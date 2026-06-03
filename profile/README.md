@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./dcc-mcp-logo.png" alt="DCC MCP logo" width="720">
+</p>
+
 # DCC MCP
 
 DCC-MCP builds open infrastructure for AI agents to safely discover, inspect, and operate Digital Content Creation applications through the Model Context Protocol.
@@ -19,3 +23,7 @@ DCC-MCP builds open infrastructure for AI agents to safely discover, inspect, an
 - Production-minded diagnostics, audit trails, and recovery paths.
 
 Start with [dcc-mcp-core](https://github.com/dcc-mcp/dcc-mcp-core) for the runtime, gateway, and adapter authoring contracts.
+
+## Contributing
+
+Issues and pull requests are welcome. Please open an issue for bugs, integration gaps, documentation improvements, or new DCC workflow ideas, and send focused PRs when you want to help improve the runtime, adapters, skills, docs, or examples.
