@@ -67,7 +67,7 @@ Control**. It uses a deterministic `snapshot -> find -> act -> wait -> verify`
 loop over Qt, native accessibility, webviews, or host-specific UI backends.
 Native Skills/APIs remain preferred; whole-desktop access is denied by default,
 and UI actions stay scoped, policy-checked, auditable, and verifiable. See the
-[UI Control workflow guide](https://github.com/dcc-mcp/dcc-mcp-core/blob/main/docs/guide/app-ui-workflows.md).
+[UI Control workflow guide](https://github.com/dcc-mcp/dcc-mcp-core/blob/main/docs/guide/ui-control-workflows.md).
 
 ## Why Skills are the production unit
 

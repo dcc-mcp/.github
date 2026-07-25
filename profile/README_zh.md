@@ -60,7 +60,7 @@ dcc-mcp-core 为此提供了类似 Computer Use 的 **UI Control** 能力。它�
 `snapshot -> find -> act -> wait -> verify` 的确定性流程。能用原生 Skill/API 时
 仍然优先使用；全桌面访问默认拒绝，UI 操作必须有明确作用域，经过策略检查、审计和
 结果验证。详细说明见
-[UI Control 工作流](https://github.com/dcc-mcp/dcc-mcp-core/blob/main/docs/zh/guide/app-ui-workflows.md)。
+[UI Control 工作流](https://github.com/dcc-mcp/dcc-mcp-core/blob/main/docs/zh/guide/ui-control-workflows.md)。
 
 ## 为什么以 Skill 为生产单元
 
