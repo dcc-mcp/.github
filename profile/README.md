@@ -8,12 +8,12 @@
 
 # DCC MCP
 
-**Reusable infrastructure for agents to operate real DCC applications.**
+**Skill-driven infrastructure for agents to operate real creative tools.**
 
-DCC-MCP does not build or prescribe an agent. It connects agents to Maya,
-Blender, Houdini, 3ds Max, Photoshop, Unreal Engine, Unity, Godot, and custom
-studio hosts through shared discovery, execution, safety, and operations
-contracts.
+DCC-MCP does not build or prescribe an agent. It connects agents to a growing
+ecosystem of desktop DCCs, game engines, 2D tools, production systems, asset
+providers, profilers, and custom studio hosts through shared discovery,
+execution, safety, and operations contracts.
 
 ## Why this project exists
 
@@ -80,6 +80,33 @@ Skills reduce repeated code generation, token use, and model-dependent
 variance. Large studios can distribute different Skill sets by project,
 department, and production stage without rebuilding an adapter.
 
+For TDs and TAs, Skills are the shortest path from an internal requirement to
+a reusable capability. Keep host connectivity, main-thread execution, routing,
+safety, and observability in Core and the adapter; package project naming,
+scene checks, asset preparation, publish gates, cache/export rules, and review
+hand-offs in `SKILL.md`, `tools.yaml`, and existing studio scripts. The result
+can be tested, project-scoped, and distributed through a public or private
+Marketplace without forking the control plane.
+
+## A growing ecosystem
+
+| Area | Projects and Skills |
+| --- | --- |
+| Foundation and distribution | [`dcc-mcp-core`](https://github.com/dcc-mcp/dcc-mcp-core), [`marketplace`](https://github.com/dcc-mcp/marketplace) |
+| Desktop DCCs | [Maya](https://github.com/dcc-mcp/dcc-mcp-maya), [Blender](https://github.com/dcc-mcp/dcc-mcp-blender), [Houdini](https://github.com/dcc-mcp/dcc-mcp-houdini), [3ds Max](https://github.com/dcc-mcp/dcc-mcp-3dsmax), [Nuke](https://github.com/dcc-mcp/dcc-mcp-nuke), [Katana](https://github.com/dcc-mcp/dcc-mcp-katana), [MotionBuilder](https://github.com/dcc-mcp/dcc-mcp-mobu), [ZBrush](https://github.com/dcc-mcp/dcc-mcp-zbrush) |
+| Design and content tools | [Photoshop](https://github.com/dcc-mcp/dcc-mcp-photoshop), [Substance 3D Designer](https://github.com/dcc-mcp/dcc-mcp-substance3d-designer), [Substance 3D Painter](https://github.com/dcc-mcp/dcc-mcp-substance3d-painter), [After Effects](https://github.com/dcc-mcp/dcc-mcp-aftereffects), [Premiere](https://github.com/dcc-mcp/dcc-mcp-premiere), [GIMP](https://github.com/dcc-mcp/dcc-mcp-gimp), [Krita](https://github.com/dcc-mcp/dcc-mcp-krita) |
+| Game and 2D engines | [Unreal Engine](https://github.com/dcc-mcp/dcc-mcp-unreal), [Unity](https://github.com/dcc-mcp/dcc-mcp-unity), [Godot](https://github.com/dcc-mcp/dcc-mcp-godot), [Tiled](https://github.com/dcc-mcp/dcc-mcp-tiled), [Material Maker](https://github.com/dcc-mcp/dcc-mcp-material-maker) |
+| Pipeline and quality | [OpenUSD](https://github.com/dcc-mcp/dcc-mcp-openusd), [Flow Production Tracking](https://github.com/dcc-mcp/dcc-mcp-fpt), [MaterialX](https://github.com/dcc-mcp/dcc-materialx), [Texture Pipeline](https://github.com/dcc-mcp/dcc-texture-pipeline), [Pipeline Publish](https://github.com/dcc-mcp/dcc-pipeline-publish), [RenderDoc](https://github.com/dcc-mcp/dcc-mcp-renderdoc), [Tracy](https://github.com/dcc-mcp/dcc-mcp-tracy) |
+| Marketplace Skills | Assets, generation, UI, rigging, and game workflows |
+
+The [official Marketplace](https://github.com/dcc-mcp/marketplace) makes those
+optional capabilities searchable, installable, upgradeable, and suitable for
+private studio catalogs too.
+
+<!-- markdownlint-disable MD013 -->
+[![DCC-MCP Skill Marketplace](https://raw.githubusercontent.com/dcc-mcp/dcc-mcp-core/main/docs/assets/admin-ui/admin-marketplace.png)](https://github.com/dcc-mcp/marketplace)
+<!-- markdownlint-enable MD013 -->
+
 ## Tool use should not be a black box
 
 The Gateway Admin UI exposes calls, traces, logs, health, statistics, and usage
@@ -94,7 +121,7 @@ against real calls.
 | --- | --- |
 | Build an adapter or operate live DCC sessions | [`dcc-mcp-core`](https://github.com/dcc-mcp/dcc-mcp-core) |
 | Discover and distribute reusable Skills | [`marketplace`](https://github.com/dcc-mcp/marketplace) |
-| Integrate desktop DCCs | [Maya](https://github.com/dcc-mcp/dcc-mcp-maya), [Blender](https://github.com/dcc-mcp/dcc-mcp-blender), [Houdini](https://github.com/dcc-mcp/dcc-mcp-houdini), [3ds Max](https://github.com/dcc-mcp/dcc-mcp-3dsmax), [Photoshop](https://github.com/dcc-mcp/dcc-mcp-photoshop) |
+| Explore the full ecosystem | [All DCC-MCP repositories](https://github.com/orgs/dcc-mcp/repositories) |
 | Integrate game engines | [Unreal Engine](https://github.com/dcc-mcp/dcc-mcp-unreal), [Unity](https://github.com/dcc-mcp/dcc-mcp-unity), [Godot](https://github.com/dcc-mcp/dcc-mcp-godot) |
 | Build pipeline integrations | [OpenUSD](https://github.com/dcc-mcp/dcc-mcp-openusd), [Flow Production Tracking](https://github.com/dcc-mcp/dcc-mcp-fpt), [Texture Pipeline](https://github.com/dcc-mcp/dcc-texture-pipeline) |
 
