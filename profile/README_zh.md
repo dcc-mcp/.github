@@ -8,10 +8,10 @@
 
 # DCC MCP
 
-**让 Agent 可以可靠操作真实 DCC 的公共基础设施。**
+**Skills 驱动，让 Agent 可以可靠操作真实创作工具的公共基础设施。**
 
-DCC-MCP 不做 Agent，也不规定用户必须选择哪个 Agent。我们把 Maya、Blender、
-Houdini、3ds Max、Photoshop、Unreal Engine、Unity、Godot 和工作室自研宿主接入
+DCC-MCP 不做 Agent，也不规定用户必须选择哪个 Agent。我们把不断扩展的桌面 DCC、
+游戏引擎、二维工具、生产管理系统、资产提供器、性能分析器和工作室自研宿主接入
 同一套发现、执行、安全与运维契约。
 
 ## 为什么做这个项目
@@ -74,6 +74,30 @@ Token 消耗和模型差异带来的结果波动。
 大型工作室还可以按项目、部门和制作阶段分发不同的 Skill。团队已有的 pipeline
 不用推倒重来，只需要逐步封装成 Agent 可以可靠调用的能力。
 
+对 TD/TA 来说，Skill 是把内部需求变成可复用能力的最短路径。宿主连接、主线程执行、
+路由、安全和可观测性继续由 Core 与 adapter 负责；项目命名、场景检查、资产准备、
+发布卡点、缓存/导出规范和审核交接，则可以直接封装进 `SKILL.md`、`tools.yaml` 和
+团队现有脚本。完成的 Skill 可以独立测试、按项目分发，并进入公开或内部 Marketplace，
+不需要 fork 控制面，也不需要为每个项目重写 adapter。
+
+## 持续扩展的生态
+
+| 领域 | 项目与 Skills |
+| --- | --- |
+| 基础设施与分发 | [`dcc-mcp-core`](https://github.com/dcc-mcp/dcc-mcp-core)、[`marketplace`](https://github.com/dcc-mcp/marketplace) |
+| 桌面 DCC | [Maya](https://github.com/dcc-mcp/dcc-mcp-maya)、[Blender](https://github.com/dcc-mcp/dcc-mcp-blender)、[Houdini](https://github.com/dcc-mcp/dcc-mcp-houdini)、[3ds Max](https://github.com/dcc-mcp/dcc-mcp-3dsmax)、[Nuke](https://github.com/dcc-mcp/dcc-mcp-nuke)、[Katana](https://github.com/dcc-mcp/dcc-mcp-katana)、[MotionBuilder](https://github.com/dcc-mcp/dcc-mcp-mobu)、[ZBrush](https://github.com/dcc-mcp/dcc-mcp-zbrush) |
+| 设计与内容工具 | [Photoshop](https://github.com/dcc-mcp/dcc-mcp-photoshop)、[Substance 3D Designer](https://github.com/dcc-mcp/dcc-mcp-substance3d-designer)、[Substance 3D Painter](https://github.com/dcc-mcp/dcc-mcp-substance3d-painter)、[After Effects](https://github.com/dcc-mcp/dcc-mcp-aftereffects)、[Premiere](https://github.com/dcc-mcp/dcc-mcp-premiere)、[GIMP](https://github.com/dcc-mcp/dcc-mcp-gimp)、[Krita](https://github.com/dcc-mcp/dcc-mcp-krita) |
+| 游戏与二维引擎 | [Unreal Engine](https://github.com/dcc-mcp/dcc-mcp-unreal)、[Unity](https://github.com/dcc-mcp/dcc-mcp-unity)、[Godot](https://github.com/dcc-mcp/dcc-mcp-godot)、[Tiled](https://github.com/dcc-mcp/dcc-mcp-tiled)、[Material Maker](https://github.com/dcc-mcp/dcc-mcp-material-maker) |
+| Pipeline 与质量 | [OpenUSD](https://github.com/dcc-mcp/dcc-mcp-openusd)、[Flow Production Tracking](https://github.com/dcc-mcp/dcc-mcp-fpt)、[MaterialX](https://github.com/dcc-mcp/dcc-materialx)、[纹理 Pipeline](https://github.com/dcc-mcp/dcc-texture-pipeline)、[Pipeline Publish](https://github.com/dcc-mcp/dcc-pipeline-publish)、[RenderDoc](https://github.com/dcc-mcp/dcc-mcp-renderdoc)、[Tracy](https://github.com/dcc-mcp/dcc-mcp-tracy) |
+| Marketplace Skills | 资产提供器、2D/3D 生成、UI 自动化、绑定、程序化制作、游戏发行与运行时验收 |
+
+[官方 Marketplace](https://github.com/dcc-mcp/marketplace) 让这些可选能力可以搜索、
+安装和升级，也支持工作室维护自己的内部目录。
+
+<!-- markdownlint-disable MD013 -->
+[![DCC-MCP Skill Marketplace](https://raw.githubusercontent.com/dcc-mcp/dcc-mcp-core/main/docs/assets/admin-ui/admin-marketplace.png)](https://github.com/dcc-mcp/marketplace)
+<!-- markdownlint-enable MD013 -->
+
 ## 让 Agent 调用不再是黑盒
 
 Gateway Admin 提供 calls、traces、logs、health、stats 和使用活动。团队可以看到
@@ -86,7 +110,7 @@ Agent 选择了什么工具、失败发生在哪一层、哪些 Skill 被频繁�
 | --- | --- |
 | 开发 adapter 或操作在线 DCC | [`dcc-mcp-core`](https://github.com/dcc-mcp/dcc-mcp-core) |
 | 发现和分发通用 Skill | [`marketplace`](https://github.com/dcc-mcp/marketplace) |
-| 接入桌面 DCC | [Maya](https://github.com/dcc-mcp/dcc-mcp-maya)、[Blender](https://github.com/dcc-mcp/dcc-mcp-blender)、[Houdini](https://github.com/dcc-mcp/dcc-mcp-houdini)、[3ds Max](https://github.com/dcc-mcp/dcc-mcp-3dsmax)、[Photoshop](https://github.com/dcc-mcp/dcc-mcp-photoshop) |
+| 浏览完整生态 | [DCC-MCP 全部仓库](https://github.com/orgs/dcc-mcp/repositories) |
 | 接入游戏引擎 | [Unreal Engine](https://github.com/dcc-mcp/dcc-mcp-unreal)、[Unity](https://github.com/dcc-mcp/dcc-mcp-unity)、[Godot](https://github.com/dcc-mcp/dcc-mcp-godot) |
 | 建设 Pipeline | [OpenUSD](https://github.com/dcc-mcp/dcc-mcp-openusd)、[Flow Production Tracking](https://github.com/dcc-mcp/dcc-mcp-fpt)、[Texture Pipeline](https://github.com/dcc-mcp/dcc-texture-pipeline) |
 
