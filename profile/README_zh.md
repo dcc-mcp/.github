@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD013 MD033 MD041 -->
+
 <p align="center">
   <img src="./dcc-mcp-pipeline-banner.png" alt="DCC-MCP 串联完整的电影与游戏生产流程">
 </p>
@@ -10,9 +12,37 @@
 
 **Skills 驱动，让 Agent 可以可靠操作真实创作工具的公共基础设施。**
 
-DCC-MCP 不做 Agent，也不规定用户必须选择哪个 Agent。我们把不断扩展的桌面 DCC、
-游戏引擎、二维工具、生产管理系统、资产提供器、性能分析器和工作室自研宿主接入
-同一套发现、执行、安全与运维契约。
+DCC-MCP（Digital Content Creation Model Context Protocol）不做 Agent，也不规定
+用户必须选择哪个 Agent。我们把不断扩展的桌面 DCC、游戏引擎、二维工具、生产管理
+系统、资产提供器、性能分析器和工作室自研宿主接入同一套发现、执行、安全与运维契约。
+
+## Agent 入口
+
+按照任务安装对应的公开 Skill。操作已有 DCC 只需要 `dcc-mcp`；两个 creator
+Skill 分别负责专项开发边界。
+
+| Agent 任务 | 公开 Skill |
+| --- | --- |
+| 操作在线 DCC、发现工具、安装扩展、分析失败并准备安全的 Bug 报告 | [`@loonghao/dcc-mcp`](https://clawhub.ai/loonghao/skills/dcc-mcp) |
+| 创建或现代化完整的 DCC-MCP adapter 与 runtime | [`@loonghao/dcc-mcp-creator`](https://clawhub.ai/loonghao/skills/dcc-mcp-creator) |
+| 创建、验证或改进 DCC 专项 Skill 包 | [`@loonghao/dcc-mcp-skills-creator`](https://clawhub.ai/loonghao/skills/dcc-mcp-skills-creator) |
+
+```bash
+openclaw skills install @loonghao/dcc-mcp
+openclaw skills install @loonghao/dcc-mcp-creator
+openclaw skills install @loonghao/dcc-mcp-skills-creator
+# 其他 Agent Skills 宿主可直接使用 ClawHub CLI：
+npx --yes clawhub@0.23.1 install @loonghao/dcc-mcp
+npx --yes clawhub@0.23.1 install @loonghao/dcc-mcp-creator
+npx --yes clawhub@0.23.1 install @loonghao/dcc-mcp-skills-creator
+```
+
+安装后开启新的 agent turn。默认工作流是 `dcc-mcp` + `dcc-mcp-cli`：先用
+`dcc-mcp-cli list` 盘点实例，用 `dcc-mcp-cli doctor` 检查启动状态，再执行
+`search -> describe -> call`。Skill 还会指导 Agent 保留 trace 证据、自我分析
+失败层，并把脱敏后的 Bug 报告路由到对应的 Skill、adapter 或 Core 项目。
+CLI 尚未安装时，请遵循
+[`dcc-mcp-cli` 已验证安装指南](https://github.com/dcc-mcp/dcc-mcp-core/blob/main/README_zh.md#安装独立-cli)。
 
 ## 为什么做这个项目
 
@@ -93,6 +123,70 @@ Token 消耗和模型差异带来的结果波动。
 
 [官方 Marketplace](https://github.com/dcc-mcp/marketplace) 让这些可选能力可以搜索、
 安装和升级，也支持工作室维护自己的内部目录。
+
+### 扩展 Skill 能力目录
+
+[官方目录](https://github.com/dcc-mcp/marketplace/blob/main/marketplace.json)
+当前发布了以下全部可选能力。安装前，Agent 应先搜索实时目录：
+
+```bash
+dcc-mcp-cli marketplace search --query "<capability>" --limit 20
+dcc-mcp-cli marketplace install <package_name> --dcc <dcc_name>
+```
+
+#### 绑定、程序化制作与 UI 自动化
+
+| 扩展 Skill | 能力 |
+| --- | --- |
+| [`dcc-mcp-maya-mgear`](https://github.com/dcc-mcp/dcc-mcp-maya-mgear) | 在 Maya 中检查、构建和管理 mGear Shifter rig |
+| [`dcc-mcp-maya-advancedskeleton`](https://github.com/dcc-mcp/dcc-mcp-maya-advancedskeleton) | 检查模板并创建、导入、构建或重建 AdvancedSkeleton rig |
+| [`dcc-mcp-maya-procedural-architecture`](https://github.com/dcc-mcp/dcc-mcp-maya-procedural-architecture) | 生成可复现的 Maya 房屋、Arnold 材质和可选 CC0 HDR 灯光 |
+| [`dcc-ui-qt-inspector`](https://github.com/dcc-mcp/dcc-ui-qt-inspector) | 跨 PySide/PyQt DCC 宿主发现 Qt 窗口、控件和 selector 状态 |
+| [`dcc-ui-qt-actions`](https://github.com/dcc-mcp/dcc-ui-qt-actions) | 点击控件、触发 action、设置值并驱动旧版 Qt UI 工作流 |
+| [`dcc-ui-workflow-memory`](https://github.com/dcc-mcp/dcc-ui-workflow-memory) | 保存已验证的 UI selector、操作 recipe 和失败记录 |
+
+#### 3D 生成与可复用资产源
+
+| 扩展 Skill | 能力 |
+| --- | --- |
+| [`dcc-ai-hunyuan3d`](https://github.com/dcc-mcp/dcc-ai-hunyuan3d) | 提交和查询腾讯混元文生/图生 3D 任务 |
+| [`dcc-ai-tripo3d`](https://github.com/dcc-mcp/dcc-ai-tripo3d) | 创建、查询和下载 Tripo 文生/图生/多视图 3D 任务 |
+| [`dcc-asset-polyhaven`](https://github.com/dcc-mcp/dcc-asset-polyhaven) | 浏览和下载 CC0 Poly Haven 模型、HDRI 与纹理 |
+| [`dcc-asset-godot-store`](https://github.com/dcc-mcp/dcc-asset-godot-store) | 搜索和下载可复用的 Godot Asset Store 插件与项目 |
+| [`dcc-asset-blender-extensions`](https://github.com/dcc-mcp/dcc-asset-blender-extensions) | 搜索和下载经过 checksum 校验的官方 Blender 扩展 |
+| [`dcc-asset-ambientcg`](https://github.com/dcc-mcp/dcc-asset-ambientcg) | 搜索和下载免费 ambientCG 材质、HDRI 与模型 |
+| [`dcc-asset-nasa3d`](https://github.com/dcc-mcp/dcc-asset-nasa3d) | 搜索和下载带使用声明的 NASA 3D 资源 |
+| [`dcc-asset-smithsonian3d`](https://github.com/dcc-mcp/dcc-asset-smithsonian3d) | 搜索和下载 Smithsonian Open Access CC0 3D 文件 |
+| [`dcc-asset-kenney`](https://github.com/dcc-mcp/dcc-asset-kenney) | 搜索和下载 CC0 Kenney 游戏资产包 |
+| [`dcc-asset-quaternius`](https://github.com/dcc-mcp/dcc-asset-quaternius) | 搜索和检查 CC0 Quaternius 游戏资产包 |
+| [`dcc-asset-objaverse`](https://github.com/dcc-mcp/dcc-asset-objaverse) | 浏览 Objaverse 元数据并下载 Creative Commons GLB 对象 |
+| [`dcc-asset-gltf-sample-assets`](https://github.com/dcc-mcp/dcc-asset-gltf-sample-assets) | 下载用于测试与验证的 Khronos glTF Sample Assets |
+| [`dcc-asset-sketchfab`](https://github.com/dcc-mcp/dcc-asset-sketchfab) | 下载允许下载的 Sketchfab 模型及其署名元数据 |
+| [`dcc-asset-google-scanned-objects`](https://github.com/dcc-mcp/dcc-asset-google-scanned-objects) | 从 Gazebo Fuel 搜索和下载 Google Scanned Objects |
+
+#### 图像、材质、媒体、地理数据与插件
+
+| 扩展 Skill | 能力 |
+| --- | --- |
+| [`dcc-ai-openai-image`](https://github.com/dcc-mcp/dcc-ai-openai-image) | 生成和编辑纹理源图，并返回经过验证的资产描述 |
+| [`dcc-texture-pipeline`](https://github.com/dcc-mcp/dcc-texture-pipeline) | 使用 OpenImageIO 和 OpenColorIO 检查、转换与优化纹理 |
+| [`dcc-materialx`](https://github.com/dcc-mcp/dcc-materialx) | 创建、检查和验证可移植的 MaterialX 文档 |
+| [`dcc-asset-pexels-video`](https://github.com/dcc-mcp/dcc-asset-free-media) | 搜索和下载带署名元数据的 Pexels 视频 |
+| [`dcc-asset-mixkit-free-media`](https://github.com/dcc-mcp/dcc-asset-free-media) | 下载带许可元数据的 Mixkit 视频、音乐、音效和 AE 模板 |
+| [`dcc-asset-game-icons`](https://github.com/dcc-mcp/dcc-asset-free-media) | 搜索和下载用于游戏界面的 CC BY SVG 图标 |
+| [`dcc-asset-google-fonts`](https://github.com/dcc-mcp/dcc-asset-free-media) | 搜索 Google Fonts 并下载带许可元数据的已验证字体 |
+| [`dcc-asset-openstreetmap-city`](https://github.com/dcc-mcp/dcc-asset-geospatial) | 下载指定边界内带署名的 OpenStreetMap 城市 GeoJSON |
+| [`dcc-asset-overture-city`](https://github.com/dcc-mcp/dcc-asset-geospatial) | 下载指定边界内带许可信息的 Overture Maps 城市 GeoJSON |
+| [`dcc-plugin-github-releases`](https://github.com/dcc-mcp/dcc-asset-free-media) | 检查开源项目许可并下载带 SHA-256 元数据的 release 插件 |
+
+#### Pipeline 发布与游戏交付
+
+| 扩展 Skill | 能力 |
+| --- | --- |
+| [`dcc-pipeline-publish`](https://github.com/dcc-mcp/dcc-pipeline-publish) | 创建连接 DCC 导出、OpenUSD、渲染农场与 ShotGrid/FPT 的已验证清单 |
+| [`dcc-game-release-package`](https://github.com/dcc-mcp/dcc-pipeline-publish) | 将预构建 Unreal、Unity、Godot Windows 游戏打包为安装包、SteamPipe 或 WeGame 交付物 |
+| [`dcc-game-runtime-acceptance`](https://github.com/dcc-mcp/dcc-pipeline-publish) | 执行有边界的游戏运行验收并保存带哈希证据 |
+| [`dcc-game-pv-capture`](https://github.com/dcc-mcp/dcc-pipeline-publish) | 为 HyperFrames PV 剪辑规划并保存精确窗口的游戏画面 |
 
 <!-- markdownlint-disable MD013 -->
 [![DCC-MCP Skill Marketplace](https://raw.githubusercontent.com/dcc-mcp/dcc-mcp-core/main/docs/assets/admin-ui/admin-marketplace.png)](https://github.com/dcc-mcp/marketplace)

@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD013 MD033 MD041 -->
+
 <p align="center">
   <img src="./dcc-mcp-pipeline-banner.png" alt="DCC-MCP connects the complete film and game production pipeline">
 </p>
@@ -10,10 +12,41 @@
 
 **Skill-driven infrastructure for agents to operate real creative tools.**
 
-DCC-MCP does not build or prescribe an agent. It connects agents to a growing
-ecosystem of desktop DCCs, game engines, 2D tools, production systems, asset
-providers, profilers, and custom studio hosts through shared discovery,
-execution, safety, and operations contracts.
+DCC-MCP (Digital Content Creation Model Context Protocol) does not build or
+prescribe an agent. It connects agents to a growing ecosystem of desktop DCCs,
+game engines, 2D tools, production systems, asset providers, profilers, and
+custom studio hosts through shared discovery, execution, safety, and operations
+contracts.
+
+## Agent entry points
+
+Install the public Skill that matches the task. Operating an existing DCC only
+needs `dcc-mcp`; the creator Skills are focused authoring guides.
+
+| Agent task | Public Skill |
+| --- | --- |
+| Operate live DCCs, discover tools, install extensions, diagnose failures, and prepare safe bug reports | [`@loonghao/dcc-mcp`](https://clawhub.ai/loonghao/skills/dcc-mcp) |
+| Create or modernize a complete DCC-MCP adapter and runtime | [`@loonghao/dcc-mcp-creator`](https://clawhub.ai/loonghao/skills/dcc-mcp-creator) |
+| Create, validate, or improve a DCC-specific Skill package | [`@loonghao/dcc-mcp-skills-creator`](https://clawhub.ai/loonghao/skills/dcc-mcp-skills-creator) |
+
+```bash
+openclaw skills install @loonghao/dcc-mcp
+openclaw skills install @loonghao/dcc-mcp-creator
+openclaw skills install @loonghao/dcc-mcp-skills-creator
+# Direct ClawHub CLI for other Agent Skills hosts:
+npx --yes clawhub@0.23.1 install @loonghao/dcc-mcp
+npx --yes clawhub@0.23.1 install @loonghao/dcc-mcp-creator
+npx --yes clawhub@0.23.1 install @loonghao/dcc-mcp-skills-creator
+```
+
+Start a new agent turn after installation. The default workflow is
+`dcc-mcp` + `dcc-mcp-cli`: inventory with `dcc-mcp-cli list`, inspect startup
+state with `dcc-mcp-cli doctor`, then `search -> describe -> call`. The Skill
+also teaches the agent to preserve trace evidence, analyze the failing layer,
+and route a sanitized bug report to the owning Skill, adapter, or Core project.
+Use the
+[`dcc-mcp-cli` verified installation guide](https://github.com/dcc-mcp/dcc-mcp-core#quick-start-operate-a-dcc)
+when the CLI is not already available.
 
 ## Why this project exists
 
@@ -102,6 +135,71 @@ Marketplace without forking the control plane.
 The [official Marketplace](https://github.com/dcc-mcp/marketplace) makes those
 optional capabilities searchable, installable, upgradeable, and suitable for
 private studio catalogs too.
+
+### Extension Skill catalog
+
+The [official catalog](https://github.com/dcc-mcp/marketplace/blob/main/marketplace.json)
+currently publishes all of the following optional capabilities. Agents should
+search the live catalog before installation:
+
+```bash
+dcc-mcp-cli marketplace search --query "<capability>" --limit 20
+dcc-mcp-cli marketplace install <package_name> --dcc <dcc_name>
+```
+
+#### Rigging, procedural authoring, and UI automation
+
+| Extension Skill | Capability |
+| --- | --- |
+| [`dcc-mcp-maya-mgear`](https://github.com/dcc-mcp/dcc-mcp-maya-mgear) | Inspect, build, and manage mGear Shifter rigs in Maya |
+| [`dcc-mcp-maya-advancedskeleton`](https://github.com/dcc-mcp/dcc-mcp-maya-advancedskeleton) | Inspect templates and create, import, build, or rebuild AdvancedSkeleton rigs |
+| [`dcc-mcp-maya-procedural-architecture`](https://github.com/dcc-mcp/dcc-mcp-maya-procedural-architecture) | Generate seeded Maya house styles with Arnold materials and optional CC0 HDR lighting |
+| [`dcc-ui-qt-inspector`](https://github.com/dcc-mcp/dcc-ui-qt-inspector) | Discover Qt windows, widgets, and selector state across PySide/PyQt DCC hosts |
+| [`dcc-ui-qt-actions`](https://github.com/dcc-mcp/dcc-ui-qt-actions) | Click widgets, trigger actions, set values, and drive legacy Qt UI workflows |
+| [`dcc-ui-workflow-memory`](https://github.com/dcc-mcp/dcc-ui-workflow-memory) | Remember verified UI selectors, recipes, and failures for later automation |
+
+#### 3D generation and reusable asset sources
+
+| Extension Skill | Capability |
+| --- | --- |
+| [`dcc-ai-hunyuan3d`](https://github.com/dcc-mcp/dcc-ai-hunyuan3d) | Submit and inspect Tencent Hunyuan text/image-to-3D jobs |
+| [`dcc-ai-tripo3d`](https://github.com/dcc-mcp/dcc-ai-tripo3d) | Create, inspect, and download Tripo text/image/multiview 3D tasks |
+| [`dcc-asset-polyhaven`](https://github.com/dcc-mcp/dcc-asset-polyhaven) | Browse and download CC0 Poly Haven models, HDRIs, and textures |
+| [`dcc-asset-godot-store`](https://github.com/dcc-mcp/dcc-asset-godot-store) | Search and download reusable Godot Asset Store add-ons and projects |
+| [`dcc-asset-blender-extensions`](https://github.com/dcc-mcp/dcc-asset-blender-extensions) | Search and download checksum-verified official Blender extensions |
+| [`dcc-asset-ambientcg`](https://github.com/dcc-mcp/dcc-asset-ambientcg) | Search and download free ambientCG materials, HDRIs, and models |
+| [`dcc-asset-nasa3d`](https://github.com/dcc-mcp/dcc-asset-nasa3d) | Search and download NASA 3D resources with usage notices |
+| [`dcc-asset-smithsonian3d`](https://github.com/dcc-mcp/dcc-asset-smithsonian3d) | Search and download Smithsonian Open Access CC0 3D files |
+| [`dcc-asset-kenney`](https://github.com/dcc-mcp/dcc-asset-kenney) | Search and download CC0 Kenney game asset packs |
+| [`dcc-asset-quaternius`](https://github.com/dcc-mcp/dcc-asset-quaternius) | Search and inspect CC0 Quaternius game asset packs |
+| [`dcc-asset-objaverse`](https://github.com/dcc-mcp/dcc-asset-objaverse) | Browse Objaverse metadata and download Creative Commons GLB objects |
+| [`dcc-asset-gltf-sample-assets`](https://github.com/dcc-mcp/dcc-asset-gltf-sample-assets) | Download Khronos glTF Sample Assets for testing and validation |
+| [`dcc-asset-sketchfab`](https://github.com/dcc-mcp/dcc-asset-sketchfab) | Download eligible Sketchfab models with attribution metadata |
+| [`dcc-asset-google-scanned-objects`](https://github.com/dcc-mcp/dcc-asset-google-scanned-objects) | Search and download Google Scanned Objects from Gazebo Fuel |
+
+#### Images, materials, media, geospatial data, and plugins
+
+| Extension Skill | Capability |
+| --- | --- |
+| [`dcc-ai-openai-image`](https://github.com/dcc-mcp/dcc-ai-openai-image) | Generate and edit texture source images with validated asset descriptors |
+| [`dcc-texture-pipeline`](https://github.com/dcc-mcp/dcc-texture-pipeline) | Inspect, color-convert, and optimize textures with OpenImageIO and OpenColorIO |
+| [`dcc-materialx`](https://github.com/dcc-mcp/dcc-materialx) | Create, inspect, and validate portable MaterialX documents |
+| [`dcc-asset-pexels-video`](https://github.com/dcc-mcp/dcc-asset-free-media) | Search and download Pexels stock video with attribution metadata |
+| [`dcc-asset-mixkit-free-media`](https://github.com/dcc-mcp/dcc-asset-free-media) | Download Mixkit video, music, sound effects, and After Effects templates with license metadata |
+| [`dcc-asset-game-icons`](https://github.com/dcc-mcp/dcc-asset-free-media) | Search and download CC BY SVG icons for game interfaces |
+| [`dcc-asset-google-fonts`](https://github.com/dcc-mcp/dcc-asset-free-media) | Search Google Fonts and download verified fonts with license metadata |
+| [`dcc-asset-openstreetmap-city`](https://github.com/dcc-mcp/dcc-asset-geospatial) | Download bounded OpenStreetMap city features as attributed GeoJSON |
+| [`dcc-asset-overture-city`](https://github.com/dcc-mcp/dcc-asset-geospatial) | Download bounded Overture Maps city features as licensed GeoJSON |
+| [`dcc-plugin-github-releases`](https://github.com/dcc-mcp/dcc-asset-free-media) | Inspect licensed open-source projects and download release plugins with SHA-256 metadata |
+
+#### Pipeline publishing and game delivery
+
+| Extension Skill | Capability |
+| --- | --- |
+| [`dcc-pipeline-publish`](https://github.com/dcc-mcp/dcc-pipeline-publish) | Create verified manifests connecting DCC exports, OpenUSD, render farms, and ShotGrid/FPT |
+| [`dcc-game-release-package`](https://github.com/dcc-mcp/dcc-pipeline-publish) | Package prebuilt Unreal, Unity, and Godot Windows games for installers, SteamPipe, or WeGame |
+| [`dcc-game-runtime-acceptance`](https://github.com/dcc-mcp/dcc-pipeline-publish) | Run bounded game-runtime acceptance and preserve hash-bearing evidence |
+| [`dcc-game-pv-capture`](https://github.com/dcc-mcp/dcc-pipeline-publish) | Plan and preserve exact-window gameplay shots for HyperFrames PV editing |
 
 <!-- markdownlint-disable MD013 -->
 [![DCC-MCP Skill Marketplace](https://raw.githubusercontent.com/dcc-mcp/dcc-mcp-core/main/docs/assets/admin-ui/admin-marketplace.png)](https://github.com/dcc-mcp/marketplace)
