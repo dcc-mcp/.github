@@ -8,6 +8,14 @@
   English | <a href="./README_zh.md">中文</a>
 </p>
 
+<p align="center">
+  <a href="https://dcc-mcp.github.io/">Website</a> ·
+  <a href="https://dcc-mcp.github.io/marketplace">Marketplace</a> ·
+  <a href="https://dcc-mcp.github.io/showcase">Showcase</a> ·
+  <a href="https://dcc-mcp.github.io/agents">For Agents</a> ·
+  <a href="https://dcc-mcp.github.io/ecosystem">Ecosystem</a>
+</p>
+
 # DCC MCP
 
 **Skill-driven infrastructure for agents to operate real creative tools.**
@@ -132,9 +140,10 @@ Marketplace without forking the control plane.
 | Pipeline and quality | [OpenUSD](https://github.com/dcc-mcp/dcc-mcp-openusd), [Flow Production Tracking](https://github.com/dcc-mcp/dcc-mcp-fpt), [MaterialX](https://github.com/dcc-mcp/dcc-materialx), [Texture Pipeline](https://github.com/dcc-mcp/dcc-texture-pipeline), [Pipeline Publish](https://github.com/dcc-mcp/dcc-pipeline-publish), [RenderDoc](https://github.com/dcc-mcp/dcc-mcp-renderdoc), [Tracy](https://github.com/dcc-mcp/dcc-mcp-tracy) |
 | Marketplace Skills | Assets, generation, UI, rigging, and game workflows |
 
-The [official Marketplace](https://github.com/dcc-mcp/marketplace) makes those
+The [official Marketplace](https://dcc-mcp.github.io/marketplace) makes those
 optional capabilities searchable, installable, upgradeable, and suitable for
-private studio catalogs too.
+private studio catalogs too. Browse [real outputs and reusable prompts](https://dcc-mcp.github.io/showcase),
+or inspect the [catalog source](https://github.com/dcc-mcp/marketplace).
 
 ### Extension Skill catalog
 
@@ -202,7 +211,7 @@ dcc-mcp-cli marketplace install <package_name> --dcc <dcc_name>
 | [`dcc-game-pv-capture`](https://github.com/dcc-mcp/dcc-pipeline-publish) | Plan and preserve exact-window gameplay shots for HyperFrames PV editing |
 
 <!-- markdownlint-disable MD013 -->
-[![DCC-MCP Skill Marketplace](https://raw.githubusercontent.com/dcc-mcp/dcc-mcp-core/main/docs/assets/admin-ui/admin-marketplace.png)](https://github.com/dcc-mcp/marketplace)
+[![DCC-MCP Skill Marketplace](https://raw.githubusercontent.com/dcc-mcp/dcc-mcp-core/main/docs/assets/admin-ui/admin-marketplace.png)](https://dcc-mcp.github.io/marketplace)
 <!-- markdownlint-enable MD013 -->
 
 ## Tool use should not be a black box
@@ -217,6 +226,7 @@ against real calls.
 
 | Need | Project |
 | --- | --- |
+| Understand the whole project or brief an agent | [Website](https://dcc-mcp.github.io/), [For Agents](https://dcc-mcp.github.io/agents), [Showcase](https://dcc-mcp.github.io/showcase) |
 | Build an adapter or operate live DCC sessions | [`dcc-mcp-core`](https://github.com/dcc-mcp/dcc-mcp-core) |
 | Discover and distribute reusable Skills | [`marketplace`](https://github.com/dcc-mcp/marketplace) |
 | Explore the full ecosystem | [All DCC-MCP repositories](https://github.com/orgs/dcc-mcp/repositories) |
