@@ -8,6 +8,14 @@
   <a href="./README.md">English</a> | 中文
 </p>
 
+<p align="center">
+  <a href="https://dcc-mcp.github.io/zh/">官网</a> ·
+  <a href="https://dcc-mcp.github.io/zh/marketplace">技能市场</a> ·
+  <a href="https://dcc-mcp.github.io/zh/showcase">案例画廊</a> ·
+  <a href="https://dcc-mcp.github.io/zh/agents">Agent 使用</a> ·
+  <a href="https://dcc-mcp.github.io/zh/ecosystem">生态目录</a>
+</p>
+
 # DCC MCP
 
 **Skills 驱动，让 Agent 可以可靠操作真实创作工具的公共基础设施。**
@@ -121,8 +129,10 @@ Token 消耗和模型差异带来的结果波动。
 | Pipeline 与质量 | [OpenUSD](https://github.com/dcc-mcp/dcc-mcp-openusd)、[Flow Production Tracking](https://github.com/dcc-mcp/dcc-mcp-fpt)、[MaterialX](https://github.com/dcc-mcp/dcc-materialx)、[纹理 Pipeline](https://github.com/dcc-mcp/dcc-texture-pipeline)、[Pipeline Publish](https://github.com/dcc-mcp/dcc-pipeline-publish)、[RenderDoc](https://github.com/dcc-mcp/dcc-mcp-renderdoc)、[Tracy](https://github.com/dcc-mcp/dcc-mcp-tracy) |
 | Marketplace Skills | 资产提供器、2D/3D 生成、UI 自动化、绑定、程序化制作、游戏发行与运行时验收 |
 
-[官方 Marketplace](https://github.com/dcc-mcp/marketplace) 让这些可选能力可以搜索、
-安装和升级，也支持工作室维护自己的内部目录。
+[官方 Marketplace](https://dcc-mcp.github.io/zh/marketplace) 让这些可选能力可以搜索、
+安装和升级，也支持工作室维护自己的内部目录。你还可以浏览
+[真实效果与可复用提示词](https://dcc-mcp.github.io/zh/showcase)，或检查
+[目录源码](https://github.com/dcc-mcp/marketplace)。
 
 ### 扩展 Skill 能力目录
 
@@ -189,7 +199,7 @@ dcc-mcp-cli marketplace install <package_name> --dcc <dcc_name>
 | [`dcc-game-pv-capture`](https://github.com/dcc-mcp/dcc-pipeline-publish) | 为 HyperFrames PV 剪辑规划并保存精确窗口的游戏画面 |
 
 <!-- markdownlint-disable MD013 -->
-[![DCC-MCP Skill Marketplace](https://raw.githubusercontent.com/dcc-mcp/dcc-mcp-core/main/docs/assets/admin-ui/admin-marketplace.png)](https://github.com/dcc-mcp/marketplace)
+[![DCC-MCP Skill Marketplace](https://raw.githubusercontent.com/dcc-mcp/dcc-mcp-core/main/docs/assets/admin-ui/admin-marketplace.png)](https://dcc-mcp.github.io/zh/marketplace)
 <!-- markdownlint-enable MD013 -->
 
 ## 让 Agent 调用不再是黑盒
@@ -202,6 +212,7 @@ Agent 选择了什么工具、失败发生在哪一层、哪些 Skill 被频繁�
 
 | 需求 | 项目 |
 | --- | --- |
+| 了解完整项目或把项目地图交给 Agent | [官网](https://dcc-mcp.github.io/zh/)、[Agent 使用](https://dcc-mcp.github.io/zh/agents)、[案例画廊](https://dcc-mcp.github.io/zh/showcase) |
 | 开发 adapter 或操作在线 DCC | [`dcc-mcp-core`](https://github.com/dcc-mcp/dcc-mcp-core) |
 | 发现和分发通用 Skill | [`marketplace`](https://github.com/dcc-mcp/marketplace) |
 | 浏览完整生态 | [DCC-MCP 全部仓库](https://github.com/orgs/dcc-mcp/repositories) |
