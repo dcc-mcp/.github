@@ -52,6 +52,11 @@ npx --yes clawhub@0.23.1 install @loonghao/dcc-mcp-skills-creator
 CLI 尚未安装时，请遵循
 [`dcc-mcp-cli` 已验证安装指南](https://github.com/dcc-mcp/dcc-mcp-core/blob/main/README_zh.md#安装独立-cli)。
 
+如果你正在搜索 **Maya MCP**、**Blender MCP** 或 **3ds Max MCP** 服务，这些适配器
+都会通过 MCP 和 `dcc-mcp-cli` 暴露同一套类型化契约。如果你的入口是 **Maya CLI**
+或 **Blender CLI** 工作流，可以使用共享 CLI 发现在线宿主、搜索当前工具目录、描述
+选中工具的 schema，再用经过校验的参数调用。
+
 ## 为什么做这个项目
 
 最直接的 DCC Agent Demo，是让模型临时写一段 `mayapy`、`hython` 或 Blender
@@ -86,6 +91,11 @@ Agent 会换，模型会升级，但工作室的 DCC 接口、权限边界和 pi
 可以启用并桥接这些官方 toolset，不重新分发 Epic 插件，也不修改官方工具名称和
 schema。官方能力、DCC-MCP 自己的能力和工作室内部工具，可以进入同一套 Agent
 工作流。
+
+Unity 项目也可以用同样的方式复用团结引擎的可选 AI 软件包。
+[`unity-tuanjie-ai` Skill](https://github.com/dcc-mcp/dcc-mcp-unity/blob/main/src/dcc_mcp_unity/skills/unity-tuanjie-ai/SKILL.md)
+先检查原生 Codely `CustomTool` 目录，并且只执行本次检查返回的工具。登录、积分、下载
+和任务恢复仍由团结软件包负责；DCC-MCP 在厂商能力外提供类型化发现、路由与验证流程。
 
 ### 没有 API 时：UI Control
 
@@ -123,9 +133,9 @@ Token 消耗和模型差异带来的结果波动。
 | 领域 | 项目与 Skills |
 | --- | --- |
 | 基础设施与分发 | [`dcc-mcp-core`](https://github.com/dcc-mcp/dcc-mcp-core)、[`marketplace`](https://github.com/dcc-mcp/marketplace) |
-| 桌面 DCC | [Maya](https://github.com/dcc-mcp/dcc-mcp-maya)、[Blender](https://github.com/dcc-mcp/dcc-mcp-blender)、[Houdini](https://github.com/dcc-mcp/dcc-mcp-houdini)、[3ds Max](https://github.com/dcc-mcp/dcc-mcp-3dsmax)、[Marmoset Toolbag](https://github.com/dcc-mcp/dcc-mcp-marmoset)、[Nuke](https://github.com/dcc-mcp/dcc-mcp-nuke)、[Katana](https://github.com/dcc-mcp/dcc-mcp-katana)、[MotionBuilder](https://github.com/dcc-mcp/dcc-mcp-mobu)、[ZBrush](https://github.com/dcc-mcp/dcc-mcp-zbrush) |
+| 桌面 DCC | [Maya MCP](https://github.com/dcc-mcp/dcc-mcp-maya)、[Blender MCP](https://github.com/dcc-mcp/dcc-mcp-blender)、[Houdini](https://github.com/dcc-mcp/dcc-mcp-houdini)、[3ds Max MCP](https://github.com/dcc-mcp/dcc-mcp-3dsmax)、[Marmoset Toolbag](https://github.com/dcc-mcp/dcc-mcp-marmoset)、[Nuke](https://github.com/dcc-mcp/dcc-mcp-nuke)、[Katana](https://github.com/dcc-mcp/dcc-mcp-katana)、[MotionBuilder](https://github.com/dcc-mcp/dcc-mcp-mobu)、[ZBrush](https://github.com/dcc-mcp/dcc-mcp-zbrush) |
 | 设计与内容工具 | [Photoshop](https://github.com/dcc-mcp/dcc-mcp-photoshop)、[Substance 3D Designer](https://github.com/dcc-mcp/dcc-mcp-substance3d-designer)、[Substance 3D Painter](https://github.com/dcc-mcp/dcc-mcp-substance3d-painter)、[After Effects](https://github.com/dcc-mcp/dcc-mcp-aftereffects)、[Premiere](https://github.com/dcc-mcp/dcc-mcp-premiere)、[GIMP](https://github.com/dcc-mcp/dcc-mcp-gimp)、[Krita](https://github.com/dcc-mcp/dcc-mcp-krita) |
-| 游戏与二维引擎 | [Unreal Engine](https://github.com/dcc-mcp/dcc-mcp-unreal)、[Unity](https://github.com/dcc-mcp/dcc-mcp-unity)、[Godot](https://github.com/dcc-mcp/dcc-mcp-godot)、[Tiled](https://github.com/dcc-mcp/dcc-mcp-tiled)、[Material Maker](https://github.com/dcc-mcp/dcc-mcp-material-maker) |
+| 游戏与二维引擎 | [Unreal Engine 官方 MCP 桥接](https://github.com/dcc-mcp/dcc-mcp-unreal)、[Unity 与团结 AI](https://github.com/dcc-mcp/dcc-mcp-unity)、[Godot](https://github.com/dcc-mcp/dcc-mcp-godot)、[Tiled](https://github.com/dcc-mcp/dcc-mcp-tiled)、[Material Maker](https://github.com/dcc-mcp/dcc-mcp-material-maker) |
 | Pipeline 与质量 | [OpenUSD](https://github.com/dcc-mcp/dcc-mcp-openusd)、[Flow Production Tracking](https://github.com/dcc-mcp/dcc-mcp-fpt)、[MaterialX](https://github.com/dcc-mcp/dcc-materialx)、[纹理 Pipeline](https://github.com/dcc-mcp/dcc-texture-pipeline)、[Pipeline Publish](https://github.com/dcc-mcp/dcc-pipeline-publish)、[RenderDoc](https://github.com/dcc-mcp/dcc-mcp-renderdoc)、[Tracy](https://github.com/dcc-mcp/dcc-mcp-tracy) |
 | Marketplace Skills | 资产提供器、2D/3D 生成、UI 自动化、绑定、程序化制作、游戏发行与运行时验收 |
 
@@ -216,7 +226,7 @@ Agent 选择了什么工具、失败发生在哪一层、哪些 Skill 被频繁�
 | 开发 adapter 或操作在线 DCC | [`dcc-mcp-core`](https://github.com/dcc-mcp/dcc-mcp-core) |
 | 发现和分发通用 Skill | [`marketplace`](https://github.com/dcc-mcp/marketplace) |
 | 浏览完整生态 | [DCC-MCP 全部仓库](https://github.com/orgs/dcc-mcp/repositories) |
-| 接入游戏引擎 | [Unreal Engine](https://github.com/dcc-mcp/dcc-mcp-unreal)、[Unity](https://github.com/dcc-mcp/dcc-mcp-unity)、[Godot](https://github.com/dcc-mcp/dcc-mcp-godot) |
+| 接入游戏引擎 | [Unreal Engine 官方 MCP 桥接](https://github.com/dcc-mcp/dcc-mcp-unreal)、[Unity 与团结 AI](https://github.com/dcc-mcp/dcc-mcp-unity)、[Godot](https://github.com/dcc-mcp/dcc-mcp-godot) |
 | 建设 Pipeline | [OpenUSD](https://github.com/dcc-mcp/dcc-mcp-openusd)、[Flow Production Tracking](https://github.com/dcc-mcp/dcc-mcp-fpt)、[Texture Pipeline](https://github.com/dcc-mcp/dcc-texture-pipeline) |
 
 更多 adapter、资产提供器、UI 自动化、性能分析和生产 Skill，请浏览

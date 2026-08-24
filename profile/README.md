@@ -56,6 +56,12 @@ Use the
 [`dcc-mcp-cli` verified installation guide](https://github.com/dcc-mcp/dcc-mcp-core#quick-start-operate-a-dcc)
 when the CLI is not already available.
 
+Looking for a **Maya MCP**, **Blender MCP**, or **3ds Max MCP** server? Each
+adapter exposes the same typed contracts through MCP and `dcc-mcp-cli`. If your
+starting point is a **Maya CLI** or **Blender CLI** workflow, use the shared CLI
+to discover the live host, search its current tool catalog, describe the
+selected schema, and call it with validated arguments.
+
 ## Why this project exists
 
 The shortest DCC agent demo asks a model to write and run a `mayapy`, `hython`,
@@ -96,6 +102,14 @@ enables and bridges those official toolsets without redistributing Epic's
 plugin or changing its tool names and schemas. Vendor tools, DCC-MCP tools, and
 studio tools can share one agent-facing workflow.
 
+Unity projects can use the same pattern with Tuanjie Editor's optional AI
+packages. The
+[`unity-tuanjie-ai` Skill](https://github.com/dcc-mcp/dcc-mcp-unity/blob/main/src/dcc_mcp_unity/skills/unity-tuanjie-ai/SKILL.md)
+inspects the native Codely `CustomTool` catalog and only executes a tool from a
+fresh inspection result. Tuanjie's packages continue to own sign-in, credits,
+downloads, and task recovery; DCC-MCP provides the typed discovery, routing,
+and verification workflow around those vendor capabilities.
+
 ### When there is no API: UI Control
 
 Adding an AI-facing interface to a new tool is usually straightforward. The
@@ -134,9 +148,9 @@ Marketplace without forking the control plane.
 | Area | Projects and Skills |
 | --- | --- |
 | Foundation and distribution | [`dcc-mcp-core`](https://github.com/dcc-mcp/dcc-mcp-core), [`marketplace`](https://github.com/dcc-mcp/marketplace) |
-| Desktop DCCs | [Maya](https://github.com/dcc-mcp/dcc-mcp-maya), [Blender](https://github.com/dcc-mcp/dcc-mcp-blender), [Houdini](https://github.com/dcc-mcp/dcc-mcp-houdini), [3ds Max](https://github.com/dcc-mcp/dcc-mcp-3dsmax), [Marmoset Toolbag](https://github.com/dcc-mcp/dcc-mcp-marmoset), [Nuke](https://github.com/dcc-mcp/dcc-mcp-nuke), [Katana](https://github.com/dcc-mcp/dcc-mcp-katana), [MotionBuilder](https://github.com/dcc-mcp/dcc-mcp-mobu), [ZBrush](https://github.com/dcc-mcp/dcc-mcp-zbrush) |
+| Desktop DCCs | [Maya MCP](https://github.com/dcc-mcp/dcc-mcp-maya), [Blender MCP](https://github.com/dcc-mcp/dcc-mcp-blender), [Houdini](https://github.com/dcc-mcp/dcc-mcp-houdini), [3ds Max MCP](https://github.com/dcc-mcp/dcc-mcp-3dsmax), [Marmoset Toolbag](https://github.com/dcc-mcp/dcc-mcp-marmoset), [Nuke](https://github.com/dcc-mcp/dcc-mcp-nuke), [Katana](https://github.com/dcc-mcp/dcc-mcp-katana), [MotionBuilder](https://github.com/dcc-mcp/dcc-mcp-mobu), [ZBrush](https://github.com/dcc-mcp/dcc-mcp-zbrush) |
 | Design and content tools | [Photoshop](https://github.com/dcc-mcp/dcc-mcp-photoshop), [Substance 3D Designer](https://github.com/dcc-mcp/dcc-mcp-substance3d-designer), [Substance 3D Painter](https://github.com/dcc-mcp/dcc-mcp-substance3d-painter), [After Effects](https://github.com/dcc-mcp/dcc-mcp-aftereffects), [Premiere](https://github.com/dcc-mcp/dcc-mcp-premiere), [GIMP](https://github.com/dcc-mcp/dcc-mcp-gimp), [Krita](https://github.com/dcc-mcp/dcc-mcp-krita) |
-| Game and 2D engines | [Unreal Engine](https://github.com/dcc-mcp/dcc-mcp-unreal), [Unity](https://github.com/dcc-mcp/dcc-mcp-unity), [Godot](https://github.com/dcc-mcp/dcc-mcp-godot), [Tiled](https://github.com/dcc-mcp/dcc-mcp-tiled), [Material Maker](https://github.com/dcc-mcp/dcc-mcp-material-maker) |
+| Game and 2D engines | [Unreal Engine official MCP bridge](https://github.com/dcc-mcp/dcc-mcp-unreal), [Unity and Tuanjie AI](https://github.com/dcc-mcp/dcc-mcp-unity), [Godot](https://github.com/dcc-mcp/dcc-mcp-godot), [Tiled](https://github.com/dcc-mcp/dcc-mcp-tiled), [Material Maker](https://github.com/dcc-mcp/dcc-mcp-material-maker) |
 | Pipeline and quality | [OpenUSD](https://github.com/dcc-mcp/dcc-mcp-openusd), [Flow Production Tracking](https://github.com/dcc-mcp/dcc-mcp-fpt), [MaterialX](https://github.com/dcc-mcp/dcc-materialx), [Texture Pipeline](https://github.com/dcc-mcp/dcc-texture-pipeline), [Pipeline Publish](https://github.com/dcc-mcp/dcc-pipeline-publish), [RenderDoc](https://github.com/dcc-mcp/dcc-mcp-renderdoc), [Tracy](https://github.com/dcc-mcp/dcc-mcp-tracy) |
 | Marketplace Skills | Assets, generation, UI, rigging, and game workflows |
 
@@ -230,7 +244,7 @@ against real calls.
 | Build an adapter or operate live DCC sessions | [`dcc-mcp-core`](https://github.com/dcc-mcp/dcc-mcp-core) |
 | Discover and distribute reusable Skills | [`marketplace`](https://github.com/dcc-mcp/marketplace) |
 | Explore the full ecosystem | [All DCC-MCP repositories](https://github.com/orgs/dcc-mcp/repositories) |
-| Integrate game engines | [Unreal Engine](https://github.com/dcc-mcp/dcc-mcp-unreal), [Unity](https://github.com/dcc-mcp/dcc-mcp-unity), [Godot](https://github.com/dcc-mcp/dcc-mcp-godot) |
+| Integrate game engines | [Unreal Engine official MCP bridge](https://github.com/dcc-mcp/dcc-mcp-unreal), [Unity and Tuanjie AI](https://github.com/dcc-mcp/dcc-mcp-unity), [Godot](https://github.com/dcc-mcp/dcc-mcp-godot) |
 | Build pipeline integrations | [OpenUSD](https://github.com/dcc-mcp/dcc-mcp-openusd), [Flow Production Tracking](https://github.com/dcc-mcp/dcc-mcp-fpt), [Texture Pipeline](https://github.com/dcc-mcp/dcc-texture-pipeline) |
 
 Browse the [DCC-MCP repositories](https://github.com/orgs/dcc-mcp/repositories)
