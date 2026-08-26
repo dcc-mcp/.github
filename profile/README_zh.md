@@ -53,9 +53,17 @@ CLI 尚未安装时，请遵循
 [`dcc-mcp-cli` 已验证安装指南](https://github.com/dcc-mcp/dcc-mcp-core/blob/main/README_zh.md#安装独立-cli)。
 
 如果你正在搜索 **Maya MCP**、**Blender MCP** 或 **3ds Max MCP** 服务，这些适配器
-都会通过 MCP 和 `dcc-mcp-cli` 暴露同一套类型化契约。如果你的入口是 **Maya CLI**
-或 **Blender CLI** 工作流，可以使用共享 CLI 发现在线宿主、搜索当前工具目录、描述
-选中工具的 schema，再用经过校验的参数调用。
+都会通过 MCP 和 `dcc-mcp-cli` 暴露同一套类型化契约。如果你的入口是 **Maya CLI**、
+**3ds Max CLI**（也常写作 `3dsmax` 或 `3ds max`）或 **Blender CLI** 工作流，可以
+使用共享 CLI 发现在线宿主、搜索当前工具目录、描述选中工具的 schema，再用经过校验
+的参数调用。
+
+| 应用 | 官网控制指南 | 归属适配器 |
+| --- | --- | --- |
+| Maya | [用 AI 控制 Maya](https://dcc-mcp.github.io/zh/control/maya) | [`dcc-mcp-maya`](https://github.com/dcc-mcp/dcc-mcp-maya) |
+| 3ds Max | [用 AI 控制 3ds Max](https://dcc-mcp.github.io/zh/control/3ds-max) | [`dcc-mcp-3dsmax`](https://github.com/dcc-mcp/dcc-mcp-3dsmax) |
+| Blender | [用 AI 控制 Blender](https://dcc-mcp.github.io/zh/control/blender) | [`dcc-mcp-blender`](https://github.com/dcc-mcp/dcc-mcp-blender) |
+| Unity / 团结 | [用 AI 控制 Unity 与团结工作流](https://dcc-mcp.github.io/zh/control/unity) | [`dcc-mcp-unity`](https://github.com/dcc-mcp/dcc-mcp-unity) |
 
 ## 为什么做这个项目
 

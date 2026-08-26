@@ -58,9 +58,17 @@ when the CLI is not already available.
 
 Looking for a **Maya MCP**, **Blender MCP**, or **3ds Max MCP** server? Each
 adapter exposes the same typed contracts through MCP and `dcc-mcp-cli`. If your
-starting point is a **Maya CLI** or **Blender CLI** workflow, use the shared CLI
-to discover the live host, search its current tool catalog, describe the
-selected schema, and call it with validated arguments.
+starting point is a **Maya CLI**, **3ds Max CLI** (`3dsmax` or `3ds max`), or
+**Blender CLI** workflow, use the shared CLI to discover the live host, search
+its current tool catalog, describe the selected schema, and call it with
+validated arguments.
+
+| Application | Canonical control guide | Owning adapter |
+| --- | --- | --- |
+| Maya | [Control Maya with AI](https://dcc-mcp.github.io/control/maya) | [`dcc-mcp-maya`](https://github.com/dcc-mcp/dcc-mcp-maya) |
+| 3ds Max | [Control 3ds Max with AI](https://dcc-mcp.github.io/control/3ds-max) | [`dcc-mcp-3dsmax`](https://github.com/dcc-mcp/dcc-mcp-3dsmax) |
+| Blender | [Control Blender with AI](https://dcc-mcp.github.io/control/blender) | [`dcc-mcp-blender`](https://github.com/dcc-mcp/dcc-mcp-blender) |
+| Unity / Tuanjie | [Control Unity and Tuanjie workflows with AI](https://dcc-mcp.github.io/control/unity) | [`dcc-mcp-unity`](https://github.com/dcc-mcp/dcc-mcp-unity) |
 
 ## Why this project exists
 
