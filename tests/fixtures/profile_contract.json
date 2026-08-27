@@ -1,0 +1,53 @@
+{
+  "profiles": {
+    "README.md": {
+      "identity": "DCC MCP",
+      "discovery_heading": "Agent entry points",
+      "table_heading": "Application",
+      "required_links": [
+        "https://dcc-mcp.github.io/",
+        "https://github.com/dcc-mcp/dcc-mcp-core"
+      ],
+      "rows": [
+        ["Maya", "https://dcc-mcp.github.io/control/maya", "https://github.com/dcc-mcp/dcc-mcp-maya"],
+        ["3ds Max", "https://dcc-mcp.github.io/control/3ds-max", "https://github.com/dcc-mcp/dcc-mcp-3dsmax"],
+        ["Blender", "https://dcc-mcp.github.io/control/blender", "https://github.com/dcc-mcp/dcc-mcp-blender"],
+        ["Unreal Engine", "https://dcc-mcp.github.io/control/unreal-engine", "https://github.com/dcc-mcp/dcc-mcp-unreal"],
+        ["Unity", "https://dcc-mcp.github.io/control/unity", "https://github.com/dcc-mcp/dcc-mcp-unity"],
+        ["Tuanjie / 团结引擎", "https://dcc-mcp.github.io/control/unity", "https://github.com/dcc-mcp/dcc-mcp-unity"],
+        ["Godot", "https://dcc-mcp.github.io/control/godot", "https://github.com/dcc-mcp/dcc-mcp-godot"]
+      ]
+    },
+    "README_zh.md": {
+      "identity": "DCC MCP",
+      "discovery_heading": "Agent 入口",
+      "table_heading": "应用",
+      "required_links": [
+        "https://dcc-mcp.github.io/zh/",
+        "https://github.com/dcc-mcp/dcc-mcp-core"
+      ],
+      "rows": [
+        ["Maya", "https://dcc-mcp.github.io/zh/control/maya", "https://github.com/dcc-mcp/dcc-mcp-maya"],
+        ["3ds Max", "https://dcc-mcp.github.io/zh/control/3ds-max", "https://github.com/dcc-mcp/dcc-mcp-3dsmax"],
+        ["Blender", "https://dcc-mcp.github.io/zh/control/blender", "https://github.com/dcc-mcp/dcc-mcp-blender"],
+        ["Unreal Engine", "https://dcc-mcp.github.io/zh/control/unreal-engine", "https://github.com/dcc-mcp/dcc-mcp-unreal"],
+        ["Unity", "https://dcc-mcp.github.io/zh/control/unity", "https://github.com/dcc-mcp/dcc-mcp-unity"],
+        ["Tuanjie / 团结引擎", "https://dcc-mcp.github.io/zh/control/unity", "https://github.com/dcc-mcp/dcc-mcp-unity"],
+        ["Godot", "https://dcc-mcp.github.io/zh/control/godot", "https://github.com/dcc-mcp/dcc-mcp-godot"]
+      ]
+    }
+  },
+  "visible_query_terms": [
+    "Maya MCP",
+    "3ds Max MCP",
+    "Blender MCP",
+    "Unreal MCP",
+    "Unity MCP",
+    "Tuanjie MCP",
+    "Godot MCP",
+    "Maya CLI",
+    "3ds Max CLI",
+    "Blender CLI",
+    "团结引擎"
+  ]
+}
