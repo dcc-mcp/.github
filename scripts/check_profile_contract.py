@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import http.client
 import ipaddress
 import json
 import re
@@ -60,6 +61,22 @@ MAX_REDIRECT_HOPS = 5
 MAX_DNS_ADDRESSES = 16
 DNS_TIMEOUT_SECONDS = 5
 VISIBILITY_ATTRIBUTES = {"aria-hidden", "hidden", "style"}
+VISIBLE_STYLE_VALUES = {
+    "display": {
+        "block",
+        "contents",
+        "flex",
+        "flow-root",
+        "grid",
+        "inline",
+        "inline-block",
+        "inline-flex",
+        "inline-grid",
+        "list-item",
+        "table",
+    },
+    "visibility": {"visible"},
+}
 ESCAPED_MARKUP_RE = re.compile(r"<\s*(?:!--|/?\s*[a-z][^<>]*>)", re.IGNORECASE)
 MAX_ESCAPED_MARKUP_EXPANSIONS = 2
 ALWAYS_HIDDEN_TAGS = {"script", "style", "template", "noscript"}
@@ -133,10 +150,7 @@ def parse_css_declarations(style: str) -> dict[str, str] | None:
         normalized_value = CSS_IMPORTANT_RE.sub("", value).strip().lower()
         if not normalized_name:
             return None
-        if (
-            normalized_name in {"display", "visibility"}
-            and normalized_name in declarations
-        ):
+        if normalized_name in declarations:
             return None
         declarations[normalized_name] = normalized_value
     return declarations
@@ -180,9 +194,9 @@ class VisibleHtmlParser(HTMLParser):
         declarations = parse_css_declarations(style)
         if declarations is None:
             return True
-        return (
-            declarations.get("display") == "none"
-            or declarations.get("visibility") == "hidden"
+        return any(
+            name not in VISIBLE_STYLE_VALUES or value not in VISIBLE_STYLE_VALUES[name]
+            for name, value in declarations.items()
         )
 
     def add_link(self, value: str, hidden: bool | None = None) -> None:
@@ -537,6 +551,76 @@ def verify_public_url_before_io(
     return pin_public_url(url, pinned_addresses)
 
 
+class BoundHTTPSConnection(http.client.HTTPSConnection):
+    """HTTPS connection whose TCP peer must be an approved DNS answer."""
+
+    def __init__(
+        self,
+        host: str,
+        pinned_addresses: dict[str, frozenset[str]],
+        port: int | None = None,
+        *,
+        timeout: object = socket._GLOBAL_DEFAULT_TIMEOUT,
+        source_address: tuple[str, int] | None = None,
+        context: object | None = None,
+        blocksize: int = 8192,
+    ) -> None:
+        super().__init__(
+            host,
+            port,
+            timeout=timeout,
+            source_address=source_address,
+            context=context,
+            blocksize=blocksize,
+        )
+        self._pinned_addresses = pinned_addresses
+
+    def connect(self) -> None:
+        if self._tunnel_host:
+            raise OSError("proxy tunneling is forbidden for bound link checks")
+        approved = self._pinned_addresses.get(self.host)
+        if not approved:
+            raise OSError(f"no approved transport addresses for {self.host}")
+
+        last_error: OSError | None = None
+        for address in sorted(approved):
+            parsed_address = ipaddress.ip_address(address)
+            family = socket.AF_INET6 if parsed_address.version == 6 else socket.AF_INET
+            candidate = socket.socket(family, socket.SOCK_STREAM)
+            try:
+                if self.timeout is not socket._GLOBAL_DEFAULT_TIMEOUT:
+                    candidate.settimeout(self.timeout)
+                if self.source_address:
+                    candidate.bind(self.source_address)
+                target = (
+                    (address, self.port, 0, 0)
+                    if family == socket.AF_INET6
+                    else (address, self.port)
+                )
+                candidate.connect(target)
+            except OSError as exc:
+                last_error = exc
+                candidate.close()
+                continue
+            self.sock = self._context.wrap_socket(candidate, server_hostname=self.host)
+            return
+        raise OSError(
+            f"approved transport connection failed for {self.host}"
+        ) from last_error
+
+
+class BoundHTTPSHandler(urllib.request.HTTPSHandler):
+    def __init__(self, pinned_addresses: dict[str, frozenset[str]]) -> None:
+        super().__init__()
+        self._pinned_addresses = pinned_addresses
+
+    def https_open(self, request: urllib.request.Request) -> object:
+        def connection_factory(host: str, **kwargs: object) -> BoundHTTPSConnection:
+            return BoundHTTPSConnection(host, self._pinned_addresses, **kwargs)
+
+        return self.do_open(connection_factory, request, context=self._context)
+
+
 class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
     def __init__(
         self, pinned_addresses: dict[str, frozenset[str]] | None = None
@@ -759,7 +843,14 @@ def check_url(url: str) -> str | None:
     last_error = "unknown error"
     for attempt in range(3):
         try:
-            opener = urllib.request.build_opener(SafeRedirectHandler(pinned_addresses))
+            retry_dns_error = pin_public_url(url, pinned_addresses)
+            if retry_dns_error:
+                return f"{url}: {retry_dns_error}"
+            opener = urllib.request.build_opener(
+                urllib.request.ProxyHandler({}),
+                SafeRedirectHandler(pinned_addresses),
+                BoundHTTPSHandler(pinned_addresses),
+            )
             with opener.open(request, timeout=30) as response:
                 response.read(1)
                 final_url = response.geturl()
