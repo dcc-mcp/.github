@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import runpy
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+import urllib.error
+import urllib.request
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "profile_contract.json"
@@ -223,6 +227,26 @@ class ProfileContractMutationTests(unittest.TestCase):
                 )
         path.write_text(original, encoding="utf-8")
 
+    def test_duplicate_visibility_attributes_fail_closed(self) -> None:
+        variants = (
+            'style="display:none" style="display:block"',
+            'style="display:block" style="display:none"',
+            'aria-hidden="true" aria-hidden="false"',
+            'hidden="hidden" hidden=""',
+        )
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        mutated = original.replace("**Godot MCP**", "**Godot connector**", 1)
+        self.assertNotEqual(original, mutated)
+        for attributes in variants:
+            with self.subTest(attributes=attributes):
+                hidden = f"&lt;div {attributes}&gt;Godot MCP&lt;/div&gt;"
+                path.write_text(mutated + f"\n{hidden}\n", encoding="utf-8")
+                self.assert_checker_rejects_cleanly(
+                    "missing visible discovery identity 'Godot MCP'"
+                )
+        path.write_text(original, encoding="utf-8")
+
     def test_malformed_escaped_comment_fails_without_traceback(self) -> None:
         path = self.profile("README.md")
         original = path.read_text(encoding="utf-8")
@@ -295,6 +319,110 @@ class ProfileContractMutationTests(unittest.TestCase):
                 path.write_text(original + f"\n{anchor}\n", encoding="utf-8")
                 self.assert_checker_rejects_cleanly(reason)
         path.write_text(original, encoding="utf-8")
+
+    def test_redirect_targets_are_rejected_before_dispatch(self) -> None:
+        checker = runpy.run_path(str(ROOT / "scripts" / "check_profile_contract.py"))
+        self.assertIn("SafeRedirectHandler", checker)
+        handler_type = checker["SafeRedirectHandler"]
+        unsafe_targets = (
+            "http://127.0.0.1/private",
+            "https://127.0.0.1/private",
+            "https://localhost/private",
+            "https://user:password@example.com/private",
+            "https://example.com:443/private",
+            "https://example.com/%GG",
+            "https://[::1",
+        )
+        request = urllib.request.Request("https://example.com/start")
+        with mock.patch.object(
+            urllib.request.HTTPRedirectHandler,
+            "redirect_request",
+            return_value=object(),
+        ) as dispatch:
+            for target in unsafe_targets:
+                with self.subTest(target=target):
+                    handler = handler_type()
+                    with self.assertRaisesRegex(
+                        urllib.error.HTTPError, "unsafe redirect"
+                    ):
+                        handler.redirect_request(
+                            request, None, 302, "Found", {}, target
+                        )
+            dispatch.assert_not_called()
+
+    def test_redirect_loops_and_hop_overflow_fail_before_dispatch(self) -> None:
+        checker = runpy.run_path(str(ROOT / "scripts" / "check_profile_contract.py"))
+        self.assertIn("SafeRedirectHandler", checker)
+        handler_type = checker["SafeRedirectHandler"]
+        max_hops = checker["MAX_REDIRECT_HOPS"]
+        request = urllib.request.Request("https://example.com/start")
+        with mock.patch.object(
+            urllib.request.HTTPRedirectHandler,
+            "redirect_request",
+            return_value=object(),
+        ) as dispatch:
+            loop_handler = handler_type()
+            with self.assertRaisesRegex(urllib.error.HTTPError, "redirect loop"):
+                loop_handler.redirect_request(
+                    request, None, 302, "Found", {}, request.full_url
+                )
+            dispatch.assert_not_called()
+
+            overflow_handler = handler_type()
+            for index in range(max_hops):
+                overflow_handler.redirect_request(
+                    request,
+                    None,
+                    302,
+                    "Found",
+                    {},
+                    f"https://example.com/hop-{index}",
+                )
+            dispatched = dispatch.call_count
+            with self.assertRaisesRegex(urllib.error.HTTPError, "too many redirects"):
+                overflow_handler.redirect_request(
+                    request,
+                    None,
+                    302,
+                    "Found",
+                    {},
+                    "https://example.com/overflow",
+                )
+            self.assertEqual(dispatched, dispatch.call_count)
+
+    def test_final_redirect_url_is_validated(self) -> None:
+        checker = runpy.run_path(str(ROOT / "scripts" / "check_profile_contract.py"))
+
+        class Response:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self, _size):
+                return b""
+
+            def geturl(self):
+                return "http://127.0.0.1/private"
+
+        class Opener:
+            def open(self, *_args, **_kwargs):
+                return Response()
+
+        with (
+            mock.patch.object(
+                checker["urllib"].request, "urlopen", return_value=Response()
+            ),
+            mock.patch.object(
+                checker["urllib"].request, "build_opener", return_value=Opener()
+            ),
+        ):
+            error = checker["check_url"]("https://example.com/start")
+        self.assertIsNotNone(error)
+        self.assertIn("unsafe redirect", error)
 
     def test_local_path_canonicalization_aliases_are_rejected(self) -> None:
         aliases = (
