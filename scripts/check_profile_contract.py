@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import unquote, urldefrag, urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
@@ -27,9 +27,8 @@ VOLATILE_GUIDANCE_RE = re.compile(
     r"(?:clawhub@\d|pip install|openclaw skills install)", re.IGNORECASE
 )
 CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
-SAFE_FRAGMENT_RE = re.compile(r"^#[A-Za-z0-9][A-Za-z0-9._:-]*$")
 ESCAPED_HTML_RE = re.compile(
-    r"<\s*/?\s*(?:script|style|template|noscript|span|div|section)\b",
+    r"(?:<!--|<\s*/?\s*(?:script|style|template|noscript|span|div|section)\b)",
     re.IGNORECASE,
 )
 ALWAYS_HIDDEN_TAGS = {"script", "style", "template", "noscript"}
@@ -146,6 +145,9 @@ class VisibleHtmlParser(HTMLParser):
             return
         (self.hidden_text if self.hidden else self.text).append(data)
 
+    def handle_comment(self, data: str) -> None:
+        self.hidden_text.append(data)
+
 
 def normalize_text(parts: list[str] | tuple[str, ...] | str) -> str:
     if isinstance(parts, str):
@@ -256,12 +258,12 @@ def validate_link(link: str, profile_path: Path) -> tuple[str | None, str | None
     if "\\" in link or any(character.isspace() for character in link):
         return f"{profile_path.name}: ambiguous link {link!r}", None
 
-    if link.startswith("#"):
-        if not SAFE_FRAGMENT_RE.fullmatch(link):
-            return f"{profile_path.name}: invalid local fragment {link!r}", None
-        return None, None
-
     parsed = urlsplit(link)
+    if "?" in link or "#" in link:
+        return (
+            f"{profile_path.name}: query and fragment links are forbidden: {link!r}",
+            None,
+        )
     if parsed.scheme:
         if parsed.scheme != "https" or not parsed.netloc:
             return (
@@ -300,19 +302,15 @@ def validate_link(link: str, profile_path: Path) -> tuple[str | None, str | None
                 f"{profile_path.name}: ambiguous or non-canonical HTTPS link {link!r}",
                 None,
             )
-        return None, urldefrag(link)[0]
+        return None, link
 
     if parsed.netloc or link.startswith(("/", "//")):
         return (
             f"{profile_path.name}: repository-local link must be relative: {link!r}",
             None,
         )
-    relative, fragment = urldefrag(link)
-    if (
-        not relative
-        or parsed.query
-        or (fragment and not SAFE_FRAGMENT_RE.fullmatch(f"#{fragment}"))
-    ):
+    relative = link
+    if not relative:
         return f"{profile_path.name}: invalid repository-local link {link!r}", None
     canonical_relative = relative[2:] if relative.startswith("./") else relative
     parts = canonical_relative.split("/")
