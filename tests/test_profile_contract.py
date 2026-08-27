@@ -204,6 +204,25 @@ class ProfileContractMutationTests(unittest.TestCase):
                 )
         path.write_text(original, encoding="utf-8")
 
+    def test_duplicate_visibility_declarations_fail_closed(self) -> None:
+        variants = (
+            "display:none!important;display:block",
+            "display:none ! important;display:block",
+            "display:block;display:none!important",
+            "visibility:hidden!important;visibility:visible",
+            "visibility:visible;visibility:hidden ! important",
+        )
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        for style in variants:
+            with self.subTest(style=style):
+                hidden = f'&lt;div style="{style}"&gt;Godot MCP&lt;/div&gt;'
+                path.write_text(original + f"\n{hidden}\n", encoding="utf-8")
+                self.assert_checker_rejects_cleanly(
+                    "deceptive hidden identity 'Godot MCP'"
+                )
+        path.write_text(original, encoding="utf-8")
+
     def test_malformed_escaped_comment_fails_without_traceback(self) -> None:
         path = self.profile("README.md")
         original = path.read_text(encoding="utf-8")
@@ -258,6 +277,23 @@ class ProfileContractMutationTests(unittest.TestCase):
                     original + f"\n[Alias {index}]({alias})\n", encoding="utf-8"
                 )
                 self.assert_checker_rejects_cleanly("README.md:")
+        path.write_text(original, encoding="utf-8")
+
+    def test_malformed_url_syntax_is_rejected_without_traceback(self) -> None:
+        aliases = (
+            ("https://[::1", "invalid URL syntax"),
+            ("https://user@[::1", "invalid URL syntax"),
+            ("https://[]/", "invalid URL syntax"),
+            ("https://example.com:notaport/", "invalid port in link"),
+            ("https://example.com:99999/", "invalid port in link"),
+        )
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        for alias, reason in aliases:
+            with self.subTest(alias=alias):
+                anchor = f'<a href="{alias}">Malformed</a>'
+                path.write_text(original + f"\n{anchor}\n", encoding="utf-8")
+                self.assert_checker_rejects_cleanly(reason)
         path.write_text(original, encoding="utf-8")
 
     def test_local_path_canonicalization_aliases_are_rejected(self) -> None:
