@@ -28,6 +28,26 @@ VOLATILE_GUIDANCE_RE = re.compile(
 )
 CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 SAFE_FRAGMENT_RE = re.compile(r"^#[A-Za-z0-9][A-Za-z0-9._:-]*$")
+ESCAPED_HTML_RE = re.compile(
+    r"<\s*/?\s*(?:script|style|template|noscript|span|div|section)\b",
+    re.IGNORECASE,
+)
+ALWAYS_HIDDEN_TAGS = {"script", "style", "template", "noscript"}
+VOID_TAGS = {
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "source",
+    "track",
+    "wbr",
+}
 
 
 @dataclass(frozen=True)
@@ -39,27 +59,92 @@ class Cell:
 @dataclass(frozen=True)
 class ParsedProfile:
     visible_text: str
+    hidden_text: str
     headings: tuple[tuple[int, str], ...]
     tables: tuple[tuple[tuple[Cell, ...], ...], ...]
     links: frozenset[str]
+    visible_links: frozenset[str]
 
 
 class VisibleHtmlParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.text: list[str] = []
+        self.hidden_text: list[str] = []
         self.links: list[str] = []
+        self.visible_links: list[str] = []
+        self._stack: list[tuple[str, bool]] = []
 
-    def handle_starttag(self, _tag: str, attrs: list[tuple[str, str | None]]) -> None:
+    @property
+    def hidden(self) -> bool:
+        return bool(self._stack and self._stack[-1][1])
+
+    @staticmethod
+    def _element_is_hidden(tag: str, attrs: list[tuple[str, str | None]]) -> bool:
+        if tag in ALWAYS_HIDDEN_TAGS:
+            return True
+        normalized = {name.lower(): value for name, value in attrs}
+        if "hidden" in normalized:
+            return True
+        aria_hidden = normalized.get("aria-hidden")
+        if aria_hidden is not None and aria_hidden.strip().lower() == "true":
+            return True
+        style = normalized.get("style") or ""
+        declarations = {}
+        for declaration in style.split(";"):
+            if ":" not in declaration:
+                continue
+            name, value = declaration.split(":", 1)
+            declarations[name.strip().lower()] = (
+                value.strip().lower().replace("!important", "").strip()
+            )
+        return (
+            declarations.get("display") == "none"
+            or declarations.get("visibility") == "hidden"
+        )
+
+    def add_link(self, value: str, hidden: bool | None = None) -> None:
+        self.links.append(value)
+        if not (self.hidden if hidden is None else hidden):
+            self.visible_links.append(value)
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag = tag.lower()
+        hidden = self.hidden or self._element_is_hidden(tag, attrs)
+        if tag not in VOID_TAGS:
+            self._stack.append((tag, hidden))
         for name, value in attrs:
             if name.lower() in {"href", "src"} and value is not None:
-                self.links.append(value)
+                self.add_link(value, hidden)
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        self.handle_starttag(tag, attrs)
+        hidden = self.hidden or self._element_is_hidden(tag.lower(), attrs)
+        for name, value in attrs:
+            if name.lower() in {"href", "src"} and value is not None:
+                self.add_link(value, hidden)
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        for index in range(len(self._stack) - 1, -1, -1):
+            if self._stack[index][0] == tag:
+                del self._stack[index:]
+                break
 
     def handle_data(self, data: str) -> None:
-        self.text.append(data)
+        if ESCAPED_HTML_RE.search(data):
+            nested = VisibleHtmlParser()
+            nested.feed(data)
+            nested.close()
+            self.links.extend(nested.links)
+            if self.hidden:
+                self.hidden_text.extend(nested.text)
+                self.hidden_text.extend(nested.hidden_text)
+            else:
+                self.text.extend(nested.text)
+                self.hidden_text.extend(nested.hidden_text)
+                self.visible_links.extend(nested.visible_links)
+            return
+        (self.hidden_text if self.hidden else self.text).append(data)
 
 
 def normalize_text(parts: list[str] | tuple[str, ...] | str) -> str:
@@ -68,35 +153,31 @@ def normalize_text(parts: list[str] | tuple[str, ...] | str) -> str:
     return " ".join(" ".join(parts).split())
 
 
-def parse_html(value: str) -> tuple[list[str], list[str]]:
-    parser = VisibleHtmlParser()
-    parser.feed(value)
-    parser.close()
-    return parser.text, parser.links
-
-
 def parse_inline(children: list[Token]) -> tuple[str, tuple[str, ...]]:
-    text: list[str] = []
-    links: list[str] = []
+    parser = VisibleHtmlParser()
     for child in children:
-        if child.type in {"text", "code_inline"}:
-            text.append(child.content)
+        if child.type == "text":
+            if not parser.hidden and ESCAPED_HTML_RE.search(child.content):
+                parser.feed(child.content)
+            else:
+                parser.handle_data(child.content)
+        elif child.type == "code_inline":
+            parser.handle_data(child.content)
         elif child.type in {"softbreak", "hardbreak"}:
-            text.append(" ")
+            parser.handle_data(" ")
         elif child.type == "link_open":
             href = child.attrGet("href")
             if href is not None:
-                links.append(href)
+                parser.add_link(href)
         elif child.type == "image":
             src = child.attrGet("src")
             if src is not None:
-                links.append(src)
-            text.append(child.content)
+                parser.add_link(src)
+            parser.handle_data(child.content)
         elif child.type == "html_inline":
-            html_text, html_links = parse_html(child.content)
-            text.extend(html_text)
-            links.extend(html_links)
-    return normalize_text(text), tuple(links)
+            parser.feed(child.content)
+    parser.close()
+    return normalize_text(parser.text), tuple(parser.visible_links)
 
 
 def parse_markdown(text: str) -> ParsedProfile:
@@ -105,11 +186,12 @@ def parse_markdown(text: str) -> ParsedProfile:
     markdown.validateLink = lambda _url: True
     markdown.normalizeLink = lambda url: url
     tokens = markdown.parse(text)
+    document = VisibleHtmlParser()
+    document.feed(markdown.render(text))
+    document.close()
 
-    visible: list[str] = []
     headings: list[tuple[int, str]] = []
     tables: list[tuple[tuple[Cell, ...], ...]] = []
-    links: set[str] = set()
     current_table: list[tuple[Cell, ...]] | None = None
     current_row: list[Cell] | None = None
     current_cell: Cell | None = None
@@ -139,23 +221,18 @@ def parse_markdown(text: str) -> ParsedProfile:
                 current_row.append(current_cell)
             current_cell = None
         elif token.type == "inline":
-            inline_text, inline_links = parse_inline(token.children or [])
-            visible.append(inline_text)
-            links.update(inline_links)
+            inline_text, inline_visible_links = parse_inline(token.children or [])
             if heading_level is not None:
                 headings.append((heading_level, inline_text))
             if current_cell is not None:
-                current_cell = Cell(inline_text, inline_links)
-        elif token.type == "html_block":
-            html_text, html_links = parse_html(token.content)
-            visible.extend(html_text)
-            links.update(html_links)
-
+                current_cell = Cell(inline_text, inline_visible_links)
     return ParsedProfile(
-        visible_text=normalize_text(visible),
+        visible_text=normalize_text(document.text),
+        hidden_text=normalize_text(document.hidden_text),
         headings=tuple(headings),
         tables=tuple(tables),
-        links=frozenset(links),
+        links=frozenset(document.links),
+        visible_links=frozenset(document.visible_links),
     )
 
 
@@ -166,8 +243,15 @@ def validate_link(link: str, profile_path: Path) -> tuple[str | None, str | None
         or CONTROL_RE.search(link)
     ):
         return f"{profile_path.name}: unsafe or non-normalized link {link!r}", None
-    decoded = unquote(link)
-    if unicodedata.normalize("NFKC", decoded) != decoded or CONTROL_RE.search(decoded):
+    try:
+        decoded = unquote(link, errors="strict")
+    except UnicodeDecodeError:
+        return f"{profile_path.name}: invalid encoded link {link!r}", None
+    if (
+        decoded != link
+        or unicodedata.normalize("NFKC", decoded) != decoded
+        or CONTROL_RE.search(decoded)
+    ):
         return f"{profile_path.name}: unsafe encoded link {link!r}", None
     if "\\" in link or any(character.isspace() for character in link):
         return f"{profile_path.name}: ambiguous link {link!r}", None
@@ -189,9 +273,14 @@ def validate_link(link: str, profile_path: Path) -> tuple[str | None, str | None
                 f"{profile_path.name}: credentials are forbidden in links: {link!r}",
                 None,
             )
-        if parsed.hostname is None or parsed.hostname != parsed.hostname.encode(
-            "idna"
-        ).decode("ascii"):
+        hostname = parsed.hostname
+        if (
+            hostname is None
+            or not hostname.isascii()
+            or hostname != hostname.lower()
+            or hostname.endswith(".")
+            or any(label.startswith("xn--") for label in hostname.split("."))
+        ):
             return (
                 f"{profile_path.name}: hostname must be normalized ASCII: {link!r}",
                 None,
@@ -200,8 +289,13 @@ def validate_link(link: str, profile_path: Path) -> tuple[str | None, str | None
             port = parsed.port
         except ValueError:
             return f"{profile_path.name}: invalid port in link {link!r}", None
-        expected_netloc = parsed.hostname + (f":{port}" if port is not None else "")
-        if parsed.netloc != expected_netloc or urlunsplit(parsed) != link:
+        if port is not None:
+            return f"{profile_path.name}: explicit ports are forbidden: {link!r}", None
+        if "//" in parsed.path or any(
+            segment in {".", ".."} for segment in parsed.path.split("/")
+        ):
+            return f"{profile_path.name}: non-canonical path in link {link!r}", None
+        if parsed.netloc != hostname or urlunsplit(parsed) != link:
             return (
                 f"{profile_path.name}: ambiguous or non-canonical HTTPS link {link!r}",
                 None,
@@ -213,14 +307,23 @@ def validate_link(link: str, profile_path: Path) -> tuple[str | None, str | None
             f"{profile_path.name}: repository-local link must be relative: {link!r}",
             None,
         )
-    relative, _fragment = urldefrag(link)
+    relative, fragment = urldefrag(link)
     if (
         not relative
         or parsed.query
-        or any(part == ".." for part in Path(relative).parts)
+        or (fragment and not SAFE_FRAGMENT_RE.fullmatch(f"#{fragment}"))
     ):
         return f"{profile_path.name}: invalid repository-local link {link!r}", None
-    local = (profile_path.parent / relative).resolve()
+    canonical_relative = relative[2:] if relative.startswith("./") else relative
+    parts = canonical_relative.split("/")
+    if (
+        not canonical_relative
+        or relative.startswith(("../", ".//"))
+        or any(part in {"", ".", ".."} for part in parts)
+        or ":" in parts[0]
+    ):
+        return f"{profile_path.name}: non-canonical local link {link!r}", None
+    local = (profile_path.parent / canonical_relative).resolve()
     try:
         local.relative_to(ROOT.resolve())
     except ValueError:
@@ -267,8 +370,10 @@ def validate_profile(
     for term in visible_terms:
         if term not in parsed.visible_text:
             failures.append(f"{path.name}: missing visible discovery identity {term!r}")
+        if term in parsed.hidden_text:
+            failures.append(f"{path.name}: deceptive hidden identity {term!r}")
     for required_link in expected["required_links"]:
-        if required_link not in parsed.links:
+        if required_link not in parsed.visible_links:
             failures.append(
                 f"{path.name}: missing visible required link {required_link}"
             )

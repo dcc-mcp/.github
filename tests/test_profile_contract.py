@@ -14,6 +14,11 @@ FIXTURE = ROOT / "tests" / "fixtures" / "profile_contract.json"
 FIXTURE_SHA256 = "2749758168cbeafcdca4403b3ad86e6f842a0569b1a671bea6a6ed1f85737cdd"
 
 
+def canonical_lf(data: bytes) -> bytes:
+    """Return the platform-independent byte representation frozen by the digest."""
+    return data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+
 class ProfileContractMutationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -114,7 +119,13 @@ class ProfileContractMutationTests(unittest.TestCase):
 
     def test_contract_fixture_is_reviewer_independent(self) -> None:
         fixture_bytes = FIXTURE.read_bytes()
-        self.assertEqual(FIXTURE_SHA256, hashlib.sha256(fixture_bytes).hexdigest())
+        self.assertEqual(
+            FIXTURE_SHA256, hashlib.sha256(canonical_lf(fixture_bytes)).hexdigest()
+        )
+        crlf_bytes = fixture_bytes.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+        self.assertEqual(
+            FIXTURE_SHA256, hashlib.sha256(canonical_lf(crlf_bytes)).hexdigest()
+        )
         contract = json.loads(fixture_bytes)
         self.assertIn("Godot MCP", contract["visible_query_terms"])
         self.assertEqual(
@@ -125,6 +136,83 @@ class ProfileContractMutationTests(unittest.TestCase):
             ],
             contract["profiles"]["README.md"]["rows"][-1],
         )
+
+    def test_hidden_html_never_satisfies_a_visible_query_term(self) -> None:
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        mutated = original.replace("**Godot MCP**", "**Godot connector**", 1)
+        hidden_variants = (
+            "<span hidden>Godot MCP</span>",
+            '<DIV ArIa-HiDdEn = " TrUe "><section>Godot MCP</section></DIV>',
+            "<div hidden>\n\nGodot MCP\n\n</div>",
+            '<div style=" DISPLAY : none ; color: red"><span>Godot MCP</span></div>',
+            '<div style="visibility : HIDDEN"><span>Godot MCP</span></div>',
+            "<template><span>Godot MCP</span></template>",
+            "<noscript>Godot MCP</noscript>",
+            "<script>Godot MCP</script>",
+            "<style>.result { content: 'Godot MCP'; }</style>",
+            "&lt;span hidden&gt;Godot MCP&lt;/span&gt;",
+            "&lt;script&gt;Godot MCP&lt;/script&gt;",
+        )
+        for variant in hidden_variants:
+            with self.subTest(variant=variant):
+                path.write_text(mutated + f"\n{variant}\n", encoding="utf-8")
+                self.assert_checker_rejects()
+        path.write_text(original, encoding="utf-8")
+
+    def test_deceptive_hidden_required_term_is_rejected_even_when_visible(self) -> None:
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        path.write_text(
+            original + '\n<div aria-hidden="true"><span>Godot MCP</span></div>\n',
+            encoding="utf-8",
+        )
+        self.assert_checker_rejects()
+
+    def test_public_url_canonicalization_aliases_are_rejected(self) -> None:
+        aliases = (
+            "https://github.com:443/dcc-mcp",
+            "https://github.com:8443/dcc-mcp",
+            "https://github.com/dcc-mcp/../dcc-mcp",
+            "https://github.com//dcc-mcp",
+            "https://github.com./dcc-mcp",
+            "https://GitHub.com/dcc-mcp",
+            "https://éxample.com/support",
+            "https://github.com/dcc-mcp/%2e%2e/dcc-mcp",
+            "https://github.com/dcc-mcp/%2Fowner",
+            "https://github.com/dcc-mcp/%5Cowner",
+            "https://github.com/%64cc-mcp",
+            "https://github.com/dcc-mcp/%00owner",
+        )
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        for index, alias in enumerate(aliases):
+            with self.subTest(alias=alias):
+                path.write_text(
+                    original + f"\n[Alias {index}]({alias})\n", encoding="utf-8"
+                )
+                self.assert_checker_rejects()
+        path.write_text(original, encoding="utf-8")
+
+    def test_local_path_canonicalization_aliases_are_rejected(self) -> None:
+        aliases = (
+            "%2e%2e/README.md",
+            "%2e%2e%2fREADME.md",
+            "%2e%2e%5cREADME.md",
+            "%2Fetc/passwd",
+            "C:/Windows/System32/config",
+            "//server/share/file.md",
+            "\\\\server\\share\\file.md",
+        )
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        for index, alias in enumerate(aliases):
+            with self.subTest(alias=alias):
+                path.write_text(
+                    original + f"\n[Local alias {index}]({alias})\n", encoding="utf-8"
+                )
+                self.assert_checker_rejects()
+        path.write_text(original, encoding="utf-8")
 
     def test_unsafe_and_ambiguous_urls_are_rejected(self) -> None:
         unsafe_urls = (
