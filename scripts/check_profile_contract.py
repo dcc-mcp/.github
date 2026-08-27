@@ -113,6 +113,13 @@ class ParsedProfile:
     visible_links: frozenset[str]
 
 
+@dataclass(frozen=True)
+class HtmlFrame:
+    tag: str
+    hidden: bool
+    closed_details: bool
+
+
 def decode_css_escapes(value: str) -> str | None:
     def replace(match: re.Match[str]) -> str:
         if match.group(1) is None:
@@ -165,12 +172,27 @@ class VisibleHtmlParser(HTMLParser):
         self.hidden_text: list[str] = []
         self.links: list[str] = []
         self.visible_links: list[str] = []
-        self._stack: list[tuple[str, bool]] = []
+        self._stack: list[HtmlFrame] = []
         self._escaped_markup_budget = escaped_markup_budget
 
     @property
     def hidden(self) -> bool:
-        return bool(self._stack and self._stack[-1][1])
+        return self._path_is_hidden()
+
+    def _path_is_hidden(self, child_tag: str | None = None) -> bool:
+        if any(frame.hidden for frame in self._stack):
+            return True
+        for index, frame in enumerate(self._stack):
+            if not frame.closed_details:
+                continue
+            direct_child = (
+                self._stack[index + 1].tag
+                if index + 1 < len(self._stack)
+                else child_tag
+            )
+            if direct_child != "summary":
+                return True
+        return False
 
     @staticmethod
     def _element_is_hidden(tag: str, attrs: list[tuple[str, str | None]]) -> bool:
@@ -206,15 +228,19 @@ class VisibleHtmlParser(HTMLParser):
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag = tag.lower()
-        hidden = self.hidden or self._element_is_hidden(tag, attrs)
+        hidden = self._path_is_hidden(tag) or self._element_is_hidden(tag, attrs)
         if tag not in VOID_TAGS:
-            self._stack.append((tag, hidden))
+            attr_names = {name.lower() for name, _value in attrs}
+            self._stack.append(
+                HtmlFrame(tag, hidden, tag == "details" and "open" not in attr_names)
+            )
         for name, value in attrs:
             if name.lower() in {"href", "src"} and value is not None:
                 self.add_link(value, hidden)
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        hidden = self.hidden or self._element_is_hidden(tag.lower(), attrs)
+        tag = tag.lower()
+        hidden = self._path_is_hidden(tag) or self._element_is_hidden(tag, attrs)
         for name, value in attrs:
             if name.lower() in {"href", "src"} and value is not None:
                 self.add_link(value, hidden)
@@ -222,7 +248,7 @@ class VisibleHtmlParser(HTMLParser):
     def handle_endtag(self, tag: str) -> None:
         tag = tag.lower()
         for index in range(len(self._stack) - 1, -1, -1):
-            if self._stack[index][0] == tag:
+            if self._stack[index].tag == tag:
                 del self._stack[index:]
                 break
 
