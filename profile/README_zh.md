@@ -26,8 +26,10 @@ DCC-MCP（Digital Content Creation Model Context Protocol）不做 Agent，也�
 
 ## Agent 入口
 
-按照任务安装对应的公开 Skill。操作已有 DCC 只需要 `dcc-mcp`；两个 creator
-Skill 分别负责专项开发边界。
+按照任务选择对应的公开 Skill。操作已有 DCC 只需要 `dcc-mcp`；两个 creator
+Skill 分别负责专项开发边界。当前设置方式由
+[Agent 使用指南](https://dcc-mcp.github.io/zh/agents)统一维护，这份组织首页只负责
+准确介绍产品和指向权威来源。
 
 | Agent 任务 | 公开 Skill |
 | --- | --- |
@@ -35,35 +37,38 @@ Skill 分别负责专项开发边界。
 | 创建或现代化完整的 DCC-MCP adapter 与 runtime | [`@loonghao/dcc-mcp-creator`](https://clawhub.ai/loonghao/skills/dcc-mcp-creator) |
 | 创建、验证或改进 DCC 专项 Skill 包 | [`@loonghao/dcc-mcp-skills-creator`](https://clawhub.ai/loonghao/skills/dcc-mcp-skills-creator) |
 
-```bash
-openclaw skills install @loonghao/dcc-mcp
-openclaw skills install @loonghao/dcc-mcp-creator
-openclaw skills install @loonghao/dcc-mcp-skills-creator
-# 其他 Agent Skills 宿主可直接使用 ClawHub CLI：
-npx --yes clawhub@0.23.1 install @loonghao/dcc-mcp
-npx --yes clawhub@0.23.1 install @loonghao/dcc-mcp-creator
-npx --yes clawhub@0.23.1 install @loonghao/dcc-mcp-skills-creator
-```
+默认操作模式是 `dcc-mcp` + `dcc-mcp-cli`：发现在线宿主和当前类型化工具，检查选中
+工具的 schema，用经过校验的参数调用，再验证结果。Skill 还会指导 Agent 保留 trace
+证据，并把脱敏后的 Bug 报告路由到对应的 Skill、adapter 或 Core 项目。
 
-安装后开启新的 agent turn。默认工作流是 `dcc-mcp` + `dcc-mcp-cli`：先用
-`dcc-mcp-cli list` 盘点实例，用 `dcc-mcp-cli doctor` 检查启动状态，再执行
-`search -> describe -> call`。Skill 还会指导 Agent 保留 trace 证据、自我分析
-失败层，并把脱敏后的 Bug 报告路由到对应的 Skill、adapter 或 Core 项目。
-CLI 尚未安装时，请遵循
-[`dcc-mcp-cli` 已验证安装指南](https://github.com/dcc-mcp/dcc-mcp-core/blob/main/README_zh.md#安装独立-cli)。
-
-如果你正在搜索 **Maya MCP**、**Blender MCP** 或 **3ds Max MCP** 服务，这些适配器
-都会通过 MCP 和 `dcc-mcp-cli` 暴露同一套类型化契约。如果你的入口是 **Maya CLI**、
-**3ds Max CLI**（也常写作 `3dsmax` 或 `3ds max`）或 **Blender CLI** 工作流，可以
-使用共享 CLI 发现在线宿主、搜索当前工具目录、描述选中工具的 schema，再用经过校验
-的参数调用。
+如果你正在搜索 **Maya MCP**、**3ds Max MCP**、**Blender MCP**、**Unreal MCP**、
+**Unity MCP**、**Tuanjie MCP** 或 **Godot MCP**，请从下表的官网指南和归属适配器
+开始。如果你的入口是 **Maya CLI**、**3ds Max CLI**（也常写作 `3dsmax` 或
+`3ds max`）或 **Blender CLI** 工作流，DCC-MCP 会补充在线宿主发现、类型化工具搜索、
+schema 检查、调用和结果验证，但不会替代应用自身的命令行。
 
 | 应用 | 官网控制指南 | 归属适配器 |
 | --- | --- | --- |
 | Maya | [用 AI 控制 Maya](https://dcc-mcp.github.io/zh/control/maya) | [`dcc-mcp-maya`](https://github.com/dcc-mcp/dcc-mcp-maya) |
 | 3ds Max | [用 AI 控制 3ds Max](https://dcc-mcp.github.io/zh/control/3ds-max) | [`dcc-mcp-3dsmax`](https://github.com/dcc-mcp/dcc-mcp-3dsmax) |
 | Blender | [用 AI 控制 Blender](https://dcc-mcp.github.io/zh/control/blender) | [`dcc-mcp-blender`](https://github.com/dcc-mcp/dcc-mcp-blender) |
-| Unity / 团结 | [用 AI 控制 Unity 与团结工作流](https://dcc-mcp.github.io/zh/control/unity) | [`dcc-mcp-unity`](https://github.com/dcc-mcp/dcc-mcp-unity) |
+| Unreal Engine | [用 AI 控制 Unreal Engine](https://dcc-mcp.github.io/zh/control/unreal-engine) | [`dcc-mcp-unreal`](https://github.com/dcc-mcp/dcc-mcp-unreal) |
+| Unity | [用 AI 控制 Unity](https://dcc-mcp.github.io/zh/control/unity) | [`dcc-mcp-unity`](https://github.com/dcc-mcp/dcc-mcp-unity) |
+| Tuanjie / 团结引擎 | [用 AI 控制团结引擎工作流](https://dcc-mcp.github.io/zh/control/unity) | [`dcc-mcp-unity`](https://github.com/dcc-mcp/dcc-mcp-unity) |
+| Godot | [用 AI 控制 Godot](https://dcc-mcp.github.io/zh/control/godot) | [`dcc-mcp-godot`](https://github.com/dcc-mcp/dcc-mcp-godot) |
+
+### 游戏引擎 Agent 工作流
+
+- **Unreal Engine：**检查和制作关卡、资产、Blueprint、Sequencer 与特效，再通过 PIE
+  或 Unreal Automation 验证。支持的编辑器中可以桥接已经安装的 Epic toolset；实验性
+  MCP 插件仍由 Epic 自己提供和分发。
+- **Unity：**检查项目与场景状态，通过类型化工具执行有边界、支持 Undo 的编辑器修改，
+  运行测试、采集 Play Mode，并生成经过验证的构建。
+- **Tuanjie / 团结引擎：**先检查可选的原生 Codely `CustomTool` 目录，再使用其中的
+  图像、Sprite、3D、材质、音频、视频或地形生成能力。登录、积分、下载和任务恢复仍由
+  团结软件包负责；DCC-MCP 负责外围的发现、路由和验证。
+- **Godot：**检查和编辑项目与场景，调用编辑器和游戏运行时工具，并通过 Godot
+  adapter 验证 2D 或 3D 结果。
 
 ## 为什么做这个项目
 

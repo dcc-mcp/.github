@@ -1,0 +1,41 @@
+name: Profile contract
+
+on:
+  pull_request:
+    paths:
+      - "profile/**"
+      - "scripts/check_profile_contract.py"
+      - ".github/workflows/profile-contract.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "profile/**"
+      - "scripts/check_profile_contract.py"
+      - ".github/workflows/profile-contract.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Check identity, discovery, and public links
+        run: python scripts/check_profile_contract.py --links
+      - name: Lint Markdown
+        run: npx --yes markdownlint-cli2 "profile/*.md"
+      - name: Render Markdown
+        run: |
+          npx --yes marked -i profile/README.md -o /tmp/profile-en.html
+          npx --yes marked -i profile/README_zh.md -o /tmp/profile-zh.html
+          test -s /tmp/profile-en.html
+          test -s /tmp/profile-zh.html
+          grep -q '<table>' /tmp/profile-en.html
+          grep -q 'Unreal MCP' /tmp/profile-en.html
+          grep -q 'Tuanjie MCP' /tmp/profile-zh.html
