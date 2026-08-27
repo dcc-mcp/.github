@@ -228,6 +228,30 @@ class ProfileContractMutationTests(unittest.TestCase):
                 )
         path.write_text(original, encoding="utf-8")
 
+    def test_escaped_unsupported_visibility_styles_fail_closed(self) -> None:
+        variants = (
+            "opacity:0",
+            "opacity:.0",
+            "opacity:0.0!important",
+            "opac\\69ty:0",
+            "opacity:0;opacity:1",
+            "opacity:1;opacity:0",
+            "filter:opacity(0)",
+            "clip-path:inset(100%)",
+        )
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        mutated = original.replace("**Godot MCP**", "**Godot connector**", 1)
+        self.assertNotEqual(original, mutated)
+        for style in variants:
+            with self.subTest(style=style):
+                markup = f'&lt;p style="{style}"&gt;Godot MCP&lt;/p&gt;'
+                path.write_text(mutated + f"\n{markup}\n", encoding="utf-8")
+                self.assert_checker_rejects_cleanly(
+                    "missing visible discovery identity 'Godot MCP'"
+                )
+        path.write_text(original, encoding="utf-8")
+
     def test_duplicate_visibility_attributes_fail_closed(self) -> None:
         variants = (
             'style="display:none" style="display:block"',
@@ -472,6 +496,77 @@ class ProfileContractMutationTests(unittest.TestCase):
         self.assertIsNotNone(error)
         self.assertIn("DNS address drift", error)
         opener.assert_not_called()
+
+    def test_mixed_public_and_non_public_dns_answers_fail_closed(self) -> None:
+        checker = runpy.run_path(str(ROOT / "scripts" / "check_profile_contract.py"))
+        mixed_answers = self.address_info("93.184.216.34") + self.address_info(
+            "127.0.0.1"
+        )
+        with (
+            mock.patch.object(
+                checker["socket"], "getaddrinfo", return_value=mixed_answers
+            ),
+            mock.patch.object(checker["urllib"].request, "build_opener") as opener,
+        ):
+            error = checker["check_url"]("https://example.com/start")
+        self.assertIsNotNone(error)
+        self.assertIn("non-public address", error)
+        opener.assert_not_called()
+
+    def test_bound_https_transport_preserves_origin_identity(self) -> None:
+        checker = runpy.run_path(str(ROOT / "scripts" / "check_profile_contract.py"))
+        self.assertIn("BoundHTTPSConnection", checker)
+        connection_type = checker["BoundHTTPSConnection"]
+
+        class RecordingSocket:
+            def __init__(self) -> None:
+                self.connected_to = None
+                self.sent = bytearray()
+
+            def settimeout(self, _timeout) -> None:
+                pass
+
+            def connect(self, address) -> None:
+                self.connected_to = address
+
+            def sendall(self, data) -> None:
+                self.sent.extend(data)
+
+            def close(self) -> None:
+                pass
+
+        class RecordingContext:
+            def __init__(self) -> None:
+                self.server_hostname = None
+
+            def wrap_socket(self, sock, *, server_hostname):
+                self.server_hostname = server_hostname
+                return sock
+
+        transport_socket = RecordingSocket()
+        tls_context = RecordingContext()
+        pins = {"example.com": frozenset({"93.184.216.34"})}
+        production_handler = checker["BoundHTTPSHandler"](pins)
+        self.assertTrue(production_handler._context.check_hostname)
+        with (
+            mock.patch.object(
+                checker["socket"], "socket", return_value=transport_socket
+            ),
+            mock.patch.object(
+                checker["socket"],
+                "getaddrinfo",
+                side_effect=AssertionError("transport performed an independent lookup"),
+            ),
+        ):
+            connection = connection_type(
+                "example.com", pins, timeout=3, context=tls_context
+            )
+            connection.connect()
+            connection.request("GET", "/health")
+
+        self.assertEqual(("93.184.216.34", 443), transport_socket.connected_to)
+        self.assertEqual("example.com", tls_context.server_hostname)
+        self.assertIn(b"Host: example.com\r\n", bytes(transport_socket.sent))
 
     def test_redirect_loops_and_hop_overflow_fail_before_dispatch(self) -> None:
         checker = runpy.run_path(str(ROOT / "scripts" / "check_profile_contract.py"))
