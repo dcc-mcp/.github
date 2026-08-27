@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import unquote, urlsplit, urlunsplit
+from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
@@ -48,6 +48,8 @@ NON_PUBLIC_DNS_SUFFIXES = (
     ".test",
 )
 MAX_STYLE_LENGTH = 4096
+MAX_REDIRECT_HOPS = 5
+VISIBILITY_ATTRIBUTES = {"aria-hidden", "hidden", "style"}
 ESCAPED_HTML_RE = re.compile(
     r"(?:<!--|<\s*/?\s*(?:script|style|template|noscript|span|div|section)\b)",
     re.IGNORECASE,
@@ -150,7 +152,15 @@ class VisibleHtmlParser(HTMLParser):
     def _element_is_hidden(tag: str, attrs: list[tuple[str, str | None]]) -> bool:
         if tag in ALWAYS_HIDDEN_TAGS:
             return True
-        normalized = {name.lower(): value for name, value in attrs}
+        normalized: dict[str, str | None] = {}
+        for name, value in attrs:
+            normalized_name = name.lower()
+            if (
+                normalized_name in VISIBILITY_ATTRIBUTES
+                and normalized_name in normalized
+            ):
+                return True
+            normalized.setdefault(normalized_name, value)
         if "hidden" in normalized:
             return True
         aria_hidden = normalized.get("aria-hidden")
@@ -416,6 +426,80 @@ def validate_link(link: str, profile_path: Path) -> tuple[str | None, str | None
     return None, None
 
 
+class RedirectPolicyError(urllib.error.HTTPError):
+    """A redirect rejected before urllib can dispatch its destination request."""
+
+
+class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def __init__(self) -> None:
+        super().__init__()
+        self._visited: set[str] = set()
+        self._redirect_count = 0
+
+    @staticmethod
+    def _reject(
+        request: urllib.request.Request,
+        file_pointer: object,
+        code: int,
+        headers: object,
+        reason: str,
+    ) -> None:
+        raise RedirectPolicyError(request.full_url, code, reason, headers, file_pointer)
+
+    def redirect_request(
+        self,
+        request: urllib.request.Request,
+        file_pointer: object,
+        code: int,
+        message: str,
+        headers: object,
+        new_url: str,
+    ) -> urllib.request.Request | None:
+        try:
+            target = urljoin(request.full_url, new_url)
+        except ValueError:
+            self._reject(
+                request,
+                file_pointer,
+                code,
+                headers,
+                f"unsafe redirect target {new_url!r}: invalid URL syntax",
+            )
+        error, public_url = validate_link(target, PROFILE_DIR / "README.md")
+        if error or public_url is None:
+            self._reject(
+                request,
+                file_pointer,
+                code,
+                headers,
+                f"unsafe redirect target {new_url!r}: {error or 'public URL required'}",
+            )
+
+        self._visited.add(request.full_url)
+        if public_url in self._visited:
+            self._reject(
+                request,
+                file_pointer,
+                code,
+                headers,
+                f"redirect loop detected at {public_url}",
+            )
+        if self._redirect_count >= MAX_REDIRECT_HOPS:
+            self._reject(
+                request,
+                file_pointer,
+                code,
+                headers,
+                f"too many redirects before {public_url}",
+            )
+
+        self._visited.add(public_url)
+        self._redirect_count += 1
+        return super().redirect_request(
+            request, file_pointer, code, message, headers, public_url
+        )
+
+
 def find_contract_table(
     parsed: ParsedProfile, heading: str, profile_name: str, failures: list[str]
 ) -> tuple[tuple[Cell, ...], ...] | None:
@@ -528,6 +612,9 @@ def check_contract() -> tuple[list[str], set[str]]:
 
 
 def check_url(url: str) -> str | None:
+    error, public_url = validate_link(url, PROFILE_DIR / "README.md")
+    if error or public_url != url:
+        return f"{url}: unsafe initial URL: {error or 'public URL required'}"
     request = urllib.request.Request(
         url,
         headers={
@@ -538,11 +625,23 @@ def check_url(url: str) -> str | None:
     last_error = "unknown error"
     for attempt in range(3):
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            opener = urllib.request.build_opener(SafeRedirectHandler())
+            with opener.open(request, timeout=30) as response:
                 response.read(1)
+                final_url = response.geturl()
+                final_error, final_public_url = validate_link(
+                    final_url, PROFILE_DIR / "README.md"
+                )
+                if final_error or final_public_url != final_url:
+                    return (
+                        f"{url}: unsafe redirect destination {final_url!r}: "
+                        f"{final_error or 'public URL required'}"
+                    )
                 if 200 <= response.status < 400:
                     return None
                 last_error = f"HTTP {response.status}"
+        except RedirectPolicyError as exc:
+            return f"{url}: {exc.reason}"
         except urllib.error.HTTPError as exc:
             last_error = f"HTTP {exc.code}"
         except (urllib.error.URLError, TimeoutError) as exc:
