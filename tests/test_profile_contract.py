@@ -169,6 +169,12 @@ class ProfileContractMutationTests(unittest.TestCase):
         )
         self.assert_checker_rejects()
 
+    def test_deceptive_escaped_comment_is_rejected_with_visible_identity(self) -> None:
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        path.write_text(original + "\n&lt;!-- Godot MCP --&gt;\n", encoding="utf-8")
+        self.assert_checker_rejects()
+
     def test_public_url_canonicalization_aliases_are_rejected(self) -> None:
         aliases = (
             "https://github.com:443/dcc-mcp",
@@ -210,6 +216,23 @@ class ProfileContractMutationTests(unittest.TestCase):
             with self.subTest(alias=alias):
                 path.write_text(
                     original + f"\n[Local alias {index}]({alias})\n", encoding="utf-8"
+                )
+                self.assert_checker_rejects()
+        path.write_text(original, encoding="utf-8")
+
+    def test_query_and_fragment_aliases_are_rejected(self) -> None:
+        aliases = (
+            "https://github.com/dcc-mcp/core?x=1",
+            "https://github.com/dcc-mcp/core#x",
+            "./README_zh.md#x",
+            "#x",
+        )
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        for index, alias in enumerate(aliases):
+            with self.subTest(alias=alias):
+                path.write_text(
+                    original + f"\n[Alias {index}]({alias})\n", encoding="utf-8"
                 )
                 self.assert_checker_rejects()
         path.write_text(original, encoding="utf-8")
