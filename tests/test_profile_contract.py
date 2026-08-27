@@ -271,12 +271,71 @@ class ProfileContractMutationTests(unittest.TestCase):
                 )
         path.write_text(original, encoding="utf-8")
 
+    def test_closed_details_headings_do_not_satisfy_contract(self) -> None:
+        cases = (
+            ("# DCC MCP", "expected exactly one visible H1 identity 'DCC MCP'"),
+            (
+                "## Agent entry points",
+                "expected exactly one visible H2 'Agent entry points'",
+            ),
+        )
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        for heading, reason in cases:
+            with self.subTest(heading=heading):
+                mutated = original.replace(heading, "", 1)
+                self.assertNotEqual(original, mutated)
+                hidden_heading = (
+                    f"<details><summary>More</summary>\n\n{heading}\n\n</details>"
+                )
+                path.write_text(mutated + f"\n{hidden_heading}\n", encoding="utf-8")
+                self.assert_checker_rejects_cleanly(reason)
+        path.write_text(original, encoding="utf-8")
+
+    def test_only_first_closed_details_summary_is_visible(self) -> None:
+        variants = (
+            "<details><summary>First</summary><summary>Godot MCP</summary></details>",
+            "&lt;details&gt;&lt;summary&gt;First&lt;/summary&gt;&lt;summary&gt;Godot MCP&lt;/summary&gt;&lt;/details&gt;",
+            "<details open><summary>Outer</summary><details><summary>First</summary><summary>Godot MCP</summary></details></details>",
+        )
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        mutated = original.replace("**Godot MCP**", "**Godot connector**", 1)
+        self.assertNotEqual(original, mutated)
+        for markup in variants:
+            with self.subTest(markup=markup):
+                path.write_text(mutated + f"\n{markup}\n", encoding="utf-8")
+                self.assert_checker_rejects_cleanly(
+                    "missing visible discovery identity 'Godot MCP'"
+                )
+        path.write_text(original, encoding="utf-8")
+
+    def test_open_details_headings_satisfy_contract(self) -> None:
+        headings = ("# DCC MCP", "## Agent entry points")
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        for heading in headings:
+            with self.subTest(heading=heading):
+                mutated = original.replace(heading, "", 1)
+                self.assertNotEqual(original, mutated)
+                visible_heading = (
+                    f"<details open><summary>More</summary>\n\n{heading}\n\n</details>"
+                )
+                path.write_text(mutated + f"\n{visible_heading}\n", encoding="utf-8")
+                result = self.run_checker()
+                output = result.stdout + result.stderr
+                self.assertEqual(0, result.returncode, output)
+                self.assertNotIn("Traceback", output)
+        path.write_text(original, encoding="utf-8")
+
     def test_details_summary_and_open_body_are_visible(self) -> None:
         variants = (
             "<details><summary>Godot MCP</summary>More</details>",
+            "<details><p>Hidden body</p><summary>Godot MCP</summary></details>",
             "&lt;details&gt;&lt;summary&gt;Godot MCP&lt;/summary&gt;More&lt;/details&gt;",
             "<details open><summary>More</summary>Godot MCP</details>",
             "&lt;details open&gt;&lt;summary&gt;More&lt;/summary&gt;Godot MCP&lt;/details&gt;",
+            "<details open><summary>First</summary><summary>Godot MCP</summary></details>",
             "<details open><summary>Outer</summary><details open><summary>Inner</summary>Godot MCP</details></details>",
         )
         path = self.profile("README.md")

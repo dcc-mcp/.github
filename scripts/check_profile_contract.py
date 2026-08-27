@@ -113,11 +113,13 @@ class ParsedProfile:
     visible_links: frozenset[str]
 
 
-@dataclass(frozen=True)
+@dataclass
 class HtmlFrame:
     tag: str
     hidden: bool
     closed_details: bool
+    summary_consumed: bool = False
+    heading_parts: list[str] | None = None
 
 
 def decode_css_escapes(value: str) -> str | None:
@@ -172,6 +174,7 @@ class VisibleHtmlParser(HTMLParser):
         self.hidden_text: list[str] = []
         self.links: list[str] = []
         self.visible_links: list[str] = []
+        self.headings: list[tuple[int, str]] = []
         self._stack: list[HtmlFrame] = []
         self._escaped_markup_budget = escaped_markup_budget
 
@@ -190,7 +193,9 @@ class VisibleHtmlParser(HTMLParser):
                 if index + 1 < len(self._stack)
                 else child_tag
             )
-            if direct_child != "summary":
+            if direct_child != "summary" or (
+                index + 1 == len(self._stack) and frame.summary_consumed
+            ):
                 return True
         return False
 
@@ -226,13 +231,32 @@ class VisibleHtmlParser(HTMLParser):
         if not (self.hidden if hidden is None else hidden):
             self.visible_links.append(value)
 
+    def _append_heading_text(self, parts: list[str] | tuple[str, ...] | str) -> None:
+        if self.hidden:
+            return
+        values = [parts] if isinstance(parts, str) else parts
+        for frame in reversed(self._stack):
+            if frame.heading_parts is not None:
+                frame.heading_parts.extend(values)
+                return
+
+    def _consume_direct_summary(self, tag: str) -> None:
+        if tag == "summary" and self._stack and self._stack[-1].closed_details:
+            self._stack[-1].summary_consumed = True
+
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag = tag.lower()
         hidden = self._path_is_hidden(tag) or self._element_is_hidden(tag, attrs)
+        self._consume_direct_summary(tag)
         if tag not in VOID_TAGS:
             attr_names = {name.lower() for name, _value in attrs}
             self._stack.append(
-                HtmlFrame(tag, hidden, tag == "details" and "open" not in attr_names)
+                HtmlFrame(
+                    tag,
+                    hidden,
+                    tag == "details" and "open" not in attr_names,
+                    heading_parts=[] if re.fullmatch(r"h[1-6]", tag) else None,
+                )
             )
         for name, value in attrs:
             if name.lower() in {"href", "src"} and value is not None:
@@ -241,6 +265,7 @@ class VisibleHtmlParser(HTMLParser):
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag = tag.lower()
         hidden = self._path_is_hidden(tag) or self._element_is_hidden(tag, attrs)
+        self._consume_direct_summary(tag)
         for name, value in attrs:
             if name.lower() in {"href", "src"} and value is not None:
                 self.add_link(value, hidden)
@@ -249,6 +274,11 @@ class VisibleHtmlParser(HTMLParser):
         tag = tag.lower()
         for index in range(len(self._stack) - 1, -1, -1):
             if self._stack[index].tag == tag:
+                for frame in self._stack[index:]:
+                    if frame.heading_parts is not None and not frame.hidden:
+                        self.headings.append(
+                            (int(frame.tag[1:]), normalize_text(frame.heading_parts))
+                        )
                 del self._stack[index:]
                 break
 
@@ -284,8 +314,14 @@ class VisibleHtmlParser(HTMLParser):
                 self.text.extend(nested.text)
                 self.hidden_text.extend(nested.hidden_text)
                 self.visible_links.extend(nested.visible_links)
+                self.headings.extend(nested.headings)
+                self._append_heading_text(nested.text)
             return
-        (self.hidden_text if self.hidden else self.text).append(data)
+        if self.hidden:
+            self.hidden_text.append(data)
+        else:
+            self.text.append(data)
+            self._append_heading_text(data)
 
     def handle_comment(self, data: str) -> None:
         self.hidden_text.append(data)
@@ -331,19 +367,13 @@ def parse_markdown(text: str) -> ParsedProfile:
     document.feed(markdown.render(text))
     document.close()
 
-    headings: list[tuple[int, str]] = []
     tables: list[tuple[tuple[Cell, ...], ...]] = []
     current_table: list[tuple[Cell, ...]] | None = None
     current_row: list[Cell] | None = None
     current_cell: Cell | None = None
-    heading_level: int | None = None
 
     for token in tokens:
-        if token.type == "heading_open":
-            heading_level = int(token.tag[1:])
-        elif token.type == "heading_close":
-            heading_level = None
-        elif token.type == "table_open":
+        if token.type == "table_open":
             current_table = []
         elif token.type == "table_close":
             if current_table is not None:
@@ -363,14 +393,12 @@ def parse_markdown(text: str) -> ParsedProfile:
             current_cell = None
         elif token.type == "inline":
             inline_text, inline_visible_links = parse_inline(token.children or [])
-            if heading_level is not None:
-                headings.append((heading_level, inline_text))
             if current_cell is not None:
                 current_cell = Cell(inline_text, inline_visible_links)
     return ParsedProfile(
         visible_text=normalize_text(document.text),
         hidden_text=normalize_text(document.hidden_text),
-        headings=tuple(headings),
+        headings=tuple(document.headings),
         tables=tuple(tables),
         links=frozenset(document.links),
         visible_links=frozenset(document.visible_links),
