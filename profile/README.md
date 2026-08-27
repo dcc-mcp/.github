@@ -28,8 +28,10 @@ contracts.
 
 ## Agent entry points
 
-Install the public Skill that matches the task. Operating an existing DCC only
-needs `dcc-mcp`; the creator Skills are focused authoring guides.
+Choose the public Skill that matches the task. Operating an existing DCC only
+needs `dcc-mcp`; the creator Skills are focused authoring guides. The
+[agent guide](https://dcc-mcp.github.io/agents) owns current setup instructions
+so this profile can stay focused on product discovery.
 
 | Agent task | Public Skill |
 | --- | --- |
@@ -37,38 +39,44 @@ needs `dcc-mcp`; the creator Skills are focused authoring guides.
 | Create or modernize a complete DCC-MCP adapter and runtime | [`@loonghao/dcc-mcp-creator`](https://clawhub.ai/loonghao/skills/dcc-mcp-creator) |
 | Create, validate, or improve a DCC-specific Skill package | [`@loonghao/dcc-mcp-skills-creator`](https://clawhub.ai/loonghao/skills/dcc-mcp-skills-creator) |
 
-```bash
-openclaw skills install @loonghao/dcc-mcp
-openclaw skills install @loonghao/dcc-mcp-creator
-openclaw skills install @loonghao/dcc-mcp-skills-creator
-# Direct ClawHub CLI for other Agent Skills hosts:
-npx --yes clawhub@0.23.1 install @loonghao/dcc-mcp
-npx --yes clawhub@0.23.1 install @loonghao/dcc-mcp-creator
-npx --yes clawhub@0.23.1 install @loonghao/dcc-mcp-skills-creator
-```
+The default operating pattern is `dcc-mcp` + `dcc-mcp-cli`: discover the live
+host and its current typed tools, inspect the selected schema, call it with
+validated arguments, then verify the result. The Skill also teaches the agent
+to preserve trace evidence and route a sanitized bug report to the owning
+Skill, adapter, or Core project.
 
-Start a new agent turn after installation. The default workflow is
-`dcc-mcp` + `dcc-mcp-cli`: inventory with `dcc-mcp-cli list`, inspect startup
-state with `dcc-mcp-cli doctor`, then `search -> describe -> call`. The Skill
-also teaches the agent to preserve trace evidence, analyze the failing layer,
-and route a sanitized bug report to the owning Skill, adapter, or Core project.
-Use the
-[`dcc-mcp-cli` verified installation guide](https://github.com/dcc-mcp/dcc-mcp-core#quick-start-operate-a-dcc)
-when the CLI is not already available.
-
-Looking for a **Maya MCP**, **Blender MCP**, or **3ds Max MCP** server? Each
-adapter exposes the same typed contracts through MCP and `dcc-mcp-cli`. If your
-starting point is a **Maya CLI**, **3ds Max CLI** (`3dsmax` or `3ds max`), or
-**Blender CLI** workflow, use the shared CLI to discover the live host, search
-its current tool catalog, describe the selected schema, and call it with
-validated arguments.
+Looking for **Maya MCP**, **3ds Max MCP**, **Blender MCP**, **Unreal MCP**,
+**Unity MCP**, **Tuanjie MCP**, or **Godot MCP**? Start with the canonical guide
+and owning adapter below. If your starting point is a **Maya CLI**,
+**3ds Max CLI** (`3dsmax` or `3ds max`), or **Blender CLI** workflow, DCC-MCP adds shared
+live-host discovery, typed tool search, schema inspection, calls, and result
+verification without replacing the application's own command line.
 
 | Application | Canonical control guide | Owning adapter |
 | --- | --- | --- |
 | Maya | [Control Maya with AI](https://dcc-mcp.github.io/control/maya) | [`dcc-mcp-maya`](https://github.com/dcc-mcp/dcc-mcp-maya) |
 | 3ds Max | [Control 3ds Max with AI](https://dcc-mcp.github.io/control/3ds-max) | [`dcc-mcp-3dsmax`](https://github.com/dcc-mcp/dcc-mcp-3dsmax) |
 | Blender | [Control Blender with AI](https://dcc-mcp.github.io/control/blender) | [`dcc-mcp-blender`](https://github.com/dcc-mcp/dcc-mcp-blender) |
-| Unity / Tuanjie | [Control Unity and Tuanjie workflows with AI](https://dcc-mcp.github.io/control/unity) | [`dcc-mcp-unity`](https://github.com/dcc-mcp/dcc-mcp-unity) |
+| Unreal Engine | [Control Unreal Engine with AI](https://dcc-mcp.github.io/control/unreal-engine) | [`dcc-mcp-unreal`](https://github.com/dcc-mcp/dcc-mcp-unreal) |
+| Unity | [Control Unity with AI](https://dcc-mcp.github.io/control/unity) | [`dcc-mcp-unity`](https://github.com/dcc-mcp/dcc-mcp-unity) |
+| Tuanjie / 团结引擎 | [Control Tuanjie workflows with AI](https://dcc-mcp.github.io/control/unity) | [`dcc-mcp-unity`](https://github.com/dcc-mcp/dcc-mcp-unity) |
+| Godot | [Control Godot with AI](https://dcc-mcp.github.io/control/godot) | [`dcc-mcp-godot`](https://github.com/dcc-mcp/dcc-mcp-godot) |
+
+### Game-engine agent workflows
+
+- **Unreal Engine:** inspect and author levels, assets, Blueprints, cinematics,
+  and effects, then validate through PIE or Unreal Automation. On supported
+  editors, the adapter can bridge installed Epic toolsets while Epic continues
+  to own and distribute its experimental MCP plugin.
+- **Unity:** inspect project and scene state, make bounded Undo-backed editor
+  changes, run tests, capture Play Mode, and produce verified builds through
+  the Unity adapter's typed tools.
+- **Tuanjie / 团结引擎:** inspect the optional native Codely `CustomTool`
+  catalog before using its image, sprite, 3D, material, audio, video, or terrain
+  generators. Tuanjie continues to own sign-in, credits, downloads, and task
+  recovery; DCC-MCP owns the surrounding discovery, routing, and verification.
+- **Godot:** inspect and edit projects and scenes, exercise editor and game
+  runtime tools, and validate 2D or 3D results through the Godot adapter.
 
 ## Why this project exists
 
