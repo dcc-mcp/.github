@@ -123,6 +123,11 @@ def parse_css_declarations(style: str) -> dict[str, str] | None:
         normalized_value = CSS_IMPORTANT_RE.sub("", value).strip().lower()
         if not normalized_name:
             return None
+        if (
+            normalized_name in {"display", "visibility"}
+            and normalized_name in declarations
+        ):
+            return None
         declarations[normalized_name] = normalized_value
     return declarations
 
@@ -320,7 +325,10 @@ def validate_link(link: str, profile_path: Path) -> tuple[str | None, str | None
     if "\\" in link or any(character.isspace() for character in link):
         return f"{profile_path.name}: ambiguous link {link!r}", None
 
-    parsed = urlsplit(link)
+    try:
+        parsed = urlsplit(link)
+    except ValueError:
+        return f"{profile_path.name}: invalid URL syntax in link {link!r}", None
     if "?" in link or "#" in link:
         return (
             f"{profile_path.name}: query and fragment links are forbidden: {link!r}",
