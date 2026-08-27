@@ -4,6 +4,7 @@ import hashlib
 import json
 import runpy
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -247,6 +248,31 @@ class ProfileContractMutationTests(unittest.TestCase):
                 )
         path.write_text(original, encoding="utf-8")
 
+    def test_generic_and_double_escaped_hidden_markup_fails_closed(self) -> None:
+        variants = (
+            '&lt;p style="display:none" style="display:block"&gt;Godot MCP&lt;/p&gt;',
+            "&lt;p style='display:none' style='display:block'&gt;Godot MCP&lt;/p&gt;",
+            '&lt;a aria-hidden="true" aria-hidden="false"&gt;Godot MCP&lt;/a&gt;',
+            "&lt;P ARIA-HIDDEN='true' aria-hidden='false'&gt;Godot MCP&lt;/P&gt;",
+            '&lt;p hidden="hidden" hidden=""&gt;Godot MCP&lt;/p&gt;',
+            '&lt;p hidden="" hidden="hidden"&gt;Godot MCP&lt;/p&gt;',
+            '&lt;p&gt;&lt;a style="display:none" style="display:block"&gt;Godot MCP&lt;/a&gt;&lt;/p&gt;',
+            '&lt;p class="one"class="two" id="one"id="two" style=&quot;display:none&quot; style=&quot;display:block&quot;&gt;Godot MCP&lt;/p&gt;',
+            '&amp;lt;p style="display:none" style="display:block"&amp;gt;Godot MCP&amp;lt;/p&amp;gt;',
+            '&amp;lt;a aria-hidden="true" aria-hidden="false"&amp;gt;Godot MCP&amp;lt;/a&amp;gt;',
+        )
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        mutated = original.replace("**Godot MCP**", "**Godot connector**", 1)
+        self.assertNotEqual(original, mutated)
+        for markup in variants:
+            with self.subTest(markup=markup):
+                path.write_text(mutated + f"\n{markup}\n", encoding="utf-8")
+                self.assert_checker_rejects_cleanly(
+                    "missing visible discovery identity 'Godot MCP'"
+                )
+        path.write_text(original, encoding="utf-8")
+
     def test_malformed_escaped_comment_fails_without_traceback(self) -> None:
         path = self.profile("README.md")
         original = path.read_text(encoding="utf-8")
@@ -332,6 +358,9 @@ class ProfileContractMutationTests(unittest.TestCase):
             "https://example.com:443/private",
             "https://example.com/%GG",
             "https://[::1",
+            "\thttps://example.com/private",
+            "https://example.com/\tprivate",
+            "https://example.com/\r\nprivate",
         )
         request = urllib.request.Request("https://example.com/start")
         with mock.patch.object(
@@ -350,17 +379,118 @@ class ProfileContractMutationTests(unittest.TestCase):
                         )
             dispatch.assert_not_called()
 
+    def test_special_use_hostnames_are_rejected(self) -> None:
+        checker = runpy.run_path(str(ROOT / "scripts" / "check_profile_contract.py"))
+        validate_link = checker["validate_link"]
+        profile = ROOT / "profile" / "README.md"
+        hosts = (
+            "service.example",
+            "service.home.arpa",
+            "service.onion",
+            "localtest.me",
+            "sub.localtest.me",
+        )
+        for host in hosts:
+            with self.subTest(host=host):
+                error, public_url = validate_link(f"https://{host}/", profile)
+                self.assertIsNone(public_url)
+                self.assertIsNotNone(error)
+                self.assertIn("special-use hostname", error)
+
+    @staticmethod
+    def address_info(address: str):
+        if ":" in address:
+            return [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", (address, 443, 0, 0))]
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, 443))]
+
+    def test_non_public_dns_answers_fail_before_network_io(self) -> None:
+        checker = runpy.run_path(str(ROOT / "scripts" / "check_profile_contract.py"))
+        self.assertIn("socket", checker)
+        unsafe_addresses = (
+            "127.0.0.1",
+            "10.0.0.1",
+            "169.254.1.1",
+            "192.0.2.1",
+            "224.0.0.1",
+            "0.0.0.0",
+            "::1",
+            "fc00::1",
+            "fe80::1",
+            "ff02::1",
+        )
+        for address in unsafe_addresses:
+            with self.subTest(address=address):
+                with (
+                    mock.patch.object(
+                        checker["socket"],
+                        "getaddrinfo",
+                        return_value=self.address_info(address),
+                    ),
+                    mock.patch.object(
+                        checker["urllib"].request, "build_opener"
+                    ) as opener,
+                ):
+                    error = checker["check_url"]("https://example.com/start")
+                self.assertIsNotNone(error)
+                self.assertIn("non-public address", error)
+                opener.assert_not_called()
+
+    def test_dns_address_drift_is_rejected(self) -> None:
+        checker = runpy.run_path(str(ROOT / "scripts" / "check_profile_contract.py"))
+        self.assertIn("socket", checker)
+
+        class Response:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self, _size):
+                return b""
+
+            def geturl(self):
+                return "https://example.com/start"
+
+        class Opener:
+            def open(self, *_args, **_kwargs):
+                return Response()
+
+        answers = [
+            self.address_info("93.184.216.34"),
+            self.address_info("93.184.216.35"),
+        ]
+        with (
+            mock.patch.object(checker["socket"], "getaddrinfo", side_effect=answers),
+            mock.patch.object(
+                checker["urllib"].request, "build_opener", return_value=Opener()
+            ) as opener,
+        ):
+            error = checker["check_url"]("https://example.com/start")
+        self.assertIsNotNone(error)
+        self.assertIn("DNS address drift", error)
+        opener.assert_not_called()
+
     def test_redirect_loops_and_hop_overflow_fail_before_dispatch(self) -> None:
         checker = runpy.run_path(str(ROOT / "scripts" / "check_profile_contract.py"))
         self.assertIn("SafeRedirectHandler", checker)
         handler_type = checker["SafeRedirectHandler"]
         max_hops = checker["MAX_REDIRECT_HOPS"]
         request = urllib.request.Request("https://example.com/start")
-        with mock.patch.object(
-            urllib.request.HTTPRedirectHandler,
-            "redirect_request",
-            return_value=object(),
-        ) as dispatch:
+        with (
+            mock.patch.object(
+                checker["socket"],
+                "getaddrinfo",
+                return_value=self.address_info("93.184.216.34"),
+            ),
+            mock.patch.object(
+                urllib.request.HTTPRedirectHandler,
+                "redirect_request",
+                return_value=object(),
+            ) as dispatch,
+        ):
             loop_handler = handler_type()
             with self.assertRaisesRegex(urllib.error.HTTPError, "redirect loop"):
                 loop_handler.redirect_request(
@@ -413,6 +543,11 @@ class ProfileContractMutationTests(unittest.TestCase):
                 return Response()
 
         with (
+            mock.patch.object(
+                checker["socket"],
+                "getaddrinfo",
+                return_value=self.address_info("93.184.216.34"),
+            ),
             mock.patch.object(
                 checker["urllib"].request, "urlopen", return_value=Response()
             ),

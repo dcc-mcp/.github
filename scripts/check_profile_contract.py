@@ -7,13 +7,16 @@ import argparse
 import ipaddress
 import json
 import re
+import socket
 import sys
 import time
 import unicodedata
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
+from html import unescape as html_unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
@@ -40,20 +43,25 @@ NUMERIC_HOST_RE = re.compile(
 )
 PUBLIC_HOST_RE = re.compile(r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}")
 NON_PUBLIC_DNS_SUFFIXES = (
+    ".example",
+    ".home.arpa",
     ".internal",
     ".invalid",
     ".lan",
     ".local",
     ".localhost",
+    ".onion",
     ".test",
 )
+NON_PUBLIC_DNS_NAMES = {suffix.removeprefix(".") for suffix in NON_PUBLIC_DNS_SUFFIXES}
+NON_PUBLIC_DNS_NAMES.add("localtest.me")
 MAX_STYLE_LENGTH = 4096
 MAX_REDIRECT_HOPS = 5
+MAX_DNS_ADDRESSES = 16
+DNS_TIMEOUT_SECONDS = 5
 VISIBILITY_ATTRIBUTES = {"aria-hidden", "hidden", "style"}
-ESCAPED_HTML_RE = re.compile(
-    r"(?:<!--|<\s*/?\s*(?:script|style|template|noscript|span|div|section)\b)",
-    re.IGNORECASE,
-)
+ESCAPED_MARKUP_RE = re.compile(r"<\s*(?:!--|/?\s*[a-z][^<>]*>)", re.IGNORECASE)
+MAX_ESCAPED_MARKUP_EXPANSIONS = 2
 ALWAYS_HIDDEN_TAGS = {"script", "style", "template", "noscript"}
 VOID_TAGS = {
     "area",
@@ -135,14 +143,16 @@ def parse_css_declarations(style: str) -> dict[str, str] | None:
 
 
 class VisibleHtmlParser(HTMLParser):
-    def __init__(self, *, expand_escaped_html: bool = True) -> None:
+    def __init__(
+        self, *, escaped_markup_budget: int = MAX_ESCAPED_MARKUP_EXPANSIONS
+    ) -> None:
         super().__init__(convert_charrefs=True)
         self.text: list[str] = []
         self.hidden_text: list[str] = []
         self.links: list[str] = []
         self.visible_links: list[str] = []
         self._stack: list[tuple[str, bool]] = []
-        self._expand_escaped_html = expand_escaped_html
+        self._escaped_markup_budget = escaped_markup_budget
 
     @property
     def hidden(self) -> bool:
@@ -203,12 +213,28 @@ class VisibleHtmlParser(HTMLParser):
                 break
 
     def handle_data(self, data: str) -> None:
-        if ESCAPED_HTML_RE.search(data):
-            if not self._expand_escaped_html:
-                self.hidden_text.append(data)
+        candidate = data
+        for _ in range(self._escaped_markup_budget + 1):
+            if ESCAPED_MARKUP_RE.search(candidate):
+                break
+            decoded = html_unescape(candidate)
+            if decoded == candidate:
+                break
+            candidate = decoded
+        if (
+            not ESCAPED_MARKUP_RE.search(candidate)
+            and html_unescape(candidate) != candidate
+        ):
+            self.hidden_text.append(data)
+            return
+        if ESCAPED_MARKUP_RE.search(candidate):
+            if self._escaped_markup_budget <= 0:
+                self.hidden_text.append(candidate)
                 return
-            nested = VisibleHtmlParser(expand_escaped_html=False)
-            nested.feed(data)
+            nested = VisibleHtmlParser(
+                escaped_markup_budget=self._escaped_markup_budget - 1
+            )
+            nested.feed(candidate)
             nested.close()
             self.links.extend(nested.links)
             if self.hidden:
@@ -235,10 +261,7 @@ def parse_inline(children: list[Token]) -> tuple[str, tuple[str, ...]]:
     parser = VisibleHtmlParser()
     for child in children:
         if child.type == "text":
-            if not parser.hidden and ESCAPED_HTML_RE.search(child.content):
-                parser.feed(child.content)
-            else:
-                parser.handle_data(child.content)
+            parser.handle_data(child.content)
         elif child.type == "code_inline":
             parser.handle_data(child.content)
         elif child.type in {"softbreak", "hardbreak"}:
@@ -376,12 +399,19 @@ def validate_link(link: str, profile_path: Path) -> tuple[str | None, str | None
                 f"{profile_path.name}: IP literal links are forbidden: {link!r}",
                 None,
             )
-        if (
-            NUMERIC_HOST_RE.fullmatch(hostname)
-            or not PUBLIC_HOST_RE.fullmatch(hostname)
-            or hostname.endswith(NON_PUBLIC_DNS_SUFFIXES)
+        if NUMERIC_HOST_RE.fullmatch(hostname) or not PUBLIC_HOST_RE.fullmatch(
+            hostname
         ):
             return f"{profile_path.name}: public domain required in link {link!r}", None
+        if (
+            hostname in NON_PUBLIC_DNS_NAMES
+            or hostname.endswith(NON_PUBLIC_DNS_SUFFIXES)
+            or hostname.endswith(".localtest.me")
+        ):
+            return (
+                f"{profile_path.name}: special-use hostname forbidden in link {link!r}",
+                None,
+            )
         try:
             port = parsed.port
         except ValueError:
@@ -430,11 +460,93 @@ class RedirectPolicyError(urllib.error.HTTPError):
     """A redirect rejected before urllib can dispatch its destination request."""
 
 
+def validate_raw_redirect_location(location: str) -> str | None:
+    if (
+        not location
+        or unicodedata.normalize("NFKC", location) != location
+        or CONTROL_RE.search(location)
+        or INVALID_PERCENT_RE.search(location)
+        or "\\" in location
+        or any(character.isspace() for character in location)
+    ):
+        return "unsafe or non-normalized raw Location"
+    return None
+
+
+def resolve_public_addresses(hostname: str) -> tuple[frozenset[str] | None, str | None]:
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(socket.getaddrinfo, hostname, 443, 0, socket.SOCK_STREAM)
+    try:
+        address_info = future.result(timeout=DNS_TIMEOUT_SECONDS)
+    except FuturesTimeoutError:
+        future.cancel()
+        return None, f"DNS resolution timed out for {hostname}"
+    except (OSError, ValueError):
+        return None, f"DNS resolution failed for {hostname}"
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+    if not address_info:
+        return None, f"DNS resolution returned no addresses for {hostname}"
+    if len(address_info) > MAX_DNS_ADDRESSES:
+        return None, f"DNS resolution returned too many addresses for {hostname}"
+
+    addresses: set[str] = set()
+    for item in address_info:
+        try:
+            parsed_address = ipaddress.ip_address(item[4][0])
+        except (IndexError, TypeError, ValueError):
+            return None, f"DNS resolution returned an invalid address for {hostname}"
+        if (
+            not parsed_address.is_global
+            or parsed_address.is_loopback
+            or parsed_address.is_private
+            or parsed_address.is_link_local
+            or parsed_address.is_reserved
+            or parsed_address.is_multicast
+            or parsed_address.is_unspecified
+        ):
+            return None, f"DNS resolution returned non-public address for {hostname}"
+        addresses.add(str(parsed_address))
+    return frozenset(addresses), None
+
+
+def pin_public_url(url: str, pinned_addresses: dict[str, frozenset[str]]) -> str | None:
+    try:
+        hostname = urlsplit(url).hostname
+    except ValueError:
+        return "invalid URL syntax during DNS validation"
+    if hostname is None:
+        return "missing hostname during DNS validation"
+    addresses, error = resolve_public_addresses(hostname)
+    if error or addresses is None:
+        return error or f"DNS resolution failed for {hostname}"
+    previous = pinned_addresses.get(hostname)
+    if previous is not None and previous != addresses:
+        return f"DNS address drift for {hostname}"
+    pinned_addresses[hostname] = addresses
+    return None
+
+
+def verify_public_url_before_io(
+    url: str, pinned_addresses: dict[str, frozenset[str]]
+) -> str | None:
+    first_error = pin_public_url(url, pinned_addresses)
+    if first_error:
+        return first_error
+    return pin_public_url(url, pinned_addresses)
+
+
 class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
-    def __init__(self) -> None:
+    def __init__(
+        self, pinned_addresses: dict[str, frozenset[str]] | None = None
+    ) -> None:
         super().__init__()
         self._visited: set[str] = set()
         self._redirect_count = 0
+        self._pinned_addresses = (
+            pinned_addresses if pinned_addresses is not None else {}
+        )
 
     @staticmethod
     def _reject(
@@ -455,6 +567,15 @@ class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
         headers: object,
         new_url: str,
     ) -> urllib.request.Request | None:
+        raw_error = validate_raw_redirect_location(new_url)
+        if raw_error:
+            self._reject(
+                request,
+                file_pointer,
+                code,
+                headers,
+                f"unsafe redirect target {new_url!r}: {raw_error}",
+            )
         try:
             target = urljoin(request.full_url, new_url)
         except ValueError:
@@ -473,6 +594,15 @@ class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
                 code,
                 headers,
                 f"unsafe redirect target {new_url!r}: {error or 'public URL required'}",
+            )
+        dns_error = verify_public_url_before_io(public_url, self._pinned_addresses)
+        if dns_error:
+            self._reject(
+                request,
+                file_pointer,
+                code,
+                headers,
+                f"unsafe redirect target {new_url!r}: {dns_error}",
             )
 
         self._visited.add(request.full_url)
@@ -615,6 +745,10 @@ def check_url(url: str) -> str | None:
     error, public_url = validate_link(url, PROFILE_DIR / "README.md")
     if error or public_url != url:
         return f"{url}: unsafe initial URL: {error or 'public URL required'}"
+    pinned_addresses: dict[str, frozenset[str]] = {}
+    dns_error = verify_public_url_before_io(url, pinned_addresses)
+    if dns_error:
+        return f"{url}: {dns_error}"
     request = urllib.request.Request(
         url,
         headers={
@@ -625,7 +759,7 @@ def check_url(url: str) -> str | None:
     last_error = "unknown error"
     for attempt in range(3):
         try:
-            opener = urllib.request.build_opener(SafeRedirectHandler())
+            opener = urllib.request.build_opener(SafeRedirectHandler(pinned_addresses))
             with opener.open(request, timeout=30) as response:
                 response.read(1)
                 final_url = response.geturl()
@@ -637,6 +771,9 @@ def check_url(url: str) -> str | None:
                         f"{url}: unsafe redirect destination {final_url!r}: "
                         f"{final_error or 'public URL required'}"
                     )
+                final_dns_error = pin_public_url(final_url, pinned_addresses)
+                if final_dns_error:
+                    return f"{url}: {final_dns_error}"
                 if 200 <= response.status < 400:
                     return None
                 last_error = f"HTTP {response.status}"
