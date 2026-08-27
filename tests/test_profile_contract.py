@@ -4,10 +4,10 @@ import hashlib
 import json
 import runpy
 import shutil
-import socket
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -520,12 +520,6 @@ class ProfileContractMutationTests(unittest.TestCase):
                 self.assertIsNotNone(error)
                 self.assertIn("special-use hostname", error)
 
-    @staticmethod
-    def address_info(address: str):
-        if ":" in address:
-            return [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", (address, 443, 0, 0))]
-        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, 443))]
-
     def test_non_public_dns_answers_fail_before_network_io(self) -> None:
         checker = runpy.run_path(str(ROOT / "scripts" / "check_profile_contract.py"))
         self.assertIn("socket", checker)
@@ -544,10 +538,13 @@ class ProfileContractMutationTests(unittest.TestCase):
         for address in unsafe_addresses:
             with self.subTest(address=address):
                 with (
-                    mock.patch.object(
-                        checker["socket"],
-                        "getaddrinfo",
-                        return_value=self.address_info(address),
+                    mock.patch.dict(
+                        checker["resolve_public_addresses"].__globals__,
+                        {
+                            "run_isolated_dns_lookup": mock.Mock(
+                                return_value=([address], None)
+                            )
+                        },
                     ),
                     mock.patch.object(
                         checker["urllib"].request, "build_opener"
@@ -581,12 +578,12 @@ class ProfileContractMutationTests(unittest.TestCase):
             def open(self, *_args, **_kwargs):
                 return Response()
 
-        answers = [
-            self.address_info("93.184.216.34"),
-            self.address_info("93.184.216.35"),
-        ]
+        answers = [(["93.184.216.34"], None), (["93.184.216.35"], None)]
         with (
-            mock.patch.object(checker["socket"], "getaddrinfo", side_effect=answers),
+            mock.patch.dict(
+                checker["resolve_public_addresses"].__globals__,
+                {"run_isolated_dns_lookup": mock.Mock(side_effect=answers)},
+            ),
             mock.patch.object(
                 checker["urllib"].request, "build_opener", return_value=Opener()
             ) as opener,
@@ -596,14 +593,46 @@ class ProfileContractMutationTests(unittest.TestCase):
         self.assertIn("DNS address drift", error)
         opener.assert_not_called()
 
+    def test_dns_timeout_terminates_worker_process(self) -> None:
+        checker_path = ROOT / "scripts" / "check_profile_contract.py"
+        blocked_worker = "import time; time.sleep(2)"
+        driver = (
+            "import runpy, sys\n"
+            f"checker = runpy.run_path({str(checker_path)!r})\n"
+            "addresses, error = checker['resolve_public_addresses'](\n"
+            "    'example.com',\n"
+            f"    worker_command=[sys.executable, '-c', {blocked_worker!r}],\n"
+            "    timeout_seconds=0.2,\n"
+            ")\n"
+            "print(error)\n"
+            "raise SystemExit(0 if addresses is None and error and "
+            "'timed out' in error else 2)\n"
+        )
+        started = time.monotonic()
+        result = subprocess.run(
+            [sys.executable, "-c", driver],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=1.5,
+        )
+        elapsed = time.monotonic() - started
+        output = result.stdout + result.stderr
+        self.assertEqual(0, result.returncode, output)
+        self.assertLess(elapsed, 1.5, output)
+        self.assertNotIn("Traceback", output)
+
     def test_mixed_public_and_non_public_dns_answers_fail_closed(self) -> None:
         checker = runpy.run_path(str(ROOT / "scripts" / "check_profile_contract.py"))
-        mixed_answers = self.address_info("93.184.216.34") + self.address_info(
-            "127.0.0.1"
-        )
+        mixed_answers = ["93.184.216.34", "127.0.0.1"]
         with (
-            mock.patch.object(
-                checker["socket"], "getaddrinfo", return_value=mixed_answers
+            mock.patch.dict(
+                checker["resolve_public_addresses"].__globals__,
+                {
+                    "run_isolated_dns_lookup": mock.Mock(
+                        return_value=(mixed_answers, None)
+                    )
+                },
             ),
             mock.patch.object(checker["urllib"].request, "build_opener") as opener,
         ):
@@ -674,10 +703,13 @@ class ProfileContractMutationTests(unittest.TestCase):
         max_hops = checker["MAX_REDIRECT_HOPS"]
         request = urllib.request.Request("https://example.com/start")
         with (
-            mock.patch.object(
-                checker["socket"],
-                "getaddrinfo",
-                return_value=self.address_info("93.184.216.34"),
+            mock.patch.dict(
+                checker["resolve_public_addresses"].__globals__,
+                {
+                    "run_isolated_dns_lookup": mock.Mock(
+                        return_value=(["93.184.216.34"], None)
+                    )
+                },
             ),
             mock.patch.object(
                 urllib.request.HTTPRedirectHandler,
@@ -737,10 +769,13 @@ class ProfileContractMutationTests(unittest.TestCase):
                 return Response()
 
         with (
-            mock.patch.object(
-                checker["socket"],
-                "getaddrinfo",
-                return_value=self.address_info("93.184.216.34"),
+            mock.patch.dict(
+                checker["resolve_public_addresses"].__globals__,
+                {
+                    "run_isolated_dns_lookup": mock.Mock(
+                        return_value=(["93.184.216.34"], None)
+                    )
+                },
             ),
             mock.patch.object(
                 checker["urllib"].request, "urlopen", return_value=Response()

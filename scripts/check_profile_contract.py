@@ -9,13 +9,13 @@ import ipaddress
 import json
 import re
 import socket
+import subprocess
 import sys
 import time
 import unicodedata
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 from html import unescape as html_unescape
 from html.parser import HTMLParser
@@ -60,6 +60,7 @@ MAX_STYLE_LENGTH = 4096
 MAX_REDIRECT_HOPS = 5
 MAX_DNS_ADDRESSES = 16
 DNS_TIMEOUT_SECONDS = 5
+DNS_WORKER_OUTPUT_LIMIT = 4096
 VISIBILITY_ATTRIBUTES = {"aria-hidden", "hidden", "style"}
 VISIBLE_STYLE_VALUES = {
     "display": {
@@ -336,9 +337,7 @@ def normalize_text(parts: list[str] | tuple[str, ...] | str) -> str:
 def parse_inline(children: list[Token]) -> tuple[str, tuple[str, ...]]:
     parser = VisibleHtmlParser()
     for child in children:
-        if child.type == "text":
-            parser.handle_data(child.content)
-        elif child.type == "code_inline":
+        if child.type in {"text", "code_inline"}:
             parser.handle_data(child.content)
         elif child.type in {"softbreak", "hardbreak"}:
             parser.handle_data(" ")
@@ -505,7 +504,7 @@ def validate_link(link: str, profile_path: Path) -> tuple[str | None, str | None
     relative = link
     if not relative:
         return f"{profile_path.name}: invalid repository-local link {link!r}", None
-    canonical_relative = relative[2:] if relative.startswith("./") else relative
+    canonical_relative = relative.removeprefix("./")
     parts = canonical_relative.split("/")
     if (
         not canonical_relative
@@ -541,29 +540,71 @@ def validate_raw_redirect_location(location: str) -> str | None:
     return None
 
 
-def resolve_public_addresses(hostname: str) -> tuple[frozenset[str] | None, str | None]:
-    executor = ThreadPoolExecutor(max_workers=1)
-    future = executor.submit(socket.getaddrinfo, hostname, 443, 0, socket.SOCK_STREAM)
+def run_isolated_dns_lookup(
+    hostname: str,
+    *,
+    worker_command: list[str] | None = None,
+    timeout_seconds: float = DNS_TIMEOUT_SECONDS,
+) -> tuple[list[str] | None, str | None]:
+    command = worker_command or [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "--resolve-host",
+        hostname,
+    ]
     try:
-        address_info = future.result(timeout=DNS_TIMEOUT_SECONDS)
-    except FuturesTimeoutError:
-        future.cancel()
+        worker = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+        )
+    except OSError:
+        return None, f"DNS worker failed to start for {hostname}"
+    try:
+        output, _stderr = worker.communicate(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        worker.kill()
+        worker.communicate()
         return None, f"DNS resolution timed out for {hostname}"
-    except (OSError, ValueError):
+    if worker.returncode != 0 or len(output) > DNS_WORKER_OUTPUT_LIMIT:
         return None, f"DNS resolution failed for {hostname}"
-    finally:
-        executor.shutdown(wait=False, cancel_futures=True)
+    try:
+        raw_addresses = json.loads(output)
+    except (json.JSONDecodeError, TypeError):
+        return None, f"DNS resolution returned invalid output for {hostname}"
+    if not isinstance(raw_addresses, list) or any(
+        not isinstance(address, str) for address in raw_addresses
+    ):
+        return None, f"DNS resolution returned invalid output for {hostname}"
+    return raw_addresses, None
 
-    if not address_info:
+
+def resolve_public_addresses(
+    hostname: str,
+    *,
+    worker_command: list[str] | None = None,
+    timeout_seconds: float = DNS_TIMEOUT_SECONDS,
+) -> tuple[frozenset[str] | None, str | None]:
+    raw_addresses, error = run_isolated_dns_lookup(
+        hostname,
+        worker_command=worker_command,
+        timeout_seconds=timeout_seconds,
+    )
+    if error or raw_addresses is None:
+        return None, error or f"DNS resolution failed for {hostname}"
+
+    if not raw_addresses:
         return None, f"DNS resolution returned no addresses for {hostname}"
-    if len(address_info) > MAX_DNS_ADDRESSES:
+    if len(raw_addresses) > MAX_DNS_ADDRESSES:
         return None, f"DNS resolution returned too many addresses for {hostname}"
 
     addresses: set[str] = set()
-    for item in address_info:
+    for address in raw_addresses:
         try:
-            parsed_address = ipaddress.ip_address(item[4][0])
-        except (IndexError, TypeError, ValueError):
+            parsed_address = ipaddress.ip_address(address)
+        except ValueError:
             return None, f"DNS resolution returned an invalid address for {hostname}"
         if (
             not parsed_address.is_global
@@ -577,6 +618,16 @@ def resolve_public_addresses(hostname: str) -> tuple[frozenset[str] | None, str 
             return None, f"DNS resolution returned non-public address for {hostname}"
         addresses.add(str(parsed_address))
     return frozenset(addresses), None
+
+
+def dns_worker_main(hostname: str) -> int:
+    try:
+        address_info = socket.getaddrinfo(hostname, 443, 0, socket.SOCK_STREAM)
+        addresses = [item[4][0] for item in address_info]
+    except (IndexError, OSError, TypeError, ValueError):
+        return 1
+    print(json.dumps(addresses, ensure_ascii=True, separators=(",", ":")))
+    return 0
 
 
 def pin_public_url(url: str, pinned_addresses: dict[str, frozenset[str]]) -> str | None:
@@ -939,7 +990,11 @@ def main() -> int:
     parser.add_argument(
         "--links", action="store_true", help="check every public profile URL"
     )
+    parser.add_argument("--resolve-host", help=argparse.SUPPRESS)
     args = parser.parse_args()
+
+    if args.resolve_host is not None:
+        return dns_worker_main(args.resolve_host)
 
     failures, urls = check_contract()
     if args.links and not failures:
