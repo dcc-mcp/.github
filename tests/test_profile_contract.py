@@ -252,6 +252,46 @@ class ProfileContractMutationTests(unittest.TestCase):
                 )
         path.write_text(original, encoding="utf-8")
 
+    def test_closed_details_body_is_hidden(self) -> None:
+        variants = (
+            "<details><summary>More</summary>Godot MCP</details>",
+            "&lt;details&gt;&lt;summary&gt;More&lt;/summary&gt;Godot MCP&lt;/details&gt;",
+            "<details open><summary>Outer</summary><details><summary>Inner</summary>Godot MCP</details></details>",
+            "&lt;details&gt;&lt;summary&gt;Outer&lt;/summary&gt;&lt;details open&gt;&lt;summary&gt;Inner&lt;/summary&gt;Godot MCP&lt;/details&gt;&lt;/details&gt;",
+        )
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        mutated = original.replace("**Godot MCP**", "**Godot connector**", 1)
+        self.assertNotEqual(original, mutated)
+        for markup in variants:
+            with self.subTest(markup=markup):
+                path.write_text(mutated + f"\n{markup}\n", encoding="utf-8")
+                self.assert_checker_rejects_cleanly(
+                    "missing visible discovery identity 'Godot MCP'"
+                )
+        path.write_text(original, encoding="utf-8")
+
+    def test_details_summary_and_open_body_are_visible(self) -> None:
+        variants = (
+            "<details><summary>Godot MCP</summary>More</details>",
+            "&lt;details&gt;&lt;summary&gt;Godot MCP&lt;/summary&gt;More&lt;/details&gt;",
+            "<details open><summary>More</summary>Godot MCP</details>",
+            "&lt;details open&gt;&lt;summary&gt;More&lt;/summary&gt;Godot MCP&lt;/details&gt;",
+            "<details open><summary>Outer</summary><details open><summary>Inner</summary>Godot MCP</details></details>",
+        )
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        mutated = original.replace("**Godot MCP**", "**Godot connector**", 1)
+        self.assertNotEqual(original, mutated)
+        for markup in variants:
+            with self.subTest(markup=markup):
+                path.write_text(mutated + f"\n{markup}\n", encoding="utf-8")
+                result = self.run_checker()
+                output = result.stdout + result.stderr
+                self.assertEqual(0, result.returncode, output)
+                self.assertNotIn("Traceback", output)
+        path.write_text(original, encoding="utf-8")
+
     def test_duplicate_visibility_attributes_fail_closed(self) -> None:
         variants = (
             'style="display:none" style="display:block"',
