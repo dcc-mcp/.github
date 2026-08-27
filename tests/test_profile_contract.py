@@ -41,14 +41,26 @@ class ProfileContractMutationTests(unittest.TestCase):
         path.write_text(text.replace(old, new, count), encoding="utf-8")
 
     def assert_checker_rejects(self) -> None:
-        result = subprocess.run(
+        result = self.run_checker()
+        output = result.stdout + result.stderr
+        self.assertEqual(1, result.returncode, output)
+        self.assertNotIn("Traceback", output)
+
+    def run_checker(self) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
             [sys.executable, str(self.root / "scripts" / "check_profile_contract.py")],
             cwd=self.root,
             capture_output=True,
             text=True,
             check=False,
         )
-        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def assert_checker_rejects_cleanly(self, expected: str) -> None:
+        result = self.run_checker()
+        output = result.stdout + result.stderr
+        self.assertEqual(1, result.returncode, output)
+        self.assertNotIn("Traceback", output)
+        self.assertIn(expected, output)
 
     def test_hidden_query_term_in_html_comment_is_rejected(self) -> None:
         path = self.profile("README.md")
@@ -175,6 +187,29 @@ class ProfileContractMutationTests(unittest.TestCase):
         path.write_text(original + "\n&lt;!-- Godot MCP --&gt;\n", encoding="utf-8")
         self.assert_checker_rejects()
 
+    def test_css_hidden_variants_are_rejected_with_visible_identity(self) -> None:
+        variants = (
+            '&lt;div style="display:/**/none"&gt;Godot MCP&lt;/div&gt;',
+            '&lt;div style="display:none ! important"&gt;Godot MCP&lt;/div&gt;',
+            '&lt;div style="d\\69 splay: \\6e one"&gt;Godot MCP&lt;/div&gt;',
+            '&lt;div style="visibility: h\\69 dden"&gt;Godot MCP&lt;/div&gt;',
+        )
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        for variant in variants:
+            with self.subTest(variant=variant):
+                path.write_text(original + f"\n{variant}\n", encoding="utf-8")
+                self.assert_checker_rejects_cleanly(
+                    "deceptive hidden identity 'Godot MCP'"
+                )
+        path.write_text(original, encoding="utf-8")
+
+    def test_malformed_escaped_comment_fails_without_traceback(self) -> None:
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        path.write_text(original + "\n&lt;!-- Godot MCP --!&gt;\n", encoding="utf-8")
+        self.assert_checker_rejects_cleanly("deceptive hidden identity 'Godot MCP'")
+
     def test_public_url_canonicalization_aliases_are_rejected(self) -> None:
         aliases = (
             "https://github.com:443/dcc-mcp",
@@ -198,6 +233,31 @@ class ProfileContractMutationTests(unittest.TestCase):
                     original + f"\n[Alias {index}]({alias})\n", encoding="utf-8"
                 )
                 self.assert_checker_rejects()
+        path.write_text(original, encoding="utf-8")
+
+    def test_malformed_and_non_domain_public_urls_are_rejected(self) -> None:
+        aliases = (
+            "https://example.com/%GG",
+            "https://example.com/%",
+            "https://example.com/%2",
+            "https://127.0.0.1/",
+            "https://8.8.8.8/",
+            "https://[::1]/",
+            "https://2130706433/",
+            "https://0x7f000001/",
+            "https://0177.0.0.1/",
+            "https://127.1/",
+            "https://localhost/",
+            "https://service.local/",
+        )
+        path = self.profile("README.md")
+        original = path.read_text(encoding="utf-8")
+        for index, alias in enumerate(aliases):
+            with self.subTest(alias=alias):
+                path.write_text(
+                    original + f"\n[Alias {index}]({alias})\n", encoding="utf-8"
+                )
+                self.assert_checker_rejects_cleanly("README.md:")
         path.write_text(original, encoding="utf-8")
 
     def test_local_path_canonicalization_aliases_are_rejected(self) -> None:
