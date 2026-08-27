@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import re
 import sys
@@ -27,6 +28,26 @@ VOLATILE_GUIDANCE_RE = re.compile(
     r"(?:clawhub@\d|pip install|openclaw skills install)", re.IGNORECASE
 )
 CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+INVALID_PERCENT_RE = re.compile(r"%(?![0-9A-Fa-f]{2})")
+CSS_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+CSS_ESCAPE_RE = re.compile(
+    r"\\(?:([0-9A-Fa-f]{1,6})(?:[ \t\r\n\f])?|([^\r\n\f0-9A-Fa-f]))"
+)
+CSS_IMPORTANT_RE = re.compile(r"\s*!\s*important\s*$", re.IGNORECASE)
+NUMERIC_HOST_RE = re.compile(
+    r"(?:0x[0-9a-f]+|[0-9]+)(?:\.(?:0x[0-9a-f]+|[0-9]+)){0,3}",
+    re.IGNORECASE,
+)
+PUBLIC_HOST_RE = re.compile(r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}")
+NON_PUBLIC_DNS_SUFFIXES = (
+    ".internal",
+    ".invalid",
+    ".lan",
+    ".local",
+    ".localhost",
+    ".test",
+)
+MAX_STYLE_LENGTH = 4096
 ESCAPED_HTML_RE = re.compile(
     r"(?:<!--|<\s*/?\s*(?:script|style|template|noscript|span|div|section)\b)",
     re.IGNORECASE,
@@ -65,14 +86,56 @@ class ParsedProfile:
     visible_links: frozenset[str]
 
 
+def decode_css_escapes(value: str) -> str | None:
+    def replace(match: re.Match[str]) -> str:
+        if match.group(1) is None:
+            return match.group(2)
+        codepoint = int(match.group(1), 16)
+        if codepoint == 0 or codepoint > 0x10FFFF or 0xD800 <= codepoint <= 0xDFFF:
+            return "\x00"
+        return chr(codepoint)
+
+    decoded = CSS_ESCAPE_RE.sub(replace, value)
+    if "\\" in decoded or CONTROL_RE.search(decoded):
+        return None
+    return decoded
+
+
+def parse_css_declarations(style: str) -> dict[str, str] | None:
+    if len(style) > MAX_STYLE_LENGTH:
+        return None
+    without_comments = CSS_COMMENT_RE.sub("", style)
+    if "/*" in without_comments or "*/" in without_comments:
+        return None
+
+    declarations: dict[str, str] = {}
+    for declaration in without_comments.split(";"):
+        if not declaration.strip():
+            continue
+        if ":" not in declaration:
+            return None
+        raw_name, raw_value = declaration.split(":", 1)
+        name = decode_css_escapes(raw_name)
+        value = decode_css_escapes(raw_value)
+        if name is None or value is None:
+            return None
+        normalized_name = name.strip().lower()
+        normalized_value = CSS_IMPORTANT_RE.sub("", value).strip().lower()
+        if not normalized_name:
+            return None
+        declarations[normalized_name] = normalized_value
+    return declarations
+
+
 class VisibleHtmlParser(HTMLParser):
-    def __init__(self) -> None:
+    def __init__(self, *, expand_escaped_html: bool = True) -> None:
         super().__init__(convert_charrefs=True)
         self.text: list[str] = []
         self.hidden_text: list[str] = []
         self.links: list[str] = []
         self.visible_links: list[str] = []
         self._stack: list[tuple[str, bool]] = []
+        self._expand_escaped_html = expand_escaped_html
 
     @property
     def hidden(self) -> bool:
@@ -89,14 +152,9 @@ class VisibleHtmlParser(HTMLParser):
         if aria_hidden is not None and aria_hidden.strip().lower() == "true":
             return True
         style = normalized.get("style") or ""
-        declarations = {}
-        for declaration in style.split(";"):
-            if ":" not in declaration:
-                continue
-            name, value = declaration.split(":", 1)
-            declarations[name.strip().lower()] = (
-                value.strip().lower().replace("!important", "").strip()
-            )
+        declarations = parse_css_declarations(style)
+        if declarations is None:
+            return True
         return (
             declarations.get("display") == "none"
             or declarations.get("visibility") == "hidden"
@@ -131,7 +189,10 @@ class VisibleHtmlParser(HTMLParser):
 
     def handle_data(self, data: str) -> None:
         if ESCAPED_HTML_RE.search(data):
-            nested = VisibleHtmlParser()
+            if not self._expand_escaped_html:
+                self.hidden_text.append(data)
+                return
+            nested = VisibleHtmlParser(expand_escaped_html=False)
             nested.feed(data)
             nested.close()
             self.links.extend(nested.links)
@@ -243,6 +304,7 @@ def validate_link(link: str, profile_path: Path) -> tuple[str | None, str | None
         not link
         or unicodedata.normalize("NFKC", link) != link
         or CONTROL_RE.search(link)
+        or INVALID_PERCENT_RE.search(link)
     ):
         return f"{profile_path.name}: unsafe or non-normalized link {link!r}", None
     try:
@@ -287,6 +349,21 @@ def validate_link(link: str, profile_path: Path) -> tuple[str | None, str | None
                 f"{profile_path.name}: hostname must be normalized ASCII: {link!r}",
                 None,
             )
+        try:
+            ipaddress.ip_address(hostname)
+        except ValueError:
+            pass
+        else:
+            return (
+                f"{profile_path.name}: IP literal links are forbidden: {link!r}",
+                None,
+            )
+        if (
+            NUMERIC_HOST_RE.fullmatch(hostname)
+            or not PUBLIC_HOST_RE.fullmatch(hostname)
+            or hostname.endswith(NON_PUBLIC_DNS_SUFFIXES)
+        ):
+            return f"{profile_path.name}: public domain required in link {link!r}", None
         try:
             port = parsed.port
         except ValueError:
