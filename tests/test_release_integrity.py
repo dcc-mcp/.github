@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import json
+import subprocess
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -168,6 +169,52 @@ class EvaluateTest(unittest.TestCase):
         self.assertEqual(self.evaluate("v0.9.31", 600, "0.10.0").status, cri.STATUS_WARN)
 
 
+class UnreachableRepositoryTest(unittest.TestCase):
+    """`/releases/latest` answers 404 both for an empty and for an invisible repository.
+
+    Collapsing the two would let a misspelled manifest entry, a renamed repository or a
+    narrowed token pass the gate silently, so the unreachable case must raise.
+    """
+
+    def stub_gh(self, release_rc, release_message, probe_rc, probe_message):
+        calls = []
+
+        def fake_run(command, **_kwargs):
+            calls.append(list(command))
+            if "release" in command:
+                return subprocess.CompletedProcess(command, release_rc, "", release_message)
+            return subprocess.CompletedProcess(command, probe_rc, probe_message, "")
+
+        return calls, fake_run
+
+    def test_unreachable_repository_raises(self):
+        calls, fake_run = self.stub_gh(1, "HTTP 404: Not Found", 1, "HTTP 404: Not Found")
+        with mock.patch.object(cri.subprocess, "run", fake_run):
+            with self.assertRaises(cri.CheckError) as caught:
+                cri.latest_release("dcc-mcp/does-not-exist")
+        self.assertIn("not reachable", str(caught.exception))
+        # The repository itself must be probed before a 404 is read as "no release".
+        self.assertTrue(
+            any("api" in command and "repos/dcc-mcp/does-not-exist" in command for command in calls),
+            f"expected a reachability probe, got {calls}",
+        )
+
+    def test_reachable_repository_without_releases_returns_none(self):
+        calls, fake_run = self.stub_gh(1, "no published releases", 0, "dcc-mcp/dcc-mcp-maya\n")
+        with mock.patch.object(cri.subprocess, "run", fake_run):
+            self.assertIsNone(cri.latest_release("dcc-mcp/dcc-mcp-maya"))
+        self.assertEqual(len(calls), 2)
+
+    def test_unreachable_repository_exits_two(self):
+        _, fake_run = self.stub_gh(1, "HTTP 404: Not Found", 1, "HTTP 404: Not Found")
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(cri.subprocess, "run", fake_run):
+            with mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", err):
+                code = cri.main(["--repository", "dcc-mcp/does-not-exist", "--package", "pkg"])
+        self.assertEqual(code, 2)
+        self.assertIn("not reachable", err.getvalue())
+
+
 class CliTest(unittest.TestCase):
     def run_cli(self, argv, release_stub=None, pypi_stub=None):
         out, err = io.StringIO(), io.StringIO()
@@ -194,10 +241,12 @@ class CliTest(unittest.TestCase):
 
     def test_reports_failure_exit_code(self):
         argv = ["--repository", REPO, "--package", PKG, "--json"]
-        code, out, _ = self.run_cli(argv, lambda _r: release_now("v0.3.7", 600), lambda _p: "0.3.1")
+        code, out, err = self.run_cli(argv, lambda _r: release_now("v0.3.7", 600), lambda _p: "0.3.1")
         self.assertEqual(code, 1)
-        self.assertIn("::error", out)
-        payload = json.loads(out[out.index("["):])
+        # Annotations belong on stderr so that --json readers can parse stdout as is.
+        self.assertIn("::error", err)
+        self.assertNotIn("::error", out)
+        payload = json.loads(out)
         self.assertEqual(payload[0]["status"], cri.STATUS_FAIL)
 
     def test_strict_fails_on_warnings(self):

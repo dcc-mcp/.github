@@ -132,10 +132,10 @@ jobs:
           REPOSITORY: ${{ matrix.repository }}
           PACKAGE: ${{ matrix.package }}
           GRACE_MINUTES: ${{ inputs.grace_minutes }}
-          STRICT: ${{ inputs.strict && '--strict' || '' }}
+          STRICT: ${{ inputs.strict }}
         run: |
-          python scripts/check_release_integrity.py \
-            --repository "$REPOSITORY" \
-            --package "$PACKAGE" \
-            --grace-minutes "$GRACE_MINUTES" \
-            $STRICT
+          set -- --repository "$REPOSITORY" --package "$PACKAGE" --grace-minutes "$GRACE_MINUTES"
+          if [[ "$STRICT" == "true" ]]; then
+            set -- "$@" --strict
+          fi
+          python scripts/check_release_integrity.py "$@"

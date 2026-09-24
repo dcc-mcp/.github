@@ -147,6 +147,12 @@ def latest_release(repository: str, timeout: float = DEFAULT_TIMEOUT_SECONDS) ->
         message = (completed.stderr or completed.stdout or "").strip()
         lowered = message.lower()
         if "no published releases" in lowered or "not found" in lowered or "404" in lowered:
+            # `/releases/latest` answers 404 both for "this repository has no release" and for
+            # "this repository does not exist / the token cannot see it". Treating both as an
+            # absent release would turn a typo in the manifest, a renamed repository, or a
+            # narrowed token into a permanently green check - exactly the silent failure this
+            # gate exists to catch. Only the reachable-and-empty case may be skipped.
+            _require_reachable(repository, timeout)
             return None
         raise CheckError(f"could not read the latest release of {repository}: {message}")
 
@@ -154,6 +160,29 @@ def latest_release(repository: str, timeout: float = DEFAULT_TIMEOUT_SECONDS) ->
         return json.loads(completed.stdout)
     except json.JSONDecodeError as exc:
         raise CheckError(f"`gh release view --repo {repository}` returned invalid JSON") from exc
+
+
+def _require_reachable(repository: str, timeout: float = DEFAULT_TIMEOUT_SECONDS) -> None:
+    """Raise ``CheckError`` unless ``repository`` exists and is visible to the token.
+
+    Used to tell the two meanings of a 404 from ``/releases/latest`` apart.
+    """
+    try:
+        probe = subprocess.run(
+            ["gh", "api", f"repos/{repository}", "--jq", ".full_name"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise CheckError(f"timed out checking whether {repository} is reachable") from exc
+
+    if probe.returncode != 0:
+        detail = (probe.stderr or probe.stdout or "").strip()
+        raise CheckError(
+            f"{repository} is not reachable, so its release state cannot be verified: {detail}"
+        )
 
 
 def pypi_version(package: str, timeout: float = DEFAULT_TIMEOUT_SECONDS) -> str | None:
@@ -412,14 +441,18 @@ def write_step_summary(results: Sequence[Result]) -> None:
 
 
 def emit_annotations(results: Sequence[Result]) -> None:
-    """Emit workflow commands so mismatches surface in the Actions UI."""
+    """Emit workflow commands so mismatches surface in the Actions UI.
+
+    These go to stderr so that stdout remains a clean, parseable stream for ``--json``
+    consumers. The Actions runner picks workflow commands up from the log either way.
+    """
     for result in results:
         if result.status == STATUS_FAIL:
-            print(f"::error title=Release integrity::{result.key}: {result.message}")
+            print(f"::error title=Release integrity::{result.key}: {result.message}", file=sys.stderr)
         elif result.status == STATUS_WARN:
-            print(f"::warning title=Release integrity::{result.key}: {result.message}")
+            print(f"::warning title=Release integrity::{result.key}: {result.message}", file=sys.stderr)
         elif result.status == STATUS_SKIP:
-            print(f"::notice title=Release integrity::{result.key}: {result.message}")
+            print(f"::notice title=Release integrity::{result.key}: {result.message}", file=sys.stderr)
 
 
 def report(results: Sequence[Result], as_json: bool) -> None:
