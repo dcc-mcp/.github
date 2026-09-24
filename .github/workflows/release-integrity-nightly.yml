@@ -1,0 +1,20 @@
+name: Release integrity (nightly)
+
+# Runs the org-wide release integrity gate once a day: every repository that publishes
+# to PyPI is compared against its newest GitHub release, and a mismatch fails the run.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-integrity-nightly
+  cancel-in-progress: false
+
+jobs:
+  release-integrity:
+    uses: ./.github/workflows/release-integrity.yml
