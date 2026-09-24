@@ -1,0 +1,141 @@
+name: Release integrity
+
+on:
+  workflow_call:
+    inputs:
+      repositories:
+        description: >
+          JSON list of {"repository": "org/repo", "packages": ["pypi-name", ...]} to check.
+          Defaults to the dcc-mcp repositories that publish to PyPI.
+        required: false
+        type: string
+        default: >-
+          [{"repository":"dcc-mcp/dcc-mcp-unreal","packages":["dcc-mcp-unreal"]},
+          {"repository":"dcc-mcp/dcc-mcp-3dsmax","packages":["dcc-mcp-3dsmax"]},
+          {"repository":"dcc-mcp/dcc-mcp-maya","packages":["dcc-mcp-maya"]},
+          {"repository":"dcc-mcp/dcc-mcp-zbrush","packages":["dcc-mcp-zbrush"]},
+          {"repository":"dcc-mcp/dcc-mcp-photoshop","packages":["dcc-mcp-photoshop"]},
+          {"repository":"dcc-mcp/dcc-mcp-core","packages":["dcc-mcp-core","dcc-mcp-server","dcc-mcp-core-semantic"]}]
+      grace_minutes:
+        description: >
+          Minutes after a release is published during which a missing PyPI upload is
+          tolerated, because the upload lands a few minutes after the GitHub release.
+        required: false
+        type: string
+        default: "30"
+      strict:
+        description: "Fail on tolerated mismatches (grace period, pre-release ahead of stable)."
+        required: false
+        type: boolean
+        default: false
+      ref:
+        description: "Git ref of dcc-mcp/.github that holds the check script."
+        required: false
+        type: string
+        default: main
+  workflow_dispatch:
+    inputs:
+      repositories:
+        description: 'JSON list of {"repository": "org/repo", "packages": ["pypi-name", ...]}.'
+        required: false
+        type: string
+        default: >-
+          [{"repository":"dcc-mcp/dcc-mcp-unreal","packages":["dcc-mcp-unreal"]},
+          {"repository":"dcc-mcp/dcc-mcp-3dsmax","packages":["dcc-mcp-3dsmax"]},
+          {"repository":"dcc-mcp/dcc-mcp-maya","packages":["dcc-mcp-maya"]},
+          {"repository":"dcc-mcp/dcc-mcp-zbrush","packages":["dcc-mcp-zbrush"]},
+          {"repository":"dcc-mcp/dcc-mcp-photoshop","packages":["dcc-mcp-photoshop"]},
+          {"repository":"dcc-mcp/dcc-mcp-core","packages":["dcc-mcp-core","dcc-mcp-server","dcc-mcp-core-semantic"]}]
+      grace_minutes:
+        description: "Minutes of grace period after a release is published."
+        required: false
+        type: string
+        default: "30"
+      strict:
+        description: "Fail on tolerated mismatches (grace period, pre-release ahead of stable)."
+        required: false
+        type: boolean
+        default: false
+      ref:
+        description: "Git ref of dcc-mcp/.github that holds the check script."
+        required: false
+        type: string
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    name: Build matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      pairs: ${{ steps.build.outputs.pairs }}
+      has_pairs: ${{ steps.build.outputs.has_pairs }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: dcc-mcp/.github
+          ref: ${{ inputs.ref || 'main' }}
+          sparse-checkout: scripts
+          path: release-integrity
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Build the repository/package matrix
+        id: build
+        working-directory: release-integrity
+        env:
+          REPOSITORIES: ${{ inputs.repositories }}
+        run: |
+          python scripts/check_release_integrity.py --manifest "$REPOSITORIES" --emit-matrix > matrix.json
+          python - <<'PY'
+          import json
+          import os
+
+          with open("matrix.json", encoding="utf-8") as handle:
+              pairs = json.load(handle)["include"]
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write("pairs=" + json.dumps({"include": pairs}) + "\n")
+              handle.write("has_pairs=" + ("true" if pairs else "false") + "\n")
+          PY
+
+  compare:
+    name: ${{ matrix.key }}
+    needs: matrix
+    if: needs.matrix.outputs.has_pairs == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.matrix.outputs.pairs) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: dcc-mcp/.github
+          ref: ${{ inputs.ref || 'main' }}
+          sparse-checkout: scripts
+          path: release-integrity
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Compare ${{ matrix.package }} with the latest release of ${{ matrix.repository }}
+        working-directory: release-integrity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ matrix.repository }}
+          PACKAGE: ${{ matrix.package }}
+          GRACE_MINUTES: ${{ inputs.grace_minutes }}
+          STRICT: ${{ inputs.strict && '--strict' || '' }}
+        run: |
+          python scripts/check_release_integrity.py \
+            --repository "$REPOSITORY" \
+            --package "$PACKAGE" \
+            --grace-minutes "$GRACE_MINUTES" \
+            $STRICT
