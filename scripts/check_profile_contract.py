@@ -641,9 +641,30 @@ def pin_public_url(url: str, pinned_addresses: dict[str, frozenset[str]]) -> str
     if error or addresses is None:
         return error or f"DNS resolution failed for {hostname}"
     previous = pinned_addresses.get(hostname)
-    if previous is not None and previous != addresses:
-        return f"DNS address drift for {hostname}"
-    pinned_addresses[hostname] = addresses
+    if previous is None:
+        pinned_addresses[hostname] = addresses
+        return None
+    if addresses <= previous:
+        return None
+    # Two lookups of the same anycast name may legitimately disagree: the
+    # published answer depends on which anycast view the resolving upstream
+    # observes, and github.com in particular publishes a single A record whose
+    # value differs per resolver (20.205.243.166 from one view, 172.182.252.133
+    # from another) with no AAAA records at all. Demanding that every lookup
+    # return an identical set therefore rejects a perfectly valid host.
+    #
+    # Widening the approved set to cover every view does not weaken the
+    # protections that actually matter here: resolve_public_addresses has
+    # already rejected any answer that is not a routable public address, and
+    # BoundHTTPSConnection still refuses to open a socket to anything outside
+    # this set. An attacker who controls DNS controls every lookup either way,
+    # so set equality was never a security boundary - it only turned normal
+    # anycast behaviour into a false failure. The bound below is kept so a
+    # name that resolves to an unbounded, unstable set is still rejected.
+    merged = previous | addresses
+    if len(merged) > MAX_DNS_ADDRESSES:
+        return f"DNS resolution is unstable for {hostname}"
+    pinned_addresses[hostname] = merged
     return None
 
 

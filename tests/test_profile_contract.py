@@ -555,43 +555,59 @@ class ProfileContractMutationTests(unittest.TestCase):
                 self.assertIn("non-public address", error)
                 opener.assert_not_called()
 
-    def test_dns_address_drift_is_rejected(self) -> None:
+    def test_anycast_answer_variance_is_accepted(self) -> None:
+        # github.com publishes a single A record whose value depends on the
+        # anycast view of the resolving upstream, and publishes no AAAA record.
+        # Two consecutive lookups therefore return disjoint singleton sets for a
+        # perfectly valid host; rejecting that is a false positive, not a
+        # defence.
         checker = runpy.run_path(str(ROOT / "scripts" / "check_profile_contract.py"))
-        self.assertIn("socket", checker)
-
-        class Response:
-            status = 200
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *_args):
-                return False
-
-            def read(self, _size):
-                return b""
-
-            def geturl(self):
-                return "https://example.com/start"
-
-        class Opener:
-            def open(self, *_args, **_kwargs):
-                return Response()
-
-        answers = [(["93.184.216.34"], None), (["93.184.216.35"], None)]
-        with (
-            mock.patch.dict(
-                checker["resolve_public_addresses"].__globals__,
-                {"run_isolated_dns_lookup": mock.Mock(side_effect=answers)},
-            ),
-            mock.patch.object(
-                checker["urllib"].request, "build_opener", return_value=Opener()
-            ) as opener,
+        pinned: dict[str, frozenset[str]] = {}
+        answers = [(["20.205.243.166"], None), (["172.182.252.133"], None)]
+        with mock.patch.dict(
+            checker["resolve_public_addresses"].__globals__,
+            {"run_isolated_dns_lookup": mock.Mock(side_effect=answers)},
         ):
-            error = checker["check_url"]("https://example.com/start")
+            error = checker["verify_public_url_before_io"](
+                "https://github.com/dcc-mcp/dcc-mcp-core", pinned
+            )
+        self.assertIsNone(error)
+        self.assertEqual(
+            {"20.205.243.166", "172.182.252.133"}, set(pinned["github.com"])
+        )
+
+    def test_anycast_variance_cannot_smuggle_a_non_public_address(self) -> None:
+        checker = runpy.run_path(str(ROOT / "scripts" / "check_profile_contract.py"))
+        pinned: dict[str, frozenset[str]] = {}
+        answers = [(["93.184.216.34"], None), (["10.0.0.1"], None)]
+        with mock.patch.dict(
+            checker["resolve_public_addresses"].__globals__,
+            {"run_isolated_dns_lookup": mock.Mock(side_effect=answers)},
+        ):
+            error = checker["verify_public_url_before_io"](
+                "https://example.com/start", pinned
+            )
         self.assertIsNotNone(error)
-        self.assertIn("DNS address drift", error)
-        opener.assert_not_called()
+        self.assertIn("non-public address", error)
+        self.assertEqual({"93.184.216.34"}, set(pinned["example.com"]))
+
+    def test_unbounded_dns_answer_set_is_rejected(self) -> None:
+        checker = runpy.run_path(str(ROOT / "scripts" / "check_profile_contract.py"))
+        limit = checker["MAX_DNS_ADDRESSES"]
+        pinned: dict[str, frozenset[str]] = {}
+        answers = [
+            ([f"93.184.216.{index}" for index in range(1, limit + 1)], None),
+            ([f"93.184.216.{limit + 1}"], None),
+        ]
+        with mock.patch.dict(
+            checker["resolve_public_addresses"].__globals__,
+            {"run_isolated_dns_lookup": mock.Mock(side_effect=answers)},
+        ):
+            error = checker["verify_public_url_before_io"](
+                "https://example.com/start", pinned
+            )
+        self.assertIsNotNone(error)
+        self.assertIn("DNS resolution is unstable", error)
 
     def test_dns_timeout_terminates_worker_process(self) -> None:
         checker_path = ROOT / "scripts" / "check_profile_contract.py"
