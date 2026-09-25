@@ -10,12 +10,42 @@ on:
         required: false
         type: string
         default: >-
-          [{"repository":"dcc-mcp/dcc-mcp-unreal","packages":["dcc-mcp-unreal"]},
+          [{"repository":"dcc-mcp/adobepy","packages":["adobepy"]},
           {"repository":"dcc-mcp/dcc-mcp-3dsmax","packages":["dcc-mcp-3dsmax"]},
+          {"repository":"dcc-mcp/dcc-mcp-aftereffects","packages":["dcc-mcp-aftereffects"]},
+          {"repository":"dcc-mcp/dcc-mcp-blender","packages":["dcc-mcp-blender"]},
+          {"repository":"dcc-mcp/dcc-mcp-cinema4d","packages":["dcc-mcp-cinema4d"]},
+          {"repository":"dcc-mcp/dcc-mcp-comfyui","packages":["dcc-mcp-comfyui"]},
+          {"repository":"dcc-mcp/dcc-mcp-core","packages":["dcc-mcp-core","dcc-mcp-server","dcc-mcp-core-semantic"]},
+          {"repository":"dcc-mcp/dcc-mcp-fpt","packages":["dcc-mcp-fpt"]},
+          {"repository":"dcc-mcp/dcc-mcp-freecad","packages":["dcc-mcp-freecad"]},
+          {"repository":"dcc-mcp/dcc-mcp-gimp","packages":["dcc-mcp-gimp"]},
+          {"repository":"dcc-mcp/dcc-mcp-godot","packages":["dcc-mcp-godot"]},
+          {"repository":"dcc-mcp/dcc-mcp-houdini","packages":["dcc-mcp-houdini"]},
+          {"repository":"dcc-mcp/dcc-mcp-illustrator","packages":["dcc-mcp-illustrator"]},
+          {"repository":"dcc-mcp/dcc-mcp-katana","packages":["dcc-mcp-katana"]},
+          {"repository":"dcc-mcp/dcc-mcp-krita","packages":["dcc-mcp-krita"]},
+          {"repository":"dcc-mcp/dcc-mcp-liquigen","packages":["dcc-mcp-liquigen"]},
+          {"repository":"dcc-mcp/dcc-mcp-mari","packages":["dcc-mcp-mari"]},
+          {"repository":"dcc-mcp/dcc-mcp-marmoset","packages":["dcc-mcp-marmoset"]},
           {"repository":"dcc-mcp/dcc-mcp-maya","packages":["dcc-mcp-maya"]},
-          {"repository":"dcc-mcp/dcc-mcp-zbrush","packages":["dcc-mcp-zbrush"]},
+          {"repository":"dcc-mcp/dcc-mcp-mobu","packages":["dcc-mcp-mobu"]},
+          {"repository":"dcc-mcp/dcc-mcp-nuke","packages":["dcc-mcp-nuke"]},
+          {"repository":"dcc-mcp/dcc-mcp-obs","packages":["dcc-mcp-obs"]},
+          {"repository":"dcc-mcp/dcc-mcp-openscad","packages":["dcc-mcp-openscad"]},
+          {"repository":"dcc-mcp/dcc-mcp-openusd","packages":["dcc-mcp-openusd"]},
           {"repository":"dcc-mcp/dcc-mcp-photoshop","packages":["dcc-mcp-photoshop"]},
-          {"repository":"dcc-mcp/dcc-mcp-core","packages":["dcc-mcp-core","dcc-mcp-server","dcc-mcp-core-semantic"]}]
+          {"repository":"dcc-mcp/dcc-mcp-premiere","packages":["dcc-mcp-premiere"]},
+          {"repository":"dcc-mcp/dcc-mcp-renderdoc","packages":["dcc-mcp-renderdoc"]},
+          {"repository":"dcc-mcp/dcc-mcp-shogun","packages":["dcc-mcp-shogun"]},
+          {"repository":"dcc-mcp/dcc-mcp-sketchup","packages":["dcc-mcp-sketchup"]},
+          {"repository":"dcc-mcp/dcc-mcp-substance3d-designer","packages":["dcc-mcp-substance3d-designer"]},
+          {"repository":"dcc-mcp/dcc-mcp-substance3d-painter","packages":["dcc-mcp-substance3d-painter"]},
+          {"repository":"dcc-mcp/dcc-mcp-touchdesigner","packages":["dcc-mcp-touchdesigner"]},
+          {"repository":"dcc-mcp/dcc-mcp-tracy","packages":["dcc-mcp-tracy"]},
+          {"repository":"dcc-mcp/dcc-mcp-unity","packages":["dcc-mcp-unity"]},
+          {"repository":"dcc-mcp/dcc-mcp-unreal","packages":["dcc-mcp-unreal"]},
+          {"repository":"dcc-mcp/dcc-mcp-zbrush","packages":["dcc-mcp-zbrush"]}]
       grace_minutes:
         description: >
           Minutes after a release is published during which a missing PyPI upload is
@@ -40,12 +70,42 @@ on:
         required: false
         type: string
         default: >-
-          [{"repository":"dcc-mcp/dcc-mcp-unreal","packages":["dcc-mcp-unreal"]},
+          [{"repository":"dcc-mcp/adobepy","packages":["adobepy"]},
           {"repository":"dcc-mcp/dcc-mcp-3dsmax","packages":["dcc-mcp-3dsmax"]},
+          {"repository":"dcc-mcp/dcc-mcp-aftereffects","packages":["dcc-mcp-aftereffects"]},
+          {"repository":"dcc-mcp/dcc-mcp-blender","packages":["dcc-mcp-blender"]},
+          {"repository":"dcc-mcp/dcc-mcp-cinema4d","packages":["dcc-mcp-cinema4d"]},
+          {"repository":"dcc-mcp/dcc-mcp-comfyui","packages":["dcc-mcp-comfyui"]},
+          {"repository":"dcc-mcp/dcc-mcp-core","packages":["dcc-mcp-core","dcc-mcp-server","dcc-mcp-core-semantic"]},
+          {"repository":"dcc-mcp/dcc-mcp-fpt","packages":["dcc-mcp-fpt"]},
+          {"repository":"dcc-mcp/dcc-mcp-freecad","packages":["dcc-mcp-freecad"]},
+          {"repository":"dcc-mcp/dcc-mcp-gimp","packages":["dcc-mcp-gimp"]},
+          {"repository":"dcc-mcp/dcc-mcp-godot","packages":["dcc-mcp-godot"]},
+          {"repository":"dcc-mcp/dcc-mcp-houdini","packages":["dcc-mcp-houdini"]},
+          {"repository":"dcc-mcp/dcc-mcp-illustrator","packages":["dcc-mcp-illustrator"]},
+          {"repository":"dcc-mcp/dcc-mcp-katana","packages":["dcc-mcp-katana"]},
+          {"repository":"dcc-mcp/dcc-mcp-krita","packages":["dcc-mcp-krita"]},
+          {"repository":"dcc-mcp/dcc-mcp-liquigen","packages":["dcc-mcp-liquigen"]},
+          {"repository":"dcc-mcp/dcc-mcp-mari","packages":["dcc-mcp-mari"]},
+          {"repository":"dcc-mcp/dcc-mcp-marmoset","packages":["dcc-mcp-marmoset"]},
           {"repository":"dcc-mcp/dcc-mcp-maya","packages":["dcc-mcp-maya"]},
-          {"repository":"dcc-mcp/dcc-mcp-zbrush","packages":["dcc-mcp-zbrush"]},
+          {"repository":"dcc-mcp/dcc-mcp-mobu","packages":["dcc-mcp-mobu"]},
+          {"repository":"dcc-mcp/dcc-mcp-nuke","packages":["dcc-mcp-nuke"]},
+          {"repository":"dcc-mcp/dcc-mcp-obs","packages":["dcc-mcp-obs"]},
+          {"repository":"dcc-mcp/dcc-mcp-openscad","packages":["dcc-mcp-openscad"]},
+          {"repository":"dcc-mcp/dcc-mcp-openusd","packages":["dcc-mcp-openusd"]},
           {"repository":"dcc-mcp/dcc-mcp-photoshop","packages":["dcc-mcp-photoshop"]},
-          {"repository":"dcc-mcp/dcc-mcp-core","packages":["dcc-mcp-core","dcc-mcp-server","dcc-mcp-core-semantic"]}]
+          {"repository":"dcc-mcp/dcc-mcp-premiere","packages":["dcc-mcp-premiere"]},
+          {"repository":"dcc-mcp/dcc-mcp-renderdoc","packages":["dcc-mcp-renderdoc"]},
+          {"repository":"dcc-mcp/dcc-mcp-shogun","packages":["dcc-mcp-shogun"]},
+          {"repository":"dcc-mcp/dcc-mcp-sketchup","packages":["dcc-mcp-sketchup"]},
+          {"repository":"dcc-mcp/dcc-mcp-substance3d-designer","packages":["dcc-mcp-substance3d-designer"]},
+          {"repository":"dcc-mcp/dcc-mcp-substance3d-painter","packages":["dcc-mcp-substance3d-painter"]},
+          {"repository":"dcc-mcp/dcc-mcp-touchdesigner","packages":["dcc-mcp-touchdesigner"]},
+          {"repository":"dcc-mcp/dcc-mcp-tracy","packages":["dcc-mcp-tracy"]},
+          {"repository":"dcc-mcp/dcc-mcp-unity","packages":["dcc-mcp-unity"]},
+          {"repository":"dcc-mcp/dcc-mcp-unreal","packages":["dcc-mcp-unreal"]},
+          {"repository":"dcc-mcp/dcc-mcp-zbrush","packages":["dcc-mcp-zbrush"]}]
       grace_minutes:
         description: "Minutes of grace period after a release is published."
         required: false
