@@ -13,10 +13,13 @@ pair it compares the newest GitHub release tag (leading `v` stripped) against
 `https://pypi.org/pypi/<package>/json` and **fails on a mismatch**.
 
 - `release-integrity.yml` - the reusable check (`workflow_call` + `workflow_dispatch`).
-- `release-integrity-nightly.yml` - runs the check daily over every dcc-mcp repository that
-  publishes to PyPI: `dcc-mcp-unreal`, `dcc-mcp-3dsmax`, `dcc-mcp-maya`, `dcc-mcp-zbrush`,
-  `dcc-mcp-photoshop`, and `dcc-mcp-core` (which also publishes `dcc-mcp-server` and
-  `dcc-mcp-core-semantic`).
+- `release-integrity-nightly.yml` - runs the check daily over the built-in manifest: every
+  dcc-mcp repository that publishes to a project that exists on PyPI (36 repositories /
+  38 packages, including `dcc-mcp-core`, which also publishes `dcc-mcp-server` and
+  `dcc-mcp-core-semantic`). The manifest is written out twice, as the `repositories`
+  default of **both** the `workflow_call` and the `workflow_dispatch` inputs in
+  `release-integrity.yml`; update **both** copies and keep them identical, because the
+  nightly schedule only reads the `workflow_call` one.
 - `scripts/check_release_integrity.py` - the comparison itself; it can be run locally.
 
 A mismatch is tolerated (reported as a warning instead of a failure) when the release was
@@ -51,6 +54,10 @@ jobs:
 
 Omit `repositories` to use the built-in manifest of every PyPI-publishing dcc-mcp
 repository. Set `strict: true` to fail on tolerated mismatches as well.
+
+`tests/test_release_integrity_manifest.py` asserts the two copies stay identical, so a
+half-applied manifest edit fails the Profile contract workflow instead of silently
+leaving the nightly gate on an outdated list.
 
 ## Profile contract
 
