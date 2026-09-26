@@ -1,7 +1,7 @@
 <!-- markdownlint-disable MD013 MD033 MD041 -->
 
 <p align="center">
-  <img src="./dcc-mcp-pipeline-banner.png" alt="DCC-MCP connects the complete film and game production pipeline">
+  <img src="./dcc-mcp-pipeline-banner.png" alt="DCC-MCP connects film and game production tools">
 </p>
 
 <p align="center">
@@ -18,41 +18,48 @@
 
 # DCC MCP
 
-**Skill-driven infrastructure for agents to operate real creative tools.**
+**Connect AI agents to creative tools for scene editing, asset processing, and production workflows.**
 
-DCC-MCP (Digital Content Creation Model Context Protocol) does not build or
-prescribe an agent. It connects agents to a growing ecosystem of desktop DCCs,
-game engines, 2D tools, production systems, asset providers, profilers, and
-custom studio hosts through shared discovery, execution, safety, and operations
-contracts.
+DCC-MCP helps artists, technical artists, and tool developers connect AI agents
+to applications such as Maya, Blender, and Houdini. DCC stands for Digital
+Content Creation; MCP stands for Model Context Protocol, an interface between
+AI applications and external tools. An agent can call these tools to carry out
+a task and check the results.
+
+Alongside desktop DCC applications, DCC-MCP connects game engines, 2D design
+tools, production systems, asset services, profilers, and custom studio software.
+They share application discovery, tool calls, permission checks, and monitoring.
+DCC-MCP provides the connections; you choose the agent.
 
 ## Agent entry points
 
-Choose the public Skill that matches the task. Operating an existing DCC only
-needs `dcc-mcp`; the creator Skills are focused authoring guides. The
-[agent guide](https://dcc-mcp.github.io/agents) owns current setup instructions
-so this profile can stay focused on product discovery.
+A Skill is a task guide for agents. Start with `dcc-mcp` to operate an integrated
+application, or choose a creator Skill below to develop adapters or Skill
+packages. See the [agent guide](https://dcc-mcp.github.io/agents) for installation
+and configuration.
 
 | Agent task | Public Skill |
 | --- | --- |
-| Operate live DCCs, discover tools, install extensions, diagnose failures, and prepare safe bug reports | [`@loonghao/dcc-mcp`](https://clawhub.ai/loonghao/skills/dcc-mcp) |
-| Create or modernize a complete DCC-MCP adapter and runtime | [`@loonghao/dcc-mcp-creator`](https://clawhub.ai/loonghao/skills/dcc-mcp-creator) |
+| Operate running DCC applications, find tools, install extensions, diagnose failures, and prepare sanitized bug reports | [`@loonghao/dcc-mcp`](https://clawhub.ai/loonghao/skills/dcc-mcp) |
+| Build or improve a DCC-MCP adapter and runtime | [`@loonghao/dcc-mcp-creator`](https://clawhub.ai/loonghao/skills/dcc-mcp-creator) |
 | Create, validate, or improve a DCC-specific Skill package | [`@loonghao/dcc-mcp-skills-creator`](https://clawhub.ai/loonghao/skills/dcc-mcp-skills-creator) |
 
-The default operating pattern is `dcc-mcp` + `dcc-mcp-cli`: discover the live
-host and its current typed tools, inspect the selected schema, call it with
-validated arguments, then verify the result. The Skill also teaches the agent
-to preserve trace evidence and route a sanitized bug report to the owning
-Skill, adapter, or Core project.
+The `dcc-mcp` Skill guides agents through `dcc-mcp-cli`: find a running
+application and its available tools, read the selected tool's parameter
+definition (schema), validate the arguments, call the tool, and check the result.
+These typed tools define their inputs, outputs, and argument types so agents
+can inspect requirements before calling them. When a call fails, the Skill
+guides agents to preserve traces and submit a sanitized report to the responsible
+Skill, adapter, or Core repository.
 
-Looking for **Maya MCP**, **3ds Max MCP**, **Blender MCP**, **Unreal MCP**,
-**Unity MCP**, **Tuanjie MCP**, or **Godot MCP**? Start with the canonical guide
-and owning adapter below. If your starting point is a **Maya CLI**,
-**3ds Max CLI** (`3dsmax` or `3ds max`), or **Blender CLI** workflow, DCC-MCP adds shared
-live-host discovery, typed tool search, schema inspection, calls, and result
-verification without replacing the application's own command line.
+Find guides and adapters for **Maya MCP**, **3ds Max MCP**, **Blender MCP**,
+**Unreal MCP**, **Unity MCP**, **Tuanjie MCP**, and **Godot MCP** below.
+Existing **Maya CLI**, **3ds Max CLI** (`3dsmax` or `3ds max`), and **Blender CLI**
+workflows can continue to use each application's command line. DCC-MCP adds
+application discovery, tool search, parameter inspection, calls, and result
+verification.
 
-| Application | Canonical control guide | Owning adapter |
+| Application | Website guide | Adapter repository |
 | --- | --- | --- |
 | Maya | [Control Maya with AI](https://dcc-mcp.github.io/control/maya) | [`dcc-mcp-maya`](https://github.com/dcc-mcp/dcc-mcp-maya) |
 | 3ds Max | [Control 3ds Max with AI](https://dcc-mcp.github.io/control/3ds-max) | [`dcc-mcp-3dsmax`](https://github.com/dcc-mcp/dcc-mcp-3dsmax) |
@@ -80,37 +87,33 @@ verification without replacing the application's own command line.
 
 ## Why this project exists
 
-The shortest DCC agent demo asks a model to write and run a `mayapy`, `hython`,
-or Blender Python script. A production pipeline cannot depend on getting the
-right script from the model on every turn.
+A model can write and run a `mayapy`, `hython`, or Blender Python script to
+demonstrate a DCC task. Everyday production also needs permission controls,
+parameter checks, execution records, and verification of the results.
 
-Repeated code generation costs tokens and makes results vary with the model,
-prompt, and context. Adapter authors also end up rebuilding the same transport,
-main-thread dispatch, validation, process lifecycle, instance routing, and
-diagnostics for every host.
+Generating fresh code for each task means reviewing whether it fits the current
+scene. Adapter authors also repeat work on transport, main-thread dispatch,
+process management, instance selection, and logging.
 
-DCC-MCP moves that common engineering into one reusable framework:
+DCC-MCP brings those shared functions into a reusable framework:
 
 | Layer | Shared capability |
 | --- | --- |
 | Integration | MCP and REST endpoints, Host RPC/IPC, typed schemas, resources, prompts, and structured results |
-| DCC runtime | Main-thread affinity, readiness, multi-instance routing, async jobs, cancellation, checkpoints, workflows, and artefact hand-off |
+| DCC runtime | Main-thread dispatch, readiness checks, multi-instance routing, async jobs, cancellation, checkpoints, workflows, and artefact hand-off |
 | Skill delivery | Versioned `SKILL.md` packages, progressive discovery, lint/schema validation, hot reload, persistence, marketplace distribution, and project/team scopes |
 | Operations | CLI, gateway, Admin UI, policies, audit records, traces, logs, metrics, health checks, and replay |
 
-Agents and models will change. Studio interfaces, permission boundaries, and
-pipeline knowledge still need to be maintained. The framework turns those
-investments into reusable engineering assets.
+Teams can maintain their existing DCC interfaces, permission rules, and
+production workflows, then reuse those tools when changing agents or models.
 
-## MCP is an entry point, not the ceiling
+## Connect through MCP and application APIs
 
-We reuse MCP as an industry-standard agent interface instead of inventing a
-private protocol. The framework is not limited to MCP: a stable Python, C++,
-HTTP, command-port, or native plugin interface can be integrated under the same
-control plane.
+DCC-MCP uses MCP to connect agents and can connect creative applications through
+Python, C++, HTTP, command ports, or native plugins. Stable application APIs can
+join the same discovery, execution, and management workflow.
 
-We also include useful vendor capabilities instead of replacing them. Unreal
-Engine 5.8 introduced an
+Vendor tools can join that workflow too. Unreal Engine 5.8 introduced an
 [experimental official MCP server and Toolset Registry](https://dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unreal-editor).
 Our
 [`unreal-official-mcp` Skill](https://github.com/dcc-mcp/dcc-mcp-unreal/blob/main/src/dcc_mcp_unreal/skills/unreal-official-mcp/SKILL.md)
@@ -128,36 +131,36 @@ and verification workflow around those vendor capabilities.
 
 ### When there is no API: UI Control
 
-Adding an AI-facing interface to a new tool is usually straightforward. The
-harder problem is making years of existing tools usable by agents when they
-have no API, cannot be modified, or expose part of a workflow only through a
-window or modal dialog.
+Some older tools have no API and cannot be modified. Other operations are only
+available through windows, dialogs, or embedded web pages. dcc-mcp-core provides
+**UI Control** for these tasks through Qt, native accessibility, webviews, or
+application-specific UI backends. UI actions use the project's
+[DCC-CUA](https://github.com/dcc-mcp/dcc-cua) and UI Control routing. The workflow follows a
+`snapshot -> find -> act -> wait -> verify` loop.
 
-dcc-mcp-core provides a scoped Computer Use-style capability called **UI
-Control**. It uses a deterministic `snapshot -> find -> act -> wait -> verify`
-loop over Qt, native accessibility, webviews, or host-specific UI backends.
-Native Skills/APIs remain preferred; whole-desktop access is denied by default,
-and UI actions stay scoped, policy-checked, auditable, and verifiable. See the
+Native Skills and APIs remain preferred. UI actions must stay scoped,
+policy-checked, audited, and verified; whole-desktop access is denied by default.
+See the
 [UI Control workflow guide](https://github.com/dcc-mcp/dcc-mcp-core/blob/main/docs/guide/ui-control-workflows.md).
 
-## Why Skills are the production unit
+## Reuse production knowledge with Skills
 
-A Skill is not just a script in another folder. It packages proven pipeline
-knowledge as a versioned, typed, testable, and distributable operation.
+A Skill can combine task instructions, tool definitions, and existing scripts
+to make a team's tested production workflows available to agents. Each Skill
+can be versioned, tested, and distributed independently.
 
-A lower-cost model may struggle to invent scene-editing logic from scratch but
-can reliably select a well-described tool and provide validated arguments.
-Skills reduce repeated code generation, token use, and model-dependent
-variance. Large studios can distribute different Skill sets by project,
-department, and production stage without rebuilding an adapter.
+Clear tool descriptions and parameter definitions let agents reuse operations
+instead of generating code repeatedly for the same task. Parameter validation
+and result checks remain necessary; outcomes depend on the tool, model, and
+task. Large studios can distribute different Skills by project, department,
+or production stage.
 
-For TDs and TAs, Skills are the shortest path from an internal requirement to
-a reusable capability. Keep host connectivity, main-thread execution, routing,
-safety, and observability in Core and the adapter; package project naming,
-scene checks, asset preparation, publish gates, cache/export rules, and review
-hand-offs in `SKILL.md`, `tools.yaml`, and existing studio scripts. The result
-can be tested, project-scoped, and distributed through a public or private
-Marketplace without forking the control plane.
+Technical directors (TDs) and technical artists (TAs) can package naming rules,
+scene checks, asset preparation, pre-publish checks, cache/export rules, and
+review hand-offs in `SKILL.md`, `tools.yaml`, and existing studio scripts.
+Core and the adapter handle connectivity, main-thread execution, routing,
+permissions, and execution records. Teams can distribute Skills through a public
+or private Marketplace while reusing the same infrastructure and adapters.
 
 ## A growing ecosystem
 
@@ -168,7 +171,7 @@ Marketplace without forking the control plane.
 | Design and content tools | [Photoshop](https://github.com/dcc-mcp/dcc-mcp-photoshop), [Substance 3D Designer](https://github.com/dcc-mcp/dcc-mcp-substance3d-designer), [Substance 3D Painter](https://github.com/dcc-mcp/dcc-mcp-substance3d-painter), [After Effects](https://github.com/dcc-mcp/dcc-mcp-aftereffects), [Premiere](https://github.com/dcc-mcp/dcc-mcp-premiere), [GIMP](https://github.com/dcc-mcp/dcc-mcp-gimp), [Krita](https://github.com/dcc-mcp/dcc-mcp-krita) |
 | Game and 2D engines | [Unreal Engine official MCP bridge](https://github.com/dcc-mcp/dcc-mcp-unreal), [Unity and Tuanjie AI](https://github.com/dcc-mcp/dcc-mcp-unity), [Godot](https://github.com/dcc-mcp/dcc-mcp-godot), [Tiled](https://github.com/dcc-mcp/dcc-mcp-tiled), [Material Maker](https://github.com/dcc-mcp/dcc-mcp-material-maker) |
 | Pipeline and quality | [OpenUSD](https://github.com/dcc-mcp/dcc-mcp-openusd), [Flow Production Tracking](https://github.com/dcc-mcp/dcc-mcp-fpt), [MaterialX](https://github.com/dcc-mcp/dcc-materialx), [Texture Pipeline](https://github.com/dcc-mcp/dcc-texture-pipeline), [Pipeline Publish](https://github.com/dcc-mcp/dcc-pipeline-publish), [RenderDoc](https://github.com/dcc-mcp/dcc-mcp-renderdoc), [Tracy](https://github.com/dcc-mcp/dcc-mcp-tracy) |
-| Marketplace Skills | Assets, generation, UI, rigging, and game workflows |
+| Extension Skills | Asset services, 2D/3D generation, UI automation, rigging, procedural authoring, game delivery, and runtime acceptance |
 
 The [official Marketplace](https://dcc-mcp.github.io/marketplace) makes those
 optional capabilities searchable, installable, upgradeable, and suitable for
@@ -177,9 +180,10 @@ or inspect the [catalog source](https://github.com/dcc-mcp/marketplace).
 
 ### Extension Skill catalog
 
-The [official catalog](https://github.com/dcc-mcp/marketplace/blob/main/marketplace.json)
-currently publishes all of the following optional capabilities. Agents should
-search the live catalog before installation:
+Find the extensions below in the
+[official catalog](https://github.com/dcc-mcp/marketplace/blob/main/marketplace.json).
+Agents should search the latest catalog to confirm package availability before
+installation:
 
 ```bash
 dcc-mcp-cli marketplace search --query "<capability>" --limit 20
@@ -244,35 +248,35 @@ dcc-mcp-cli marketplace install <package_name> --dcc <dcc_name>
 [![DCC-MCP Skill Marketplace](https://raw.githubusercontent.com/dcc-mcp/dcc-mcp-core/main/docs/assets/admin-ui/admin-marketplace.png)](https://dcc-mcp.github.io/marketplace)
 <!-- markdownlint-enable MD013 -->
 
-## Tool use should not be a black box
+## Inspect agent tool calls
 
 The Gateway Admin UI exposes calls, traces, logs, health, statistics, and usage
 activity. Teams can see which tools agents selected, where calls failed, and
-which Skills are used most often. That evidence can drive a practical feedback
-loop: improve a description, schema, or implementation, then verify the result
-against real calls.
+which Skills are used most often. Use those records to improve a description,
+parameter definition, or implementation, then check the changes through real
+calls.
 
 ## Start here
 
 | Need | Project |
 | --- | --- |
-| Understand the whole project or brief an agent | [Website](https://dcc-mcp.github.io/), [For Agents](https://dcc-mcp.github.io/agents), [Showcase](https://dcc-mcp.github.io/showcase) |
-| Build an adapter or operate live DCC sessions | [`dcc-mcp-core`](https://github.com/dcc-mcp/dcc-mcp-core) |
+| Learn about the project or configure an agent | [Website](https://dcc-mcp.github.io/), [For Agents](https://dcc-mcp.github.io/agents), [Showcase](https://dcc-mcp.github.io/showcase) |
+| Build an adapter or explore the shared runtime | [`dcc-mcp-core`](https://github.com/dcc-mcp/dcc-mcp-core) |
 | Discover and distribute reusable Skills | [`marketplace`](https://github.com/dcc-mcp/marketplace) |
 | Explore the full ecosystem | [All DCC-MCP repositories](https://github.com/orgs/dcc-mcp/repositories) |
 | Integrate game engines | [Unreal Engine official MCP bridge](https://github.com/dcc-mcp/dcc-mcp-unreal), [Unity and Tuanjie AI](https://github.com/dcc-mcp/dcc-mcp-unity), [Godot](https://github.com/dcc-mcp/dcc-mcp-godot) |
 | Build pipeline integrations | [OpenUSD](https://github.com/dcc-mcp/dcc-mcp-openusd), [Flow Production Tracking](https://github.com/dcc-mcp/dcc-mcp-fpt), [Texture Pipeline](https://github.com/dcc-mcp/dcc-texture-pipeline) |
 
 Browse the [DCC-MCP repositories](https://github.com/orgs/dcc-mcp/repositories)
-for more adapters, asset providers, UI automation, profilers, and production
+for more adapters, asset services, UI automation, profilers, and production
 Skills.
 
-The boundary is deliberate: the core does not replace host-specific pipeline
-semantics or promise safe rollback where a DCC exposes no transaction API.
-Those responsibilities stay in adapters and pipeline Skills.
+Core provides shared connectivity and runtime services. Adapters and Skills
+implement each application's production rules. If an application has no
+transaction API, Core cannot guarantee safe rollback.
 
-If you want DCC agents to move from demos to reusable, deployable, and
-observable production tools, try the project and give it a Star.
+Try DCC-MCP in your own production workflows. If it helps, support the project
+with a Star.
 
 ## Contributing
 
