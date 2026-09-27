@@ -1,0 +1,78 @@
+{
+  "$comment": "Repositories swept nightly by .github/workflows/repo-contract-nightly.yml. A repository belongs here once it passes the profile it is listed with; add yours in the same PR that makes it pass. The contract gate used by a repository you own is .github/workflows/repo-contract.yml in that repository.",
+  "defaults": {
+    "profile": "baseline",
+    "fail_on": "error"
+  },
+  "repositories": [
+    {
+      "repository": "dcc-mcp/dcc-mcp-3dsmax"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-blender"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-core"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-excel"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-houdini"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-marvelous-designer"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-maya"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-obs"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-office"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-outlook"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-photoshop"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-powerpoint"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-word"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-wwise"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-zbrush"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp.github.io"
+    },
+    {
+      "repository": "dcc-mcp/fpt-cli"
+    },
+    {
+      "repository": "loonghao/AionUi"
+    },
+    {
+      "repository": "loonghao/GameLearningRuntime"
+    },
+    {
+      "repository": "loonghao/aionrs"
+    },
+    {
+      "repository": "loonghao/clawup"
+    },
+    {
+      "repository": "loonghao/cua"
+    },
+    {
+      "repository": "loonghao/vx"
+    }
+  ]
+}

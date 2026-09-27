@@ -1,0 +1,149 @@
+name: Repo contract
+
+# Machine-checkable version of the configuration and documentation contract agreed
+# in PIP-3741: no build artifacts at the root, a lowercase justfile, an AGENTS.md,
+# a vx.toml that pins tools consistently, and a root directory limited to the
+# allowlist. The rules and their severities live in contract/repo_contract.json so
+# that this workflow and the `vx-repo-contract` skill share one definition.
+#
+# Adopt it in a repository with a single caller file:
+#
+#   name: Repo contract
+#   on:
+#     pull_request:
+#     push:
+#       branches: [main]
+#   permissions:
+#     contents: read
+#   jobs:
+#     contract:
+#       uses: dcc-mcp/.github/.github/workflows/repo-contract.yml@main
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Git ref of dcc-mcp/.github that holds the checker and contract."
+        required: false
+        type: string
+        default: main
+      profile:
+        description: "Rule set to run: baseline (mechanical rules) or strict (all rules)."
+        required: false
+        type: string
+        default: baseline
+      rules:
+        description: "Comma-separated rule ids to add to the profile, e.g. R006,R008."
+        required: false
+        type: string
+        default: ""
+      skip-rules:
+        description: "Comma-separated rule ids to remove from the profile."
+        required: false
+        type: string
+        default: ""
+      error-rules:
+        description: "Comma-separated rule ids to promote from warning to error."
+        required: false
+        type: string
+        default: ""
+      allow-extra:
+        description: "Comma-separated top-level entries tolerated by the root allowlist."
+        required: false
+        type: string
+        default: ""
+      fail-on:
+        description: "Lowest severity that fails the run: error, warning, or none."
+        required: false
+        type: string
+        default: error
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref of dcc-mcp/.github that holds the checker and contract."
+        required: false
+        type: string
+        default: main
+      profile:
+        description: "Rule set to run: baseline (mechanical rules) or strict (all rules)."
+        required: false
+        type: string
+        default: baseline
+      rules:
+        description: "Comma-separated rule ids to add to the profile, e.g. R006,R008."
+        required: false
+        type: string
+        default: ""
+      skip-rules:
+        description: "Comma-separated rule ids to remove from the profile."
+        required: false
+        type: string
+        default: ""
+      error-rules:
+        description: "Comma-separated rule ids to promote from warning to error."
+        required: false
+        type: string
+        default: ""
+      allow-extra:
+        description: "Comma-separated top-level entries tolerated by the root allowlist."
+        required: false
+        type: string
+        default: ""
+      fail-on:
+        description: "Lowest severity that fails the run: error, warning, or none."
+        required: false
+        type: string
+        default: error
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Repository contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # The repository under test and the contract tooling are checked out into
+      # sibling directories, so the tooling never shows up as a top-level entry.
+      - name: Check out the repository under test
+        uses: actions/checkout@v7
+        with:
+          path: repository
+
+      - name: Check out the contract tooling
+        uses: actions/checkout@v7
+        with:
+          repository: dcc-mcp/.github
+          ref: ${{ inputs.ref || 'main' }}
+          sparse-checkout: |
+            contract
+            scripts
+          path: contract-tooling
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Check the repository contract
+        env:
+          PROFILE: ${{ inputs.profile }}
+          RULES: ${{ inputs.rules }}
+          SKIP_RULES: ${{ inputs.skip-rules }}
+          ERROR_RULES: ${{ inputs.error-rules }}
+          ALLOW_EXTRA: ${{ inputs.allow-extra }}
+          FAIL_ON: ${{ inputs.fail-on }}
+        run: |
+          set -- \
+            --root repository \
+            --contract contract-tooling/contract/repo_contract.json \
+            --profile "${PROFILE:-baseline}" \
+            --fail-on "${FAIL_ON:-error}" \
+            --format github
+
+          [[ -n "$RULES" ]] && set -- "$@" --rule "$RULES"
+          [[ -n "$SKIP_RULES" ]] && set -- "$@" --skip-rule "$SKIP_RULES"
+          [[ -n "$ERROR_RULES" ]] && set -- "$@" --error-rule "$ERROR_RULES"
+          [[ -n "$ALLOW_EXTRA" ]] && set -- "$@" --allow-extra "$ALLOW_EXTRA"
+
+          python contract-tooling/scripts/check_repo_contract.py "$@"

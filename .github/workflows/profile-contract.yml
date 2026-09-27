@@ -38,6 +38,10 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Check identity, discovery, and public links
         run: python scripts/check_profile_contract.py --links
+      - name: Check this repository against the repository contract
+        run: |
+          python scripts/check_repo_contract.py --root . --profile strict \
+            --allow-extra profile,requirements-profile-check.txt
       - name: Lint Markdown
         run: npx --yes markdownlint-cli2 "profile/*.md"
       - name: Render Markdown
