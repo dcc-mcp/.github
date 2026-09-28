@@ -24,6 +24,7 @@ on:
           {"repository":"dcc-mcp/dcc-mcp-houdini","packages":["dcc-mcp-houdini"]},
           {"repository":"dcc-mcp/dcc-mcp-illustrator","packages":["dcc-mcp-illustrator"]},
           {"repository":"dcc-mcp/dcc-mcp-katana","packages":["dcc-mcp-katana"]},
+          {"repository":"dcc-mcp/dcc-mcp-kdenlive","packages":["dcc-mcp-kdenlive"]},
           {"repository":"dcc-mcp/dcc-mcp-krita","packages":["dcc-mcp-krita"]},
           {"repository":"dcc-mcp/dcc-mcp-liquigen","packages":["dcc-mcp-liquigen"]},
           {"repository":"dcc-mcp/dcc-mcp-mari","packages":["dcc-mcp-mari"]},
@@ -42,9 +43,11 @@ on:
           {"repository":"dcc-mcp/dcc-mcp-substance3d-designer","packages":["dcc-mcp-substance3d-designer"]},
           {"repository":"dcc-mcp/dcc-mcp-substance3d-painter","packages":["dcc-mcp-substance3d-painter"]},
           {"repository":"dcc-mcp/dcc-mcp-touchdesigner","packages":["dcc-mcp-touchdesigner"]},
+          {"repository":"dcc-mcp/dcc-mcp-tiled","packages":["dcc-mcp-tiled"]},
           {"repository":"dcc-mcp/dcc-mcp-tracy","packages":["dcc-mcp-tracy"]},
           {"repository":"dcc-mcp/dcc-mcp-unity","packages":["dcc-mcp-unity"]},
           {"repository":"dcc-mcp/dcc-mcp-unreal","packages":["dcc-mcp-unreal"]},
+          {"repository":"dcc-mcp/dcc-mcp-wwise","packages":["dcc-mcp-wwise"]},
           {"repository":"dcc-mcp/dcc-mcp-zbrush","packages":["dcc-mcp-zbrush"]}]
       grace_minutes:
         description: >
@@ -84,6 +87,7 @@ on:
           {"repository":"dcc-mcp/dcc-mcp-houdini","packages":["dcc-mcp-houdini"]},
           {"repository":"dcc-mcp/dcc-mcp-illustrator","packages":["dcc-mcp-illustrator"]},
           {"repository":"dcc-mcp/dcc-mcp-katana","packages":["dcc-mcp-katana"]},
+          {"repository":"dcc-mcp/dcc-mcp-kdenlive","packages":["dcc-mcp-kdenlive"]},
           {"repository":"dcc-mcp/dcc-mcp-krita","packages":["dcc-mcp-krita"]},
           {"repository":"dcc-mcp/dcc-mcp-liquigen","packages":["dcc-mcp-liquigen"]},
           {"repository":"dcc-mcp/dcc-mcp-mari","packages":["dcc-mcp-mari"]},
@@ -102,9 +106,11 @@ on:
           {"repository":"dcc-mcp/dcc-mcp-substance3d-designer","packages":["dcc-mcp-substance3d-designer"]},
           {"repository":"dcc-mcp/dcc-mcp-substance3d-painter","packages":["dcc-mcp-substance3d-painter"]},
           {"repository":"dcc-mcp/dcc-mcp-touchdesigner","packages":["dcc-mcp-touchdesigner"]},
+          {"repository":"dcc-mcp/dcc-mcp-tiled","packages":["dcc-mcp-tiled"]},
           {"repository":"dcc-mcp/dcc-mcp-tracy","packages":["dcc-mcp-tracy"]},
           {"repository":"dcc-mcp/dcc-mcp-unity","packages":["dcc-mcp-unity"]},
           {"repository":"dcc-mcp/dcc-mcp-unreal","packages":["dcc-mcp-unreal"]},
+          {"repository":"dcc-mcp/dcc-mcp-wwise","packages":["dcc-mcp-wwise"]},
           {"repository":"dcc-mcp/dcc-mcp-zbrush","packages":["dcc-mcp-zbrush"]}]
       grace_minutes:
         description: "Minutes of grace period after a release is published."
