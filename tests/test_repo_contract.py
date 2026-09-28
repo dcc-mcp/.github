@@ -380,6 +380,18 @@ class TestR005ToolPins(ContractTestCase):
         self.repo.write("vx.toml", "[tools]\npython = 3.11\n")
         self.assertEqual(run_cli(self.repo.root)[0], 0)
 
+    def test_accepts_a_delegation_sentinel_on_its_own_tool(self) -> None:
+        self.repo.clean()
+        self.repo.write("vx.toml", '[tools]\nrust = "rustup-managed"\n')
+        self.assertEqual(run_cli(self.repo.root)[0], 0)
+
+    def test_sentinel_is_not_accepted_on_another_tool(self) -> None:
+        self.repo.clean()
+        self.repo.write("vx.toml", '[tools]\npython = "rustup-managed"\n')
+        code, findings = run_cli(self.repo.root)
+        self.assertEqual(code, 1)
+        self.assertIn("R005", self.ids(findings))
+
 
 class TestR006RootAllowlist(ContractTestCase):
     def test_unknown_top_level_file_warns(self) -> None:
