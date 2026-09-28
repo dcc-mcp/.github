@@ -384,10 +384,20 @@ def check_tools_version_format(root: Path, contract: Contract, ctx: dict) -> lis
     if not isinstance(tools, dict):
         return []
     pattern = re.compile(contract.value("tools_version_pattern", r"^.+$"))
+    sentinels = contract.value("tools_delegation_sentinels", {})
+    if not isinstance(sentinels, dict):
+        sentinels = {}
     findings = []
     for name in sorted(tools):
         value = tools[name]
         if isinstance(value, str) and pattern.match(value):
+            continue
+        # A delegation sentinel is an ownership declaration, not a version: another
+        # manager owns the toolchain and vx deliberately keeps its hands off. vx can
+        # still resolve the pin (to "ask the other manager"), so R005 accepts it --
+        # but only for the tool that declares it, never as a blanket escape hatch.
+        declared = sentinels.get(name) if isinstance(value, str) else None
+        if isinstance(declared, list) and value in declared:
             continue
         findings.append(
             Finding(

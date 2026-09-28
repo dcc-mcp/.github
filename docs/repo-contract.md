@@ -18,7 +18,7 @@ down twice.
 | R002 | `justfile-lowercase` — `justfile`, never `Justfile` | error | error | PIP-3735 |
 | R003 | `agents-md-exists` — `AGENTS.md` is present | error | error | PIP-3736 |
 | R004 | `vx-toml-parses` — `vx.toml` parses into known tables | error | error | PIP-3737 |
-| R005 | `tools-version-format` — `[tools]` pins are `stable`, `latest`, or `X[.Y[.Z]]` | error | error | PIP-3737 |
+| R005 | `tools-version-format` — `[tools]` pins are `stable`, `latest`, `X[.Y[.Z]]`, or a declared delegation sentinel | error | error | PIP-3737 |
 | R006 | `root-allowlist` — every top-level entry is allowlisted | — | warning | PIP-3735 |
 | R007 | `no-scripts-with-justfile` — no `vx.toml [scripts]` when a justfile exists | — | warning | PIP-3734 |
 | R008 | `agents-derived-symlink` — `CLAUDE.md` and friends are symlinks or generated | — | warning | PIP-3736 |
@@ -35,6 +35,29 @@ repository either satisfies them or it does not. The last five are being rolled
 out by their owning issues, so they start as warnings and get promoted when the
 rollout lands. That is the ratchet — a repository adopts the gate before it is
 clean, and the warnings are the to-do list.
+
+### Delegation sentinels (R005)
+
+Some tools are deliberately owned by another manager. A repository that pins its
+Rust toolchain in `rust-toolchain.toml` wants rustup to own it, and records that
+in `vx.toml` as an explicit opt-out:
+
+```toml
+[tools]
+rust = "rustup-managed"
+```
+
+`rustup-managed` is an **ownership declaration, not a version**, so it does not
+match `tools_version_pattern`. R005 accepts it anyway, because vx *can* resolve
+that pin — it resolves to "ask rustup" — and a sentinel is exactly as
+reproducible as the toolchain file it points at. The point of R005 is to reject
+pins vx cannot act on: bare channel names, ranges, and URLs.
+
+The exemption is scoped per tool, via `tools_delegation_sentinels` in
+`contract/repo_contract.json`. `rust` may declare `rustup-managed`;
+`python = "rustup-managed"` is still an error. When another proxy-managed runtime
+needs a sentinel, add it there. Do not widen `tools_version_pattern` instead —
+that would let every tool claim every sentinel.
 
 ## Adopting the gate
 

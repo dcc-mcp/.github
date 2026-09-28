@@ -1,6 +1,6 @@
 {
-  "contract_version": "1.0.0",
-  "updated": "2026-09-28",
+  "contract_version": "1.1.0",
+  "updated": "2026-09-29",
   "owner": "dcc-mcp/.github",
   "source_issue": "PIP-3741",
   "description": "Machine-readable definition of the dcc-mcp repository contract. Consumed by scripts/check_repo_contract.py (CI gate) and by the vx-repo-contract skill (local check). Both read this file, so the pass/fail criteria are defined exactly once.",
@@ -52,7 +52,7 @@
       "severity": "error",
       "profiles": ["baseline", "strict"],
       "source": "PIP-3737",
-      "summary": "A pin must be `stable`, `latest`, or numeric `X`, `X.Y`, or `X.Y.Z`. Anything else (a bare channel name, a range, a URL) is not resolvable by vx and is rejected."
+      "summary": "A pin must be `stable`, `latest`, or numeric `X`, `X.Y`, or `X.Y.Z`. Anything else (a bare channel name, a range, a URL) is not resolvable by vx and is rejected. A tool named in tools_delegation_sentinels may instead declare that another manager owns it; that is an ownership declaration rather than a version, and it is accepted for that tool only."
     },
     {
       "id": "R006",
@@ -414,6 +414,9 @@
   "vx_toml_known_tables": ["project", "tools", "settings", "env", "scripts"],
   "tools_version_pattern": "^(stable|latest|[0-9]+(?:\\.[0-9]+){0,2})$",
   "tools_latest_allowed": ["just", "maturin", "uv"],
+  "tools_delegation_sentinels": {
+    "rust": ["rustup-managed"]
+  },
   "llms_generator_paths": [
     ".codebuddy/skills/llms-txt-generator",
     ".github/workflows/llms-txt.yml",
