@@ -13,6 +13,7 @@
   <a href="https://dcc-mcp.github.io/zh/marketplace">技能市场</a> ·
   <a href="https://dcc-mcp.github.io/zh/showcase">案例画廊</a> ·
   <a href="https://dcc-mcp.github.io/zh/agents">Agent 使用指南</a> ·
+  <a href="https://dcc-mcp.github.io/zh/cloud-agents">云 Agent 工作流</a> ·
   <a href="https://dcc-mcp.github.io/zh/ecosystem">生态目录</a>
 </p>
 
@@ -62,6 +63,16 @@ Skill 是供 Agent 使用的任务指南。操作已接入的应用，从 `dcc-m
 | Unity | [用 AI 控制 Unity](https://dcc-mcp.github.io/zh/control/unity) | [`dcc-mcp-unity`](https://github.com/dcc-mcp/dcc-mcp-unity) |
 | Tuanjie / 团结引擎 | [用 AI 控制团结引擎工作流](https://dcc-mcp.github.io/zh/control/unity) | [`dcc-mcp-unity`](https://github.com/dcc-mcp/dcc-mcp-unity) |
 | Godot | [用 AI 控制 Godot](https://dcc-mcp.github.io/zh/control/godot) | [`dcc-mcp-godot`](https://github.com/dcc-mcp/dcc-mcp-godot) |
+
+### 云 Agent 工作流
+
+通过 MCP 或 `dcc-mcp-cli` 调用 DCC-MCP 的类型化工具，检查场景、执行限定范围的
+编辑、导出素材并验证产物。根据平台提供的接口和可用软件，DCC 应用可以运行在 Agent
+的云电脑中，也可以运行在通过安全网关连接的已授权工作站上。
+
+[云 Agent 指南](https://dcc-mcp.github.io/zh/cloud-agents) 考察 dots、Grok Bot、
+Meta Muse 和 Manus Cue。选择工作流前，请核对安装前提、带版本的证据矩阵和限制。
+矩阵分别记录软件原生运行检查、已实测的 DCC-MCP 工作流，以及有待验证的平台接口。
 
 ### 用 Agent 操作游戏引擎
 
