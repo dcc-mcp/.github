@@ -13,6 +13,7 @@
   <a href="https://dcc-mcp.github.io/marketplace">Marketplace</a> ·
   <a href="https://dcc-mcp.github.io/showcase">Showcase</a> ·
   <a href="https://dcc-mcp.github.io/agents">For Agents</a> ·
+  <a href="https://dcc-mcp.github.io/cloud-agents">Cloud Agents</a> ·
   <a href="https://dcc-mcp.github.io/ecosystem">Ecosystem</a>
 </p>
 
@@ -68,6 +69,20 @@ verification.
 | Unity | [Control Unity with AI](https://dcc-mcp.github.io/control/unity) | [`dcc-mcp-unity`](https://github.com/dcc-mcp/dcc-mcp-unity) |
 | Tuanjie / 团结引擎 | [Control Tuanjie workflows with AI](https://dcc-mcp.github.io/control/unity) | [`dcc-mcp-unity`](https://github.com/dcc-mcp/dcc-mcp-unity) |
 | Godot | [Control Godot with AI](https://dcc-mcp.github.io/control/godot) | [`dcc-mcp-godot`](https://github.com/dcc-mcp/dcc-mcp-godot) |
+
+### Cloud agent workflows
+
+Use DCC-MCP's typed tools through MCP or `dcc-mcp-cli` to inspect scenes, make
+scoped edits, export assets, and verify outputs. Depending on the platform's
+interfaces and available software, the DCC application can run in the agent's
+cloud computer or on an authorized workstation connected through a secured
+gateway.
+
+The [cloud agent guide](https://dcc-mcp.github.io/cloud-agents) examines dots,
+Grok Bot, Meta Muse, and Manus Cue. Check its installation prerequisites,
+versioned evidence matrix, and limitations before choosing a workflow. The
+matrix separates native software checks, tested DCC-MCP workflows, and platform
+interfaces awaiting validation.
 
 ### Game-engine agent workflows
 
