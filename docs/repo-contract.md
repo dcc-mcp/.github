@@ -10,6 +10,12 @@ The rules and their severities are defined once, in
 `vx-repo-contract` skill both read that file, so a criterion is never written
 down twice.
 
+`R0xx` is not the only rule namespace. `--contract` points the same checker at a
+different rule file, and [`docs/adapter-contract.md`](adapter-contract.md)
+describes `contract/adapter_contract.json`: the `A0xx` rules that apply only to
+the Python adapter packages. The two are deliberately separate so that a
+non-Python repository never has to satisfy an adapter rule.
+
 ## Rules
 
 | Id | Rule | `baseline` | `strict` | Decided by |
@@ -114,6 +120,9 @@ python /path/to/dcc-mcp/.github/scripts/check_repo_contract.py --root . --profil
 # What does the contract actually say?
 ... --emit-contract
 ... --list-rules --profile strict
+
+# The adapter rules instead of these ones (see docs/adapter-contract.md)
+... --contract /path/to/dcc-mcp/.github/contract/adapter_contract.json --root .
 ```
 
 Findings are emitted as GitHub annotations

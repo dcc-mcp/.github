@@ -9,8 +9,10 @@ repository contract that every `dcc-mcp` repository is checked against.
 | Path | Purpose |
 |---|---|
 | `profile/` | The public `dcc-mcp` GitHub organisation profile. Checked by `scripts/check_profile_contract.py`. |
-| `contract/repo_contract.json` | Machine-readable repository contract: rules, severities, root allowlist. **Single source of truth.** |
+| `contract/repo_contract.json` | Machine-readable repository contract: rules, severities, root allowlist. **Single source of truth for the `R0xx` rules.** |
 | `contract/repositories.json` | Manifest of repositories swept nightly by the contract gate. |
+| `contract/adapter_contract.json` | The adapter contract: rules that only apply to the Python adapter packages. Ids use the **`A0xx`** namespace so they can never collide with `R0xx`. Selected with `--contract`. |
+| `contract/adapter_repositories.json` | Manifest of the Python adapter packages swept nightly by `adapter-contract-nightly.yml`. |
 | `scripts/check_*.py` | The gates. Stdlib-only, no third-party imports. |
 | `tests/` | `unittest` suites, run with `python -m unittest discover -s tests -v`. |
 | `.github/workflows/` | Reusable (`workflow_call`) workflows plus the org-wide nightly sweeps. |

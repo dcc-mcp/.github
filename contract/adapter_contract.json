@@ -1,0 +1,40 @@
+{
+  "contract_version": "0.1.0",
+  "updated": "2026-10-02",
+  "owner": "dcc-mcp/.github",
+  "source_issue": "PIP-4104",
+  "description": "Machine-readable definition of the dcc-mcp adapter contract: the rules that only apply to the Python adapter packages, not to every repository in the organisation. Consumed by scripts/check_repo_contract.py --contract (CI gate) and by the vx-repo-contract skill (local check). Both read this file, so the pass/fail criteria are defined exactly once. Rule ids use the A0xx namespace so they can never collide with the R0xx rules in contract/repo_contract.json.",
+  "profiles": {
+    "baseline": "Rules that every registered adapter package is expected to satisfy today. A repository starts here and ratchets up.",
+    "strict": "All rules including the ones still being rolled out by PIP-4106. Opt in per repository once it is clean."
+  },
+  "rules": [
+    {
+      "id": "A001",
+      "name": "adapter-python-package",
+      "title": "A registered adapter is a Python package that depends on dcc-mcp-core",
+      "severity": "warning",
+      "profiles": ["baseline", "strict"],
+      "source": "PIP-4105",
+      "summary": "A repository swept by the adapter contract must ship a pyproject.toml that declares a dcc-mcp-core dependency, or be the core distribution itself. This is the applicability gate for every other A0xx rule: it carries no business constraint of its own, it proves the --contract dispatch reaches the registered repository."
+    }
+  ],
+  "adapter_python_package": {
+    "manifest": "pyproject.toml",
+    "core_distribution_names": ["dcc-mcp-core"],
+    "self_distributions": ["dcc-mcp-core"],
+    "dependency_key_patterns": [
+      "^project\\.dependencies$",
+      "^project\\.optional-dependencies\\.",
+      "^build-system\\.requires$",
+      "^dependency-groups\\.",
+      "^tool\\.uv\\.dev-dependencies$",
+      "^tool\\.poetry\\.dependencies$",
+      "^tool\\.poetry\\.group\\..*\\.dependencies$"
+    ],
+    "distribution_name_key_patterns": [
+      "^project\\.name$",
+      "^tool\\.poetry\\.name$"
+    ]
+  }
+}
