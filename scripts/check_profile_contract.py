@@ -951,6 +951,32 @@ def check_contract() -> tuple[list[str], set[str]]:
     return failures, public_urls
 
 
+# github.com/<owner>/<repo>/blob/<ref>/<path> renders the file through GitHub's HTML
+# view. That path answers 503 to unauthenticated clients far more readily than the
+# raw content host does -- persistently, not as a transient blip, so retrying it
+# cannot help. raw.githubusercontent.com serves the same file with no rendering,
+# so a link that is valid is reported as valid.
+GITHUB_BLOB_RE = re.compile(
+    r"^https://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/blob/(?P<ref>[^/]+)/(?P<path>.+)$"
+)
+
+
+def raw_equivalent(url: str) -> str:
+    """Map a GitHub blob URL onto its raw.githubusercontent.com equivalent.
+
+    Returns the URL unchanged when it is not a GitHub blob link. The rewrite only
+    swaps the host and drops the ``blob/`` segment; the owner, repository, ref, and
+    path are preserved, so the link still proves the same file exists.
+    """
+    match = GITHUB_BLOB_RE.match(url)
+    if not match:
+        return url
+    return (
+        f"https://raw.githubusercontent.com/{match['owner']}/{match['repo']}/"
+        f"{match['ref']}/{match['path']}"
+    )
+
+
 def check_url(url: str) -> str | None:
     error, public_url = validate_link(url, PROFILE_DIR / "README.md")
     if error or public_url != url:
@@ -959,8 +985,11 @@ def check_url(url: str) -> str | None:
     dns_error = verify_public_url_before_io(url, pinned_addresses)
     if dns_error:
         return f"{url}: {dns_error}"
+    # Security decisions above are made against the profile's own URL; only the
+    # transport below is redirected, and every redirect is re-validated.
+    fetch_url = raw_equivalent(url)
     request = urllib.request.Request(
-        url,
+        fetch_url,
         headers={
             "User-Agent": "dcc-mcp-profile-link-check/2.0",
             "Accept": "text/html,*/*",
@@ -969,7 +998,7 @@ def check_url(url: str) -> str | None:
     last_error = "unknown error"
     for attempt in range(3):
         try:
-            retry_dns_error = pin_public_url(url, pinned_addresses)
+            retry_dns_error = pin_public_url(fetch_url, pinned_addresses)
             if retry_dns_error:
                 return f"{url}: {retry_dns_error}"
             opener = urllib.request.build_opener(

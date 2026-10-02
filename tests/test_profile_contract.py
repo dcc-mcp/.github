@@ -15,6 +15,7 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
 FIXTURE = ROOT / "tests" / "fixtures" / "profile_contract.json"
 FIXTURE_SHA256 = "2749758168cbeafcdca4403b3ad86e6f842a0569b1a671bea6a6ed1f85737cdd"
 
@@ -22,6 +23,60 @@ FIXTURE_SHA256 = "2749758168cbeafcdca4403b3ad86e6f842a0569b1a671bea6a6ed1f85737c
 def canonical_lf(data: bytes) -> bytes:
     """Return the platform-independent byte representation frozen by the digest."""
     return data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+
+class GitHubBlobRewriteTests(unittest.TestCase):
+    """The blob -> raw rewrite, without touching the network."""
+
+    def raw(self, url: str) -> str:
+        from check_profile_contract import raw_equivalent
+
+        return raw_equivalent(url)
+
+    def test_blob_link_maps_onto_the_raw_host(self) -> None:
+        self.assertEqual(
+            self.raw(
+                "https://github.com/dcc-mcp/dcc-mcp-core/blob/main/docs/guide/x.md"
+            ),
+            "https://raw.githubusercontent.com/dcc-mcp/dcc-mcp-core/main/docs/guide/x.md",
+        )
+
+    def test_owner_repo_ref_and_path_are_preserved(self) -> None:
+        # The rewrite must prove the same file still exists, so only the host and
+        # the `blob/` segment may change.
+        url = "https://github.com/dcc-mcp/marketplace/blob/v1.2.3/a/b/c.json"
+        self.assertEqual(
+            self.raw(url),
+            "https://raw.githubusercontent.com/dcc-mcp/marketplace/v1.2.3/a/b/c.json",
+        )
+
+    def test_a_non_main_ref_is_kept(self) -> None:
+        self.assertEqual(
+            self.raw("https://github.com/o/r/blob/develop/src/x.py"),
+            "https://raw.githubusercontent.com/o/r/develop/src/x.py",
+        )
+
+    def test_non_blob_links_are_untouched(self) -> None:
+        for url in (
+            "https://github.com/dcc-mcp/dcc-mcp-core",
+            "https://github.com/dcc-mcp/dcc-mcp-core/tree/main/docs",
+            "https://example.com/a/b",
+            "https://raw.githubusercontent.com/o/r/main/x.md",
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(self.raw(url), url)
+
+    def test_the_raw_form_passes_the_link_validator(self) -> None:
+        from check_profile_contract import PROFILE_DIR, validate_link
+
+        for url in (
+            "https://github.com/dcc-mcp/dcc-mcp-core/blob/main/docs/guide/x.md",
+            "https://github.com/dcc-mcp/marketplace/blob/main/marketplace.json",
+        ):
+            with self.subTest(url=url):
+                error, public = validate_link(self.raw(url), PROFILE_DIR / "README.md")
+                self.assertIsNone(error)
+                self.assertEqual(public, self.raw(url))
 
 
 class ProfileContractMutationTests(unittest.TestCase):
