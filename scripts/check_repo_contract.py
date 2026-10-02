@@ -24,6 +24,8 @@ Rules
 
     A001 adapter-python-package  a registered adapter declares a dcc-mcp-core
                                  dependency (contract/adapter_contract.json)
+    A010-A014 live in the same file: the Install SOP interface family for the
+                                 adapter packages (see docs/adapter-contract.md).
 
 Profiles
 --------
@@ -44,6 +46,7 @@ Exit codes
 from __future__ import annotations
 
 import argparse
+import ast
 import fnmatch
 import json
 import re
@@ -835,6 +838,562 @@ def check_adapter_python_package(root: Path, contract: Contract, ctx: dict) -> l
     ]
 
 
+# ------------------------------------------------------------ adapter machinery
+#
+# The A0xx rules live in contract/adapter_contract.json and only apply to Python
+# adapter packages. They read the repository's Python sources, so they need a
+# tree walk, an AST pass and a pyproject dependency read; everything they decide
+# (thresholds, symbol names, globs) still comes from the contract.
+
+_MISSING = object()
+
+# Python 3.7's parser emits ast.Num / ast.Str / ast.Bytes / ast.NameConstant
+# where 3.8+ emits ast.Constant. Those classes are deprecated from 3.12 and
+# removed in 3.14, so they are matched by *name* rather than by getattr(ast, ...):
+# touching them by attribute is itself deprecated and would make the checker
+# warn about deprecation while it is checking for deprecation.
+_LEGACY_CONST_NAMES = frozenset({"Num", "Str", "Bytes", "NameConstant"})
+
+_FLOOR_OPERATOR_RE = re.compile(r"(>=|==|~=|\^|>)\s*([0-9][0-9A-Za-z.\-]*)")
+
+
+def _literal(node: Any) -> Any:
+    """Return the Python value of a literal node, or ``_MISSING``."""
+    if isinstance(node, ast.Constant):
+        return node.value
+    if type(node).__name__ in _LEGACY_CONST_NAMES:
+        for attribute in ("value", "n", "s"):
+            if hasattr(node, attribute):
+                return getattr(node, attribute)
+    return _MISSING
+
+
+def _iter_repo_files(
+    root: Path, globs: Iterable[str], exclude_dirs: Iterable[str]
+) -> Iterable[Path]:
+    """Yield tracked files matching ``globs``, skipping vendored directories."""
+    excludes = set(exclude_dirs or ())
+    seen: set[Path] = set()
+    for pattern in globs or ():
+        try:
+            candidates = sorted(root.glob(pattern))
+        except (OSError, ValueError):
+            continue
+        for path in candidates:
+            if not path.is_file() or path in seen:
+                continue
+            parts = path.relative_to(root).parts
+            if any(part in excludes for part in parts[:-1]):
+                continue
+            seen.add(path)
+            yield path
+
+
+def _read_text(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def _parse_module(path: Path) -> ast.Module | None:
+    """Parse a Python file, or return None when it cannot be parsed.
+
+    A file written for a newer Python than the interpreter running the check
+    raises SyntaxError. That is a property of the file, not a contract finding,
+    so it is skipped: A010 still covers it with a text scan.
+    """
+    text = _read_text(path)
+    if text is None:
+        return None
+    try:
+        return ast.parse(text, filename=str(path))
+    except (SyntaxError, ValueError, RecursionError):
+        return None
+
+
+def _referenced_names(node: Any) -> set[str]:
+    """Every bare name and attribute touched by an expression."""
+    names: set[str] = set()
+    if node is None:
+        return names
+    for child in ast.walk(node):
+        if isinstance(child, ast.Name):
+            names.add(child.id)
+        elif isinstance(child, ast.Attribute):
+            names.add(child.attr)
+    return names
+
+
+def _bindings(tree: ast.Module) -> dict[str, Any]:
+    """Map every assigned name in the module, at any scope, to its value node."""
+    mapping: dict[str, Any] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    mapping.setdefault(target.id, node.value)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            if node.value is not None:
+                mapping.setdefault(node.target.id, node.value)
+    return mapping
+
+
+def _resolve(node: Any, bindings: dict[str, Any], depth: int) -> Any:
+    """Follow module-level aliasing, so `SCHEMA_VERSION` reaches its literal."""
+    cursor = node
+    for _ in range(max(0, depth)):
+        if not isinstance(cursor, ast.Name):
+            return cursor
+        following = bindings.get(cursor.id)
+        if following is None:
+            return cursor
+        cursor = following
+    return cursor
+
+
+def _dict_value_for_key(node: ast.Dict, field: str) -> Any:
+    for key, value in zip(node.keys, node.values):
+        if key is None:
+            continue
+        text = _literal(key)
+        if isinstance(text, str) and text == field:
+            return value
+    return None
+
+
+def _dict_has_any_key(node: ast.Dict, keys: Iterable[str]) -> bool:
+    wanted = set(keys or ())
+    if not wanted:
+        return True
+    for key in node.keys:
+        if key is None:
+            continue
+        text = _literal(key)
+        if isinstance(text, str) and text in wanted:
+            return True
+    return False
+
+
+def _const_read_names(tree: ast.Module, const_reads: Iterable[str]) -> set[str]:
+    """Names in this module that produce the schema ``const``.
+
+    Direct calls to a known reader, plus one hop of local helpers that return
+    one: a test helper such as ``_published_schema_const()`` is how an adapter
+    normally spells the assertion that pins a hardcoded value to the schema.
+    """
+    wanted = set(const_reads or ())
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id in wanted:
+                names.add(node.func.id)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for child in ast.walk(node):
+                if (
+                    isinstance(child, ast.Call)
+                    and isinstance(child.func, ast.Name)
+                    and child.func.id in wanted
+                ):
+                    names.add(node.name)
+                    break
+    return names
+
+
+def _is_const_read(node: Any, names: set[str]) -> bool:
+    """True when an expression reads the schema const, subscripts included."""
+    if not names:
+        return False
+    return bool(names & _referenced_names(node))
+
+
+def _collect_schema_const_guards(root: Path, contract: Contract) -> set[tuple[str, Any]]:
+    """Names and literal values that a test pins to the schema ``const``."""
+    const_reads = set(contract.value("a011_schema_const_reads", []))
+    guards: set[tuple[str, Any]] = set()
+    if not const_reads:
+        return guards
+    for path in _iter_repo_files(
+        root, contract.value("a011_guard_globs", []), contract.value("scan_exclude_dirs", [])
+    ):
+        tree = _parse_module(path)
+        if tree is None:
+            continue
+        readers = _const_read_names(tree, const_reads)
+        if not readers:
+            continue
+        bindings = _bindings(tree)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Compare):
+                continue
+            sides = [node.left, *node.comparators]
+            if not any(_is_const_read(side, readers) for side in sides):
+                continue
+            for side in sides:
+                if _is_const_read(side, readers):
+                    continue
+                if isinstance(side, ast.Name):
+                    guards.add(("name", side.id))
+                value = _literal(_resolve(side, bindings, 2))
+                if value is not _MISSING and not isinstance(value, bool):
+                    guards.add(("value", value))
+    return guards
+
+
+def _classify_schema_version(
+    value: Any,
+    bindings: dict[str, Any],
+    depth: int,
+    sources: set[str],
+    artifact: set[str],
+    guards: set[tuple[str, Any]],
+) -> tuple[str, str] | None:
+    """Return ``None`` when the source is acceptable, else ``(kind, detail)``."""
+    resolved = _resolve(value, bindings, depth)
+    names = _referenced_names(value) | _referenced_names(resolved)
+    if names & sources:
+        return None
+    if names & artifact:
+        return ("artifact", ", ".join(sorted(names & artifact)))
+    literal = _literal(resolved)
+    if literal is _MISSING or isinstance(literal, bool):
+        return None
+    if ("value", literal) in guards:
+        return None
+    if isinstance(value, ast.Name) and ("name", value.id) in guards:
+        return None
+    return ("constant", repr(literal))
+
+
+def _serves_alias(text: str, alias: str) -> bool:
+    """True when a file defines or serves the alias rather than consuming it.
+
+    core keeps the deprecated name alive through ``__getattr__`` so that old
+    adapters keep working. The file that does that is the provider of the alias;
+    penalising it would flag the one repository that is supposed to have it.
+    """
+    if "def __getattr__" in text and alias in text:
+        return True
+    return re.search(r"^\s*" + re.escape(alias) + r"\s*=", text, re.M) is not None
+
+
+def _has_install_sop_surface(
+    root: Path, contract: Contract, source_files: Sequence[Path]
+) -> bool:
+    """True when the repository has an Install SOP surface to be checked."""
+    symbols = list(contract.value("install_sop_symbols", []))
+    if symbols:
+        pattern = re.compile("|".join(r"\b" + re.escape(symbol) + r"\b" for symbol in symbols))
+        for path in source_files:
+            text = _read_text(path)
+            if text and pattern.search(text):
+                return True
+    for pattern in contract.value("install_source_globs", []):
+        if any(root.glob(pattern)):
+            return True
+    return False
+
+
+def _version_tuple(value: str) -> tuple[int, ...]:
+    numbers: list[int] = []
+    for part in re.split(r"[.\-+]", str(value).strip()):
+        if not part.isdigit():
+            break
+        numbers.append(int(part))
+    return tuple(numbers)
+
+
+def _version_cmp(left: tuple[int, ...], right: tuple[int, ...]) -> int:
+    width = max(len(left), len(right))
+    a = tuple(list(left) + [0] * (width - len(left)))
+    b = tuple(list(right) + [0] * (width - len(right)))
+    return (a > b) - (a < b)
+
+
+def _lower_bound(operators: str) -> str | None:
+    best: tuple[tuple[int, ...], str] | None = None
+    for _, version in _FLOOR_OPERATOR_RE.findall(operators or ""):
+        parsed = _version_tuple(version)
+        if not parsed:
+            continue
+        if best is None or _version_cmp(parsed, best[0]) > 0:
+            best = (parsed, version)
+    return best[1] if best else None
+
+
+def _core_distribution_names(contract: Contract) -> list[str]:
+    """The distributions that count as the core dependency.
+
+    A001 already declares them, so A012 reads that list instead of keeping a
+    second one that could drift: a criterion is never written down twice.
+    """
+    block = contract.value("adapter_python_package") or {}
+    names = block.get("core_distribution_names") if isinstance(block, dict) else None
+    if names:
+        return list(names)
+    return list(contract.value("core_dependency_names", ["dcc-mcp-core"]))
+
+
+def _core_dependency(root: Path, contract: Contract) -> tuple[str, str | None] | None:
+    """Find the dcc-mcp-core requirement and its lower bound.
+
+    A001 already ships a pyproject reader, so A012 reads the same tables
+    through the same contract patterns instead of keeping a second reader that
+    could disagree about which dependencies a package declares.
+
+    A package may declare dependencies in several tables. The PEP 621
+    ``project.dependencies`` table wins, so a dev extra or a build requirement
+    cannot silently stand in for the real floor.
+    """
+    block = contract.value("adapter_python_package") or {}
+    manifest = root / str(block.get("manifest", "pyproject.toml"))
+    text = _read_text(manifest)
+    if text is None:
+        return None
+    patterns = [
+        re.compile(pattern)
+        for pattern in (block.get("dependency_key_patterns") or ["^project\\.dependencies$"])
+    ]
+    wanted = {_normalise_distribution(name) for name in _core_distribution_names(contract)}
+    best: tuple[int, str, str | None] | None = None
+    for key, body in parse_pyproject(text).items():
+        if not any(pattern.search(key) for pattern in patterns):
+            continue
+        rank = 0 if key.startswith("project.dependencies") else 1
+        for element in TOML_STRING_RE.findall(body):
+            requirement = element.strip()
+            head = REQUIREMENT_TAIL_RE.split(requirement, maxsplit=1)[0].strip()
+            if not head or _normalise_distribution(head) not in wanted:
+                continue
+            if best is None or rank < best[0]:
+                best = (rank, requirement, _lower_bound(requirement))
+    if best is None:
+        return None
+    return best[1], best[2]
+
+
+# ----------------------------------------------------------------- A0xx rules
+
+
+def check_no_deprecated_schema_alias(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
+    rule = contract.rules["A010"]
+    alias = contract.value("deprecated_schema_alias", "INSTALL_SOP_SCHEMA_VERSION")
+    pattern = re.compile(r"\b" + re.escape(alias) + r"\b")
+    exempt = contract.value("a010_exempt_path_globs", [])
+    findings = []
+    for path in _iter_repo_files(
+        root, contract.value("scan_source_globs", []), contract.value("scan_exclude_dirs", [])
+    ):
+        rel = _rel(root, path)
+        if _matches_any(rel, exempt):
+            continue
+        text = _read_text(path)
+        if text is None or _serves_alias(text, alias):
+            continue
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if line.strip().startswith("#"):
+                continue
+            if pattern.search(line):
+                findings.append(
+                    Finding(
+                        rule["id"],
+                        rule["name"],
+                        rule["severity"],
+                        f"{rel}:{lineno}",
+                        (
+                            f"`{alias}` is a deprecated alias that core serves through "
+                            "__getattr__ with a DeprecationWarning; use "
+                            "`INSTALL_SOP_SCHEMA_REVISION` for the artifact revision, or "
+                            "`install_sop_report_schema_version()` for the report field. "
+                            "Fix the value, not just the name: PIP-3990 shipped because six "
+                            "adapters published the artifact revision as the report field."
+                        ),
+                    )
+                )
+    return findings
+
+
+def check_report_schema_version_source(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
+    rule = contract.rules["A011"]
+    field = contract.value("a011_schema_version_field", "schema_version")
+    sources = set(contract.value("a011_schema_version_sources", []))
+    artifact = set(contract.value("a011_artifact_revision_symbols", []))
+    markers = set(contract.value("a011_report_marker_keys", []))
+    depth = int(contract.value("a011_max_resolve_depth", 3))
+    guards = _collect_schema_const_guards(root, contract)
+    findings = []
+    for path in _iter_repo_files(
+        root, contract.value("scan_source_globs", []), contract.value("scan_exclude_dirs", [])
+    ):
+        tree = _parse_module(path)
+        if tree is None:
+            continue
+        bindings = _bindings(tree)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Dict):
+                continue
+            value = _dict_value_for_key(node, field)
+            if value is None or not _dict_has_any_key(node, markers):
+                continue
+            verdict = _classify_schema_version(
+                value, bindings, depth, sources, artifact, guards
+            )
+            if verdict is None:
+                continue
+            kind, detail = verdict
+            if kind == "artifact":
+                message = (
+                    f"the report `{field}` is bound to the Install SOP artifact revision "
+                    f"({detail}); the field must come from "
+                    "`install_sop_report_schema_version()` or the schema `const`. This is "
+                    "exactly the PIP-3990 defect: the artifact revision is 2 while the "
+                    "report field is pinned to 1."
+                )
+            else:
+                message = (
+                    f"the report `{field}` is the literal {detail}; read it from "
+                    "`install_sop_report_schema_version()` so that a schema `const` change "
+                    "cannot be published silently. A literal that a test pins to the "
+                    "schema const is accepted as guarded."
+                )
+            findings.append(
+                Finding(
+                    rule["id"],
+                    rule["name"],
+                    rule["severity"],
+                    f"{_rel(root, path)}:{getattr(node, 'lineno', 0)}",
+                    message,
+                )
+            )
+    return findings
+
+
+def check_core_floor_policy(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
+    rule = contract.rules["A012"]
+    manifest = str((contract.value("adapter_python_package") or {}).get("manifest", "pyproject.toml"))
+    if not (root / manifest).is_file():
+        return []
+    dependency = _core_dependency(root, contract)
+    if dependency is None:
+        return []
+    specifier, lower = dependency
+    if lower is None:
+        return [
+            Finding(
+                rule["id"],
+                rule["name"],
+                rule["severity"],
+                manifest,
+                (
+                    f"the core dependency is declared as `{specifier}` with no lower bound; "
+                    "declare `dcc-mcp-core>=<version>` so the resolved core is "
+                    "reproducible instead of whatever happens to be latest"
+                ),
+            )
+        ]
+    baseline_value = contract.value("core_floor_baseline")
+    target_value = contract.value("core_floor_target")
+    baseline = _version_tuple(baseline_value) if baseline_value else None
+    target = _version_tuple(target_value) if target_value else None
+    actual = _version_tuple(lower)
+    if baseline is not None and _version_cmp(actual, baseline) < 0:
+        return [
+            Finding(
+                rule["id"],
+                rule["name"],
+                rule["severity"],
+                "pyproject.toml",
+                (
+                    f"declared core floor `{lower}` (from `{specifier}`) is "
+                    f"below the organisation baseline `{baseline_value}`; the 2026-10-02 "
+                    "sweep spans 54 patch versions, from >=0.18.2 to >=0.20.36"
+                ),
+            )
+        ]
+    if target is not None and _version_cmp(actual, target) < 0:
+        # Advisory only. The baseline is met, so this never fails the build; it
+        # records that the new Install SOP API is not unconditionally available.
+        return [
+            Finding(
+                rule["id"],
+                rule["name"],
+                "notice",
+                "pyproject.toml",
+                (
+                    f"declared core floor `{lower}` meets the baseline `{baseline_value}` "
+                    f"but is below the target `{target_value}`; "
+                    "`install_sop_report_schema_version()` and "
+                    "`validate_install_sop_report()` need core 0.20.40"
+                ),
+            )
+        ]
+    return []
+
+
+def check_doctor_module_present(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
+    rule = contract.rules["A013"]
+    globs = contract.value("scan_source_globs", [])
+    excludes = contract.value("scan_exclude_dirs", [])
+    source_files = list(_iter_repo_files(root, globs, excludes))
+    if not _has_install_sop_surface(root, contract, source_files):
+        return []
+    for pattern in contract.value("a013_doctor_module_globs", []):
+        if any(root.glob(pattern)):
+            return []
+    anchor = "src"
+    for pattern in contract.value("install_source_globs", []):
+        matches = sorted(root.glob(pattern))
+        if matches:
+            anchor = _rel(root, matches[0])
+            break
+    return [
+        Finding(
+            rule["id"],
+            rule["name"],
+            rule["severity"],
+            anchor,
+            (
+                "this adapter provides install capability but ships no `doctor` "
+                "self-check module; add one that assembles the Install SOP report and "
+                "validates it with `validate_install_sop_report()` (8 of 50 adapters "
+                "have one today)"
+            ),
+        )
+    ]
+
+
+def check_report_validates_against_schema(
+    root: Path, contract: Contract, ctx: dict
+) -> list[Finding]:
+    rule = contract.rules["A014"]
+    globs = contract.value("scan_source_globs", [])
+    excludes = contract.value("scan_exclude_dirs", [])
+    source_files = list(_iter_repo_files(root, globs, excludes))
+    if not _has_install_sop_surface(root, contract, source_files):
+        return []
+    symbols = set(contract.value("a014_validator_symbols", []))
+    if not symbols:
+        return []
+    pattern = re.compile("|".join(r"\b" + re.escape(name) + r"\b" for name in sorted(symbols)))
+    for path in _iter_repo_files(root, contract.value("a014_scan_globs", []), excludes):
+        text = _read_text(path)
+        if text and pattern.search(text):
+            return []
+    return [
+        Finding(
+            rule["id"],
+            rule["name"],
+            rule["severity"],
+            "tests",
+            (
+                "no test or CI workflow validates a real report with "
+                "`validate_install_sop_report()`; schema compliance is only claimed, and "
+                "that is how the PIP-3990 defect reached a release"
+            ),
+        )
+    ]
+
+
 RULES: dict[str, Callable[[Path, Contract, dict], list[Finding]]] = {
     "A001": check_adapter_python_package,
     "R001": check_no_root_artifacts,
@@ -847,6 +1406,11 @@ RULES: dict[str, Callable[[Path, Contract, dict], list[Finding]]] = {
     "R008": check_agents_derived_symlink,
     "R009": check_tools_no_latest,
     "R010": check_llms_txt_fresh,
+    "A010": check_no_deprecated_schema_alias,
+    "A011": check_report_schema_version_source,
+    "A012": check_core_floor_policy,
+    "A013": check_doctor_module_present,
+    "A014": check_report_validates_against_schema,
 }
 
 

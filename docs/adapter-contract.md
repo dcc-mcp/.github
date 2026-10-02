@@ -38,11 +38,21 @@ error rather than a silently mis-selected rule.
 | Id | Rule | `baseline` | `strict` | Decided by |
 |---|---|---|---|---|
 | A001 | `adapter-python-package` — a registered adapter ships a `pyproject.toml` that declares a `dcc-mcp-core` dependency | warning | warning | PIP-4105 |
+| A010 | `no-deprecated-schema-alias` — adapter code does not reference the deprecated `INSTALL_SOP_SCHEMA_VERSION` alias | **error** | error | PIP-4106 |
+| A011 | `report-schema-version-source` — the report `schema_version` comes from the schema `const`, not from a literal or the artifact revision | — | warning | PIP-4106 |
+| A012 | `core-floor-policy` — the declared `dcc-mcp-core` floor is at or above the organisation baseline | — | warning | PIP-4106 |
+| A013 | `doctor-module-present` — an adapter with install capability ships a `doctor` self-check module | — | warning | PIP-4106 |
+| A014 | `report-validates-against-schema` — a real report is validated with `validate_install_sop_report()` in tests or CI | — | warning | PIP-4106 |
 
 A001 is the **applicability gate**, not a business rule. It answers one question
 the other rules cannot answer for themselves: *is this repository actually an
 adapter package?* Everything else in this contract assumes the answer is yes, so
 A001 has to be able to say no.
+
+A010 is the only rule besides A001 that sits in `baseline`, and the only one
+that fails the build: it is decided from source text alone, needs no core at
+runtime, and has no migration cost, so there is no reason to ratchet it. A011
+to A014 report the gap and start as warnings.
 
 ## How A001 decides
 
@@ -74,6 +84,55 @@ the checker.
 A manifest the reader cannot model is reported as a finding rather than
 crashing: one exotic `pyproject.toml` must not take down a 50-repository sweep.
 
+## How the Install SOP family decides
+
+`dcc-mcp-core` `0.20.40` split one name into two, and the family exists to keep
+adapters from putting the wrong one on the wire:
+
+- `INSTALL_SOP_SCHEMA_REVISION` — the revision of the published schema
+  *artifact* (`adapter-install-sop-vN.schema.json`), currently `2`.
+- `install_sop_report_schema_version()` — the value a report document's
+  `schema_version` field must carry. It reads
+  `properties.schema_version.const` from the schema and is `1`; publishing
+  `-v(N+1)` adds optional members and never moves it.
+
+The old `INSTALL_SOP_SCHEMA_VERSION` is a deprecated alias that `__getattr__`
+still serves with a `DeprecationWarning`, which is why **A010** can be an error
+immediately: whether adapter source references it is decidable from the text.
+The one exemption is a file that defines or serves the alias — that is core
+keeping old adapters working, and flagging it would penalise the only
+repository that is supposed to have it.
+
+**A011** reads an Install SOP report envelope with `ast`, not with a regex, and
+only considers dicts that carry an Install SOP marker key (`steps`,
+`next_steps`, `receipt_path`). Adapters ship other schemas that also have a
+`schema_version` — a deck IR, a patch format — and without that scoping the
+rule reports documents that have nothing to do with the Install SOP. Two
+sources are rejected: the artifact revision, which is the defect that shipped in
+PIP-3990, and a hardcoded literal.
+
+A hardcoded literal is **accepted when a test pins it to the schema `const`**.
+An adapter that writes `SCHEMA_VERSION = 1` and asserts
+`SCHEMA_VERSION == install_sop_report_schema_version()` has already closed the
+drift this rule is for, and a gate that reports a defended adapter is a gate
+people learn to ignore. The known trade-off is that a guard is matched by name
+across files, so a second, unrelated constant sharing a guarded name is also
+excused. That is the deliberate direction to err in for a warning.
+
+**A012** compares the declared `dcc-mcp-core` floor against
+`core_floor_baseline` (`0.20.36`), which is the highest floor any adapter
+declares today, so the target is reachable rather than aspirational.
+`core_floor_target` (`0.20.40`) is where the new Install SOP API becomes
+unconditionally available; meeting the baseline but not the target is a
+`notice`, which is reported but can never fail a run. The floor is read through
+the same `parse_pyproject` reader and the same `dependency_key_patterns` that
+A001 uses, so the two rules cannot disagree about what a package declares.
+
+**A013** and **A014** are skipped for an adapter with no Install SOP surface at
+all. Roughly 42 of the 50 adapters neither reference the Install SOP contract
+nor ship an install module, and reporting them for a gap they do not have would
+bury the real findings.
+
 ## The nightly sweep
 
 [`.github/workflows/adapter-contract-nightly.yml`](../.github/workflows/adapter-contract-nightly.yml)
@@ -84,8 +143,11 @@ repository checks it out and runs the gate. Adopting the adapter contract needs
 gap this contract exists to close is that 50 repositories each drifted in their
 own direction.
 
-The manifest defaults are `profile: baseline`, `fail_on: error`. With only A001
-in the contract that means the sweep is green and the warnings are the gap list;
+The manifest defaults are `profile: baseline`, `fail_on: error`. In `baseline`
+the sweep runs A001 and A010, so a repository that still references the
+deprecated `INSTALL_SOP_SCHEMA_VERSION` alias fails the sweep while an
+unregistered or non-Python repository only draws an A001 warning. Running the
+sweep with `profile: strict` adds A011 to A014, whose warnings are the gap list;
 the ratchet is what turns them red.
 
 ## Ratchet plan
@@ -99,11 +161,13 @@ big-bang edit across 50 repositories:
    to `error`, or a repository that is clean promotes it for itself with
    `error_rules` in its manifest entry.
 
-PIP-4106 adds the Install SOP interface rules on top of this contract. A010
-(`no-deprecated-schema-alias`) is planned to land directly at `error` because it
-is a purely static check with no migration cost; the rest start at `warning`
-because the `dcc-mcp-core` floor declarations across the fleet are as low as
-`>=0.18.2` while the replacement API only exists from `0.20.40`.
+The Install SOP family (A010 to A014) is the current ratchet target. Only A010
+is binding today; the other four start as warnings because the `dcc-mcp-core`
+floor declarations across the fleet are as low as `>=0.18.2` while the
+replacement API only exists from `0.20.40`. Every threshold the family uses —
+`core_floor_baseline`, `core_floor_target`, the symbol names, the globs — is a
+contract value, so moving a threshold is an edit to the JSON and not a code
+change.
 
 ## Running it locally
 

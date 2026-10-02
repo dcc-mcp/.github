@@ -597,7 +597,10 @@ class TestA001AdapterPythonPackage(ContractTestCase):
     def pyproject(self, body: str) -> None:
         self.repo.write("pyproject.toml", body)
 
-    def test_a001_is_the_only_baseline_rule(self) -> None:
+    def test_baseline_is_a001_plus_the_statically_decidable_a010(self) -> None:
+        # A010 joins A001 in baseline because it is decided from source text
+        # alone: it needs no core at runtime, so it can fail the build at once.
+        # The remaining A0xx rules report the rollout gap and stay in strict.
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):
             self.assertEqual(
@@ -605,7 +608,8 @@ class TestA001AdapterPythonPackage(ContractTestCase):
                 0,
             )
         self.assertEqual(
-            [line.split()[0] for line in stdout.getvalue().strip().splitlines()], ["A001"]
+            [line.split()[0] for line in stdout.getvalue().strip().splitlines()],
+            ["A001", "A010"],
         )
 
     def test_missing_pyproject_toml_warns(self) -> None:
@@ -809,6 +813,310 @@ class TestMatrix(unittest.TestCase):
             )
         self.assertEqual(code, 2)
 
+
+class InstallSopFixture(ContractTestCase):
+    """Scaffolding for the Install SOP family, A010-A014."""
+
+    def adapter_strict(self, *args: str) -> tuple[int, list[dict]]:
+        """Run the adapter contract in `strict`, where A011-A014 live."""
+        return run_cli_with(ADAPTER_CONTRACT, self.repo.root, "--profile", "strict", *args)
+
+    def install_surface(self) -> None:
+        """The smallest source set that makes A013 and A014 applicable."""
+        self.repo.write(
+            "src/demo_adapter/install.py",
+            "from dcc_mcp_core.deployment import INSTALL_EXIT_OK\n",
+        )
+
+    def write_report(self, schema_version: str, extra: str = "") -> None:
+        """Write an Install SOP report envelope, optionally preceded by source."""
+        self.repo.write(
+            "src/demo_adapter/report.py",
+            (f"{extra}\n" if extra else "")
+            + "def build():\n"
+            "    return {\n"
+            f'        "schema_version": {schema_version},\n'
+            '        "status": "ok",\n'
+            '        "steps": [],\n'
+            '        "next_steps": [],\n'
+            '        "receipt_path": None,\n'
+            "    }\n",
+        )
+
+
+class TestAdapterRuleProfiles(InstallSopFixture):
+    def listed_rules(self, profile: str) -> dict[str, str]:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = main(["--contract", ADAPTER_CONTRACT, "--list-rules", "--profile", profile])
+        self.assertEqual(code, 0)
+        listed = {}
+        for line in stdout.getvalue().splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and parts[0].startswith("A0"):
+                listed[parts[0]] = parts[1]
+        return listed
+
+    def test_baseline_is_the_applicability_gate_plus_a010(self) -> None:
+        self.assertEqual(self.listed_rules("baseline"), {"A001": "warning", "A010": "error"})
+
+    def test_strict_carries_every_adapter_rule(self) -> None:
+        self.assertEqual(
+            self.listed_rules("strict"),
+            {
+                "A001": "warning",
+                "A010": "error",
+                "A011": "warning",
+                "A012": "warning",
+                "A013": "warning",
+                "A014": "warning",
+            },
+        )
+
+
+class TestA010DeprecatedSchemaAlias(InstallSopFixture):
+    """A010 is the one adapter rule that fails the build: it is pure static."""
+
+    def test_references_the_alias_in_source(self) -> None:
+        self.repo.write(
+            "src/demo_adapter/contract.py",
+            "import dcc_mcp_core as _core\n"
+            "ARTIFACT_SCHEMA_VERSION = _core.INSTALL_SOP_SCHEMA_VERSION\n",
+        )
+        code, findings = self.adapter_strict()
+        self.assertIn("A010", self.ids(findings))
+        self.assertEqual(self.severities(findings, "A010"), {"error"})
+        self.assertEqual(code, 1)
+
+    def test_ignores_a_mention_that_is_only_a_comment(self) -> None:
+        self.repo.write(
+            "src/demo_adapter/contract.py",
+            "# INSTALL_SOP_SCHEMA_VERSION is the artifact revision, not the report field.\n"
+            "ARTIFACT_SCHEMA_VERSION = 2\n",
+        )
+        _, findings = self.adapter_strict()
+        self.assertNotIn("A010", self.ids(findings))
+
+    def test_ignores_the_file_that_serves_the_alias(self) -> None:
+        self.repo.write(
+            "python/demo_core/deployment.py",
+            "def __getattr__(name):\n"
+            "    if name == 'INSTALL_SOP_SCHEMA_VERSION':\n"
+            "        return 2\n",
+        )
+        _, findings = self.adapter_strict()
+        self.assertNotIn("A010", self.ids(findings))
+
+    def test_reports_the_line_number(self) -> None:
+        self.repo.write(
+            "src/demo_adapter/contract.py", "VALUE = 1\nVALUE = dcc.INSTALL_SOP_SCHEMA_VERSION\n"
+        )
+        _, findings = self.adapter_strict()
+        paths = [item["path"] for item in findings if item["rule_id"] == "A010"]
+        self.assertTrue(paths)
+        self.assertTrue(paths[0].endswith("contract.py:2"), paths[0])
+
+    def test_runs_in_the_baseline_profile(self) -> None:
+        self.repo.write(
+            "src/demo_adapter/contract.py", "VALUE = dcc.INSTALL_SOP_SCHEMA_VERSION\n"
+        )
+        _, findings = run_cli_with(ADAPTER_CONTRACT, self.repo.root, "--profile", "baseline")
+        self.assertIn("A010", self.ids(findings))
+
+
+class TestA011ReportSchemaVersionSource(InstallSopFixture):
+    def test_artifact_revision_is_reported(self) -> None:
+        # The PIP-3990 defect: the report field carries the artifact revision (2)
+        # instead of the schema const (1).
+        self.write_report(
+            "INSTALL_SOP_SCHEMA_REVISION",
+            "from dcc_mcp_core.deployment import INSTALL_SOP_SCHEMA_REVISION",
+        )
+        _, findings = self.adapter_strict()
+        self.assertIn("A011", self.ids(findings))
+        self.assertEqual(self.severities(findings, "A011"), {"warning"})
+        message = next(item["message"] for item in findings if item["rule_id"] == "A011")
+        self.assertIn("artifact revision", message)
+
+    def test_hardcoded_literal_is_reported(self) -> None:
+        self.write_report("1")
+        _, findings = self.adapter_strict()
+        self.assertIn("A011", self.ids(findings))
+
+    def test_canonical_source_is_accepted(self) -> None:
+        self.write_report(
+            "install_sop_report_schema_version()",
+            "from dcc_mcp_core.deployment import install_sop_report_schema_version",
+        )
+        _, findings = self.adapter_strict()
+        self.assertNotIn("A011", self.ids(findings))
+
+    def test_a_constant_pinned_to_the_schema_const_by_a_test_is_accepted(self) -> None:
+        self.write_report("SCHEMA_VERSION", "SCHEMA_VERSION = 1")
+        self.repo.write(
+            "tests/test_report.py",
+            "from dcc_mcp_core.deployment import install_sop_report_schema_version\n"
+            "from demo_adapter.report import SCHEMA_VERSION\n"
+            "def test_pinned():\n"
+            "    assert SCHEMA_VERSION == install_sop_report_schema_version()\n",
+        )
+        _, findings = self.adapter_strict()
+        self.assertNotIn("A011", self.ids(findings))
+
+    def test_the_same_constant_without_a_guard_is_reported(self) -> None:
+        self.write_report("SCHEMA_VERSION", "SCHEMA_VERSION = 1")
+        _, findings = self.adapter_strict()
+        self.assertIn("A011", self.ids(findings))
+
+    def test_an_unrelated_schema_is_not_reported(self) -> None:
+        # Adapters ship schemas that have nothing to do with the Install SOP,
+        # such as a deck IR. Only dicts with an Install SOP marker key are read.
+        self.repo.write(
+            "src/demo_adapter/deck_ir.py",
+            'IR_VERSION = "office-ir/1.0"\n'
+            "def build():\n"
+            '    return {"schema_version": IR_VERSION, "metadata": {}, "operations": []}\n',
+        )
+        _, findings = self.adapter_strict()
+        self.assertNotIn("A011", self.ids(findings))
+
+    def test_a_file_that_cannot_be_parsed_is_skipped(self) -> None:
+        self.repo.write("src/demo_adapter/broken.py", "def broken(:\n")
+        _, findings = self.adapter_strict()
+        self.assertNotIn("A011", self.ids(findings))
+
+
+class TestA012CoreFloorPolicy(InstallSopFixture):
+    def pyproject(self, dependency: str) -> None:
+        self.repo.write(
+            "pyproject.toml",
+            '[project]\nname = "demo"\ndependencies = [\n'
+            f'    "{dependency}",\n'
+            '    "pytest>=7.0",\n'
+            "]\n",
+        )
+
+    def test_floor_below_the_baseline_is_reported(self) -> None:
+        self.pyproject("dcc-mcp-core>=0.18.2,<1.0.0")
+        _, findings = self.adapter_strict()
+        self.assertIn("A012", self.ids(findings))
+        self.assertEqual(self.severities(findings, "A012"), {"warning"})
+        message = next(item["message"] for item in findings if item["rule_id"] == "A012")
+        self.assertIn("0.20.36", message)
+
+    def test_floor_at_the_baseline_is_advisory_only(self) -> None:
+        self.pyproject("dcc-mcp-core>=0.20.36,<1.0.0")
+        code, findings = self.adapter_strict()
+        self.assertEqual(self.severities(findings, "A012"), {"notice"})
+        self.assertEqual(code, 0, "a notice must never fail the build")
+
+    def test_floor_at_the_target_is_accepted(self) -> None:
+        self.pyproject("dcc-mcp-core>=0.20.40,<1.0.0")
+        _, findings = self.adapter_strict()
+        self.assertNotIn("A012", self.ids(findings))
+
+    def test_a_dependency_without_a_lower_bound_is_reported(self) -> None:
+        self.pyproject("dcc-mcp-core")
+        _, findings = self.adapter_strict()
+        self.assertIn("A012", self.ids(findings))
+        message = next(item["message"] for item in findings if item["rule_id"] == "A012")
+        self.assertIn("no lower bound", message)
+
+    def test_a_comment_in_the_dependency_array_is_ignored(self) -> None:
+        self.repo.write(
+            "pyproject.toml",
+            '[project]\nname = "demo"\ndependencies = [\n'
+            "    # Release Train anchor: same core the other adapters pin.\n"
+            '    "dcc-mcp-core>=0.18.2,<1.0.0",\n'
+            "]\n",
+        )
+        _, findings = self.adapter_strict()
+        self.assertEqual(self.severities(findings, "A012"), {"warning"})
+
+    def test_a_dev_extra_does_not_stand_in_for_the_floor(self) -> None:
+        self.repo.write(
+            "pyproject.toml",
+            '[project]\nname = "demo"\ndependencies = ["dcc-mcp-core>=0.18.2,<1.0.0"]\n'
+            '[project.optional-dependencies]\ndev = ["dcc-mcp-core>=0.20.40"]\n',
+        )
+        _, findings = self.adapter_strict()
+        self.assertEqual(self.severities(findings, "A012"), {"warning"})
+
+    def test_a_repository_without_core_is_not_reported(self) -> None:
+        self.repo.write(
+            "pyproject.toml", '[project]\nname = "demo"\ndependencies = ["pytest>=7.0"]\n'
+        )
+        _, findings = self.adapter_strict()
+        self.assertNotIn("A012", self.ids(findings))
+
+
+class TestA013DoctorModulePresent(InstallSopFixture):
+    def test_install_surface_without_a_doctor_is_reported(self) -> None:
+        self.install_surface()
+        _, findings = self.adapter_strict()
+        self.assertIn("A013", self.ids(findings))
+        self.assertEqual(self.severities(findings, "A013"), {"warning"})
+
+    def test_a_doctor_module_satisfies_the_rule(self) -> None:
+        self.install_surface()
+        self.repo.write("src/demo_adapter/doctor.py", "def main():\n    return 0\n")
+        _, findings = self.adapter_strict()
+        self.assertNotIn("A013", self.ids(findings))
+
+    def test_a_doctor_package_satisfies_the_rule(self) -> None:
+        self.install_surface()
+        self.repo.write("src/demo_adapter/doctor/__init__.py", "")
+        _, findings = self.adapter_strict()
+        self.assertNotIn("A013", self.ids(findings))
+
+    def test_an_adapter_without_an_install_surface_is_skipped(self) -> None:
+        self.repo.write("src/demo_adapter/server.py", "def main():\n    return 0\n")
+        _, findings = self.adapter_strict()
+        self.assertNotIn("A013", self.ids(findings))
+
+    def test_an_install_module_alone_makes_the_rule_apply(self) -> None:
+        self.repo.write("src/demo_adapter/installer.py", "def run():\n    return 0\n")
+        _, findings = self.adapter_strict()
+        self.assertIn("A013", self.ids(findings))
+
+
+class TestA014ReportValidatesAgainstSchema(InstallSopFixture):
+    def test_a_validated_report_satisfies_the_rule(self) -> None:
+        self.install_surface()
+        self.repo.write(
+            "tests/test_report.py",
+            "from dcc_mcp_core.deployment import validate_install_sop_report\n"
+            "def test_report():\n"
+            "    validate_install_sop_report(build_report())\n",
+        )
+        _, findings = self.adapter_strict()
+        self.assertNotIn("A014", self.ids(findings))
+
+    def test_a_ci_workflow_counts_as_validation(self) -> None:
+        self.install_surface()
+        self.repo.write(
+            ".github/workflows/validate.yml",
+            "name: validate\n"
+            "on: [push]\n"
+            "jobs:\n"
+            "  check:\n"
+            "    steps:\n"
+            "      - run: python -c 'validate_install_sop_report(report)'\n",
+        )
+        _, findings = self.adapter_strict()
+        self.assertNotIn("A014", self.ids(findings))
+
+    def test_no_validation_anywhere_is_reported(self) -> None:
+        self.install_surface()
+        self.repo.write("tests/test_other.py", "def test_nothing():\n    assert True\n")
+        _, findings = self.adapter_strict()
+        self.assertIn("A014", self.ids(findings))
+        self.assertEqual(self.severities(findings, "A014"), {"warning"})
+
+    def test_an_adapter_without_an_install_surface_is_skipped(self) -> None:
+        self.repo.write("src/demo_adapter/server.py", "def main():\n    return 0\n")
+        _, findings = self.adapter_strict()
+        self.assertNotIn("A014", self.ids(findings))
 
 if __name__ == "__main__":
     unittest.main()
