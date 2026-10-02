@@ -27,6 +27,7 @@ from check_repo_contract import (  # noqa: E402
 )
 
 CONTRACT = str(DEFAULT_CONTRACT_PATH)
+ADAPTER_CONTRACT = str(ROOT / "contract" / "adapter_contract.json")
 
 
 def run_cli(root: Path, *args: str) -> tuple[int, list[dict]]:
@@ -35,6 +36,24 @@ def run_cli(root: Path, *args: str) -> tuple[int, list[dict]]:
         code = main(["--root", str(root), "--contract", CONTRACT, "--format", "json", *args])
     payload = stdout.getvalue().strip()
     return code, (json.loads(payload) if payload else [])
+
+
+def run_adapter_cli(root: Path, *args: str) -> tuple[int, list[dict]]:
+    """Drive the CLI with the adapter contract instead of the repository one."""
+    stdout, stderr = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+        code = main(
+            ["--root", str(root), "--contract", ADAPTER_CONTRACT, "--format", "json", *args]
+        )
+    payload = stdout.getvalue().strip()
+    return code, (json.loads(payload) if payload else [])
+
+
+def list_rules(contract_path: str, *args: str) -> list[str]:
+    stdout = io.StringIO()
+    with contextlib.redirect_stdout(stdout):
+        main(["--contract", contract_path, "--list-rules", *args])
+    return [line.split()[0] for line in stdout.getvalue().strip().splitlines()]
 
 
 class FixtureRepo:
@@ -88,18 +107,40 @@ class ContractTestCase(unittest.TestCase):
 
 class TestContractFile(ContractTestCase):
     def test_every_rule_has_an_implementation(self) -> None:
-        contract = Contract.load(Path(CONTRACT))
-        self.assertEqual(set(contract.rules), set(RULES))
+        # The checker implements the union of every contract's rules, so each
+        # contract is a subset of RULES rather than equal to it.
+        for contract_path in (CONTRACT, ADAPTER_CONTRACT):
+            with self.subTest(contract=contract_path):
+                contract = Contract.load(Path(contract_path))
+                self.assertLessEqual(set(contract.rules), set(RULES))
 
-    def test_every_rule_ids_are_unique_and_ordered(self) -> None:
-        contract = Contract.load(Path(CONTRACT))
-        ids = [rule["id"] for rule in contract.data["rules"]]
-        self.assertEqual(len(ids), len(set(ids)))
+    def test_every_rule_ids_are_unique(self) -> None:
+        for contract_path in (CONTRACT, ADAPTER_CONTRACT):
+            with self.subTest(contract=contract_path):
+                contract = Contract.load(Path(contract_path))
+                ids = [rule["id"] for rule in contract.data["rules"]]
+                self.assertEqual(len(ids), len(set(ids)))
+
+    def test_contracts_use_disjoint_rule_namespaces(self) -> None:
+        repo_ids = set(Contract.load(Path(CONTRACT)).rules)
+        adapter_ids = set(Contract.load(Path(ADAPTER_CONTRACT)).rules)
+        self.assertFalse(repo_ids & adapter_ids)
+        self.assertTrue(repo_ids)
+        self.assertTrue(adapter_ids)
+
+    def test_every_rule_names_a_source_issue(self) -> None:
+        for contract_path in (CONTRACT, ADAPTER_CONTRACT):
+            with self.subTest(contract=contract_path):
+                contract = Contract.load(Path(contract_path))
+                for rule_id, rule in contract.rules.items():
+                    self.assertTrue(rule.get("source"), rule_id)
 
     def test_severities_are_normalised(self) -> None:
-        contract = Contract.load(Path(CONTRACT))
-        for rule_id, rule in contract.rules.items():
-            self.assertIn(rule["severity"], {"error", "warning", "notice"}, rule_id)
+        for contract_path in (CONTRACT, ADAPTER_CONTRACT):
+            with self.subTest(contract=contract_path):
+                contract = Contract.load(Path(contract_path))
+                for rule_id, rule in contract.rules.items():
+                    self.assertIn(rule["severity"], {"error", "warning", "notice"}, rule_id)
 
     def test_emit_contract_round_trips(self) -> None:
         stdout = io.StringIO()
@@ -233,10 +274,9 @@ class TestProfiles(ContractTestCase):
 
     def test_strict_runs_every_rule(self) -> None:
         self.repo.clean()
-        stdout = io.StringIO()
-        with contextlib.redirect_stdout(stdout):
-            main(["--root", str(self.repo.root), "--contract", CONTRACT, "--profile", "strict", "--list-rules"])
-        self.assertEqual(len(stdout.getvalue().strip().splitlines()), len(RULES))
+        rules = list_rules(CONTRACT, "--profile", "strict")
+        self.assertEqual(len(rules), len(Contract.load(Path(CONTRACT)).rules))
+        self.assertEqual(set(rules), set(Contract.load(Path(CONTRACT)).rules))
 
     def test_clean_fixture_passes_strict_with_zero_findings(self) -> None:
         self.repo.clean()
@@ -546,6 +586,126 @@ class TestR010LlmsTxt(ContractTestCase):
         self.assertIn("R010", self.ids(findings))
 
 
+class TestA001AdapterPythonPackage(ContractTestCase):
+    """A001 scopes the adapter contract; it constrains no code."""
+
+    ADAPTER_PYPROJECT = '\n'.join(
+        [
+            "[project]",
+            'name = "dcc-mcp-demo"',
+            'version = "0.1.0"',
+            'dependencies = ["dcc-mcp-core>=0.20.36,<1.0.0"]',
+        ]
+    )
+
+    def adapter(self, *args: str) -> tuple[int, list[dict]]:
+        return run_adapter_cli(self.repo.root, *args)
+
+    def test_contract_lists_only_the_adapter_rule(self) -> None:
+        self.assertEqual(list_rules(ADAPTER_CONTRACT, "--profile", "baseline"), ["A001"])
+        self.assertEqual(list_rules(ADAPTER_CONTRACT, "--profile", "strict"), ["A001"])
+
+    def test_declares_core_is_applicable(self) -> None:
+        self.repo.write("pyproject.toml", self.ADAPTER_PYPROJECT)
+        code, findings = self.adapter()
+        self.assertEqual(code, 0)
+        self.assertEqual(findings, [])
+
+    def test_optional_dependency_group_counts(self) -> None:
+        self.repo.write(
+            "pyproject.toml",
+            '\n'.join(
+                [
+                    "[project]",
+                    'name = "dcc-mcp-core"',
+                    'dependencies = ["pydantic>=2"]',
+                    "[project.optional-dependencies]",
+                    'dev = ["dcc-mcp-core[semantic]", "pytest>=8"]',
+                ]
+            ),
+        )
+        self.assertEqual(self.adapter()[1], [])
+
+    def test_underscore_and_bracket_spellings_match(self) -> None:
+        for requirement in ("dcc_mcp_core>=0.20.36", "DCC-MCP-CORE[extra]>=0.20.36"):
+            with self.subTest(requirement=requirement):
+                self.repo.root.joinpath("pyproject.toml").unlink(missing_ok=True)
+                self.repo.write(
+                    "pyproject.toml",
+                    '\n'.join(
+                        [
+                            "[project]",
+                            'name = "dcc-mcp-demo"',
+                            f'dependencies = ["{requirement}"]',
+                        ]
+                    ),
+                )
+                self.assertEqual(self.adapter()[1], [])
+
+    def test_missing_manifest_is_out_of_scope(self) -> None:
+        code, findings = self.adapter()
+        self.assertEqual(code, 0)
+        self.assertEqual(self.severities(findings, "A001"), {"notice"})
+        self.assertIn("pyproject.toml", findings[0]["path"])
+        self.assertIn("not in its scope", findings[0]["message"])
+
+    def test_package_without_core_is_out_of_scope(self) -> None:
+        self.repo.write(
+            "pyproject.toml",
+            '\n'.join(
+                [
+                    "[project]",
+                    'name = "dcc-mcp-epic"',
+                    'dependencies = ["psutil>=5.9"]',
+                ]
+            ),
+        )
+        code, findings = self.adapter()
+        self.assertEqual(code, 0)
+        self.assertEqual(self.severities(findings, "A001"), {"notice"})
+        self.assertIn("dcc-mcp-epic", findings[0]["message"])
+
+    def test_empty_dependencies_are_out_of_scope(self) -> None:
+        self.repo.write(
+            "pyproject.toml",
+            '\n'.join(
+                [
+                    "[project]",
+                    'name = "dcc-mcp-runtime"',
+                    "dependencies = []",
+                ]
+            ),
+        )
+        _, findings = self.adapter()
+        self.assertEqual(self.severities(findings, "A001"), {"notice"})
+
+    def test_malformed_manifest_is_reported_not_crashed(self) -> None:
+        self.repo.write("pyproject.toml", "[project\nname = broken\n")
+        code, findings = self.adapter()
+        self.assertNotEqual(code, 2)
+        self.assertEqual(self.severities(findings, "A001"), {"notice"})
+        self.assertIn("could not be parsed", findings[0]["message"])
+
+    def test_a_near_miss_name_is_not_a_marker(self) -> None:
+        self.repo.write(
+            "pyproject.toml",
+            '\n'.join(
+                [
+                    "[project]",
+                    'name = "dcc-mcp-demo"',
+                    'dependencies = ["dcc-mcp-coreutils>=1"]',
+                ]
+            ),
+        )
+        _, findings = self.adapter()
+        self.assertEqual(self.severities(findings, "A001"), {"notice"})
+
+    def test_adapter_rules_are_invisible_to_the_repository_contract(self) -> None:
+        # The two contracts share one checker; neither may leak into the other.
+        self.repo.clean()
+        self.assertNotIn("A001", list_rules(CONTRACT, "--profile", "strict"))
+
+
 class TestAnnotationOutput(ContractTestCase):
     def test_github_format_marks_the_file_and_rule(self) -> None:
         self.repo.clean()
@@ -657,6 +817,44 @@ class TestMatrix(unittest.TestCase):
                 ["--contract", CONTRACT, "--emit-matrix", str(self.write_manifest({"repositories": []}))]
             )
         self.assertEqual(code, 2)
+
+
+class TestSweepManifests(unittest.TestCase):
+    """The checked-in nightly manifests must stay loadable and unambiguous."""
+
+    def entries(self, manifest: Path) -> list[dict]:
+        from check_repo_contract import load_manifest
+
+        return load_manifest(manifest)
+
+    def test_adapter_manifest_covers_every_registered_repository(self) -> None:
+        entries = self.entries(ROOT / "contract" / "adapter_repositories.json")
+        self.assertEqual(len(entries), 50)
+        self.assertEqual(len({entry["repository"] for entry in entries}), len(entries))
+
+    def test_adapter_manifest_starts_every_repository_at_baseline(self) -> None:
+        entries = self.entries(ROOT / "contract" / "adapter_repositories.json")
+        self.assertTrue(all(entry["profile"] == "baseline" for entry in entries))
+        self.assertTrue(all(entry["fail_on"] == "error" for entry in entries))
+
+    def test_adapter_manifest_excludes_repositories_without_a_manifest(self) -> None:
+        # Measured 2026-10-02: these eight ship no pyproject.toml, so the adapter
+        # contract cannot say anything about them. They belong to the repository
+        # contract, and A001 would only ever report them as out of scope.
+        out_of_scope = {
+            "dcc-mcp/dcc-mcp-agent-plugins",
+            "dcc-mcp/dcc-mcp-excel",
+            "dcc-mcp/dcc-mcp-inkscape",
+            "dcc-mcp/dcc-mcp-maya-advancedskeleton",
+            "dcc-mcp/dcc-mcp-maya-mgear",
+            "dcc-mcp/dcc-mcp-office",
+            "dcc-mcp/dcc-mcp-outlook",
+            "dcc-mcp/dcc-mcp-word",
+        }
+        adapter = {
+            entry["repository"] for entry in self.entries(ROOT / "contract" / "adapter_repositories.json")
+        }
+        self.assertEqual(adapter & out_of_scope, set())
 
 
 if __name__ == "__main__":

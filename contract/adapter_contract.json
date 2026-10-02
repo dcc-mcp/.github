@@ -1,0 +1,28 @@
+{
+  "contract_version": "0.1.0",
+  "updated": "2026-10-02",
+  "owner": "dcc-mcp/.github",
+  "source_issue": "PIP-4104",
+  "description": "Machine-readable definition of the dcc-mcp adapter contract: the rules that apply to Python packages built on dcc-mcp-core. Loaded with scripts/check_repo_contract.py --contract contract/adapter_contract.json, so it reuses the gates, profiles, annotations, and nightly sweep of the repository contract without redefining any of them. A criterion is never written down twice.",
+  "profiles": {
+    "baseline": "Rules that every adapter repository is expected to satisfy today. Adapters start here and ratchet up.",
+    "strict": "All rules including the ones still being rolled out by the PIP-4104 sub-issues. Opt in per repository once it is clean."
+  },
+  "rules": [
+    {
+      "id": "A001",
+      "name": "adapter-python-package",
+      "title": "The repository is a Python package that declares dcc-mcp-core",
+      "severity": "notice",
+      "profiles": ["baseline", "strict"],
+      "source": "PIP-4105",
+      "summary": "The adapter contract only applies to Python packages that declare a dependency on one of adapter_marker_dependencies. A registered repository that does not is reported at notice severity so the manifest stays honest; this rule scopes the contract, it constrains no code."
+    }
+  ],
+  "adapter_manifest_file": "pyproject.toml",
+  "adapter_marker_dependencies": ["dcc-mcp-core"],
+  "adapter_dependency_paths": [
+    "project.dependencies",
+    "project.optional-dependencies.*"
+  ]
+}

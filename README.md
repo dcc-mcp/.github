@@ -59,6 +59,47 @@ repository. Set `strict: true` to fail on tolerated mismatches as well.
 half-applied manifest edit fails the Profile contract workflow instead of silently
 leaving the nightly gate on an outdated list.
 
+## Repository and adapter contracts
+
+Two machine-readable contracts, one checker. `scripts/check_repo_contract.py` reads
+whichever contract `--contract` points at, so both gates share the profiles, the
+severity ratchet, the GitHub annotations, and the nightly sweep.
+
+- `contract/repo_contract.json` - configuration and documentation rules for every
+  dcc-mcp repository. Rule ids `R0xx`. See [docs/repo-contract.md](docs/repo-contract.md).
+- `contract/adapter_contract.json` - rules for the Python packages built on
+  `dcc-mcp-core`. Rule ids `A0xx`, disjoint from `R0xx`. See
+  [docs/adapter-contract.md](docs/adapter-contract.md).
+
+The split exists because most dcc-mcp repositories are not Python packages: rules
+about core version floors or `line-length` would be meaningless applied to them,
+and forcing those rules everywhere would mean a growing exemption list or a gate
+nobody can adopt.
+
+- `repo-contract.yml` / `repo-contract-nightly.yml` - reusable check and the daily
+  sweep over `contract/repositories.json`.
+- `adapter-contract-nightly.yml` - the daily sweep over
+  `contract/adapter_repositories.json` (50 Python package repositories).
+
+Adopt the repository contract in a repository with one caller file:
+
+```yaml
+jobs:
+  contract:
+    uses: dcc-mcp/.github/.github/workflows/repo-contract.yml@main
+```
+
+Run either contract locally:
+
+```bash
+python scripts/check_repo_contract.py --root . --profile strict
+python scripts/check_repo_contract.py \
+  --contract contract/adapter_contract.json --root ../dcc-mcp-maya --list-rules
+```
+
+Exit codes: `0` no finding at or above `--fail-on`, `1` at least one, `2` the check
+could not run.
+
 ## Profile contract
 
 `profile/README.md` is the organization profile. `profile-contract.yml` validates it on

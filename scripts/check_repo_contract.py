@@ -17,6 +17,7 @@ Rules
     R008 agents-derived-symlink  CLAUDE.md & friends are symlinks or generated
     R009 tools-no-latest         [tools] pins are concrete, not `latest`
     R010 llms-txt-fresh          llms.txt exists when a generator exists
+    A001 adapter-python-package  a pyproject.toml that declares dcc-mcp-core
 
 Profiles
 --------
@@ -24,6 +25,14 @@ Profiles
     strict    every rule. Rules still being rolled out report as warnings so that a
               repository can adopt the gate before it is clean; promote them with
               ``--error-rule`` or fail the job on warnings with ``--fail-on warning``.
+
+Contracts
+---------
+    ``contract/repo_contract.json``      default; rules for every dcc-mcp repository.
+    ``contract/adapter_contract.json``   rules for Python packages built on
+                                         dcc-mcp-core, in the A0xx namespace. Both
+                                         contracts share this script, so ``--contract``
+                                         is all that separates the two gates.
 
 Exit codes
 ----------
@@ -42,6 +51,11 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
+
+try:  # Python 3.11+ ships a TOML reader; older interpreters fall back below.
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - exercised only on Python < 3.11
+    tomllib = None  # type: ignore[assignment]
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONTRACT_PATH = ROOT / "contract" / "repo_contract.json"
@@ -276,6 +290,75 @@ def _justfile_recipes(path: Path) -> set[str]:
         if head and re.fullmatch(r"[A-Za-z0-9_@\-]+", head):
             recipes.add(head.lstrip("@"))
     return recipes
+
+
+# --------------------------------------------------------------------- pyproject
+
+# A requirement string starts at the package name: `dcc-mcp-core`, `dcc_mcp_core`,
+# `dcc-mcp-core[extra] >= 0.20.36`. Normalising to a bare name lets a marker such as
+# `dcc-mcp-core` match every spelling pip accepts.
+REQUIREMENT_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+def _requirement_name(requirement: str) -> str:
+    """Reduce a PEP 508 requirement to its normalised distribution name."""
+    match = REQUIREMENT_NAME_RE.match(requirement.strip())
+    if not match:
+        return ""
+    return re.sub(r"[-_.]+", "-", match.group(0)).lower()
+
+
+def _dependency_requirements(table: Any) -> list[str]:
+    if isinstance(table, list):
+        return [item for item in table if isinstance(item, str)]
+    # Poetry-style mappings declare `dcc-mcp-core = ">=0.20.36"` instead of a list.
+    if isinstance(table, dict):
+        return [key for key in table if isinstance(key, str)]
+    return []
+
+
+def _walk_dependency_path(data: Any, path: str) -> list[str]:
+    """Collect requirement strings from one dotted path such as
+    ``project.dependencies``.
+
+    A trailing ``.*`` means "every value of this table", which is how
+    ``[project.optional-dependencies]`` groups (dev, docs, semantic, ...) are read
+    without naming any of them in the contract.
+    """
+    node: Any = data
+    for part in path.split("."):
+        if part == "*":
+            if not isinstance(node, dict):
+                return []
+            collected: list[str] = []
+            for value in node.values():
+                collected.extend(_dependency_requirements(value))
+            return collected
+        if not isinstance(node, dict):
+            return []
+        node = node.get(part)
+    return _dependency_requirements(node)
+
+
+def parse_pyproject(path: Path) -> dict[str, Any] | None:
+    """Parse a ``pyproject.toml``, or return ``None`` when it cannot be understood.
+
+    ``None`` is deliberately distinct from ``{}``: an empty mapping means "a valid
+    manifest that declares nothing", while ``None`` means "the manifest is missing,
+    unreadable, or malformed". A malformed manifest is a reportable finding rather
+    than a crash, so this never raises. Interpreters without ``tomllib`` fall into
+    the ``None`` branch instead of pretending the file parsed.
+    """
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    if tomllib is None:  # pragma: no cover - Python < 3.11
+        return None
+    try:
+        return tomllib.loads(text)
+    except (ValueError, TypeError):
+        return None
 
 
 # ------------------------------------------------------------------------- rules
@@ -621,6 +704,78 @@ def check_llms_txt_fresh(root: Path, contract: Contract, ctx: dict) -> list[Find
     ]
 
 
+def check_adapter_python_package(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
+    """A001 - decide whether the adapter contract applies to this repository.
+
+    This rule scopes the contract rather than constraining code: every later A0xx
+    rule may read ``ctx["adapter_applicable"]`` and stay silent on a repository that
+    turns out not to be an adapter package. It reports at notice severity, so it
+    makes the manifest honest - a repository swept nightly that is not actually a
+    Python package built on dcc-mcp-core says so - without failing any build.
+    """
+    rule = contract.rules["A001"]
+    manifest_name = contract.value("adapter_manifest_file", "pyproject.toml")
+    markers = {_requirement_name(name) for name in contract.value("adapter_marker_dependencies", [])} - {""}
+    paths = contract.value("adapter_dependency_paths", ["project.dependencies"])
+
+    manifest = root / manifest_name
+    if not manifest.is_file():
+        ctx["adapter_applicable"] = False
+        return [
+            Finding(
+                rule["id"],
+                rule["name"],
+                rule["severity"],
+                manifest_name,
+                (
+                    f"`{manifest_name}` is missing; the adapter contract applies only to "
+                    "Python packages, so this repository is not in its scope"
+                ),
+            )
+        ]
+
+    data = parse_pyproject(manifest)
+    if data is None:
+        ctx["adapter_applicable"] = False
+        return [
+            Finding(
+                rule["id"],
+                rule["name"],
+                rule["severity"],
+                manifest_name,
+                (
+                    f"`{manifest_name}` could not be parsed; the adapter contract cannot "
+                    "tell whether this repository is in its scope"
+                ),
+            )
+        ]
+
+    ctx["pyproject"] = data
+    declared = {_requirement_name(req) for path in paths for req in _walk_dependency_path(data, path)}
+    ctx["adapter_dependencies"] = sorted(name for name in declared if name)
+    matched = sorted(declared & markers)
+    ctx["adapter_applicable"] = bool(matched)
+    if matched:
+        return []
+
+    project = data.get("project")
+    project_name = project.get("name") if isinstance(project, dict) else None
+    joined = ", ".join(sorted(markers)) or "(none configured)"
+    return [
+        Finding(
+            rule["id"],
+            rule["name"],
+            rule["severity"],
+            manifest_name,
+            (
+                f"`{project_name or manifest_name}` declares no dependency on {joined}; "
+                "the adapter contract does not apply, so this entry should move to "
+                "contract/repositories.json"
+            ),
+        )
+    ]
+
+
 RULES: dict[str, Callable[[Path, Contract, dict], list[Finding]]] = {
     "R001": check_no_root_artifacts,
     "R002": check_justfile_lowercase,
@@ -632,6 +787,7 @@ RULES: dict[str, Callable[[Path, Contract, dict], list[Finding]]] = {
     "R008": check_agents_derived_symlink,
     "R009": check_tools_no_latest,
     "R010": check_llms_txt_fresh,
+    "A001": check_adapter_python_package,
 }
 
 

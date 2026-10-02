@@ -1,0 +1,113 @@
+name: Adapter contract (nightly)
+
+# Runs the adapter contract gate once a day across every repository listed in
+# contract/adapter_repositories.json. Same shape as repo-contract-nightly.yml --
+# one reusable checker, one org-wide sweep, one place to add a repository -- but it
+# loads contract/adapter_contract.json, so the Python adapter rules in the A0xx
+# namespace never leak into repositories that are not Python packages.
+#
+# The sweep is offset from the repository contract sweep so the two do not compete
+# for runners, and so a night that fails shows which contract failed.
+
+on:
+  schedule:
+    - cron: "43 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: adapter-contract-nightly
+  cancel-in-progress: false
+
+jobs:
+  matrix:
+    name: Build matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      repos: ${{ steps.build.outputs.repos }}
+      has_repos: ${{ steps.build.outputs.has_repos }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: dcc-mcp/.github
+          sparse-checkout: |
+            contract
+            scripts
+          path: contract-tooling
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Build the repository matrix
+        id: build
+        working-directory: contract-tooling
+        run: |
+          python scripts/check_repo_contract.py \
+            --emit-matrix contract/adapter_repositories.json > matrix.json
+          python - <<'PY'
+          import json
+          import os
+
+          with open("matrix.json", encoding="utf-8") as handle:
+              repos = json.load(handle)["include"]
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write("repos=" + json.dumps(repos) + "\n")
+              handle.write("has_repos=" + ("true" if repos else "false") + "\n")
+          PY
+
+  check:
+    name: ${{ matrix.key }}
+    needs: matrix
+    if: needs.matrix.outputs.has_repos == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.matrix.outputs.repos) }}
+    steps:
+      - name: Check out ${{ matrix.repository }}
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ matrix.repository }}
+          path: repository
+
+      - name: Check out the contract tooling
+        uses: actions/checkout@v7
+        with:
+          repository: dcc-mcp/.github
+          sparse-checkout: |
+            contract
+            scripts
+          path: contract-tooling
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Check the adapter contract
+        env:
+          PROFILE: ${{ matrix.profile }}
+          RULES: ${{ matrix.rules }}
+          SKIP_RULES: ${{ matrix.skip_rules }}
+          ERROR_RULES: ${{ matrix.error_rules }}
+          ALLOW_EXTRA: ${{ matrix.allow_extra }}
+          FAIL_ON: ${{ matrix.fail_on }}
+        run: |
+          set -- \
+            --root repository \
+            --contract contract-tooling/contract/adapter_contract.json \
+            --profile "${PROFILE:-baseline}" \
+            --fail-on "${FAIL_ON:-error}" \
+            --format github
+
+          [[ -n "$RULES" ]] && set -- "$@" --rule "$RULES"
+          [[ -n "$SKIP_RULES" ]] && set -- "$@" --skip-rule "$SKIP_RULES"
+          [[ -n "$ERROR_RULES" ]] && set -- "$@" --error-rule "$ERROR_RULES"
+          [[ -n "$ALLOW_EXTRA" ]] && set -- "$@" --allow-extra "$ALLOW_EXTRA"
+
+          python contract-tooling/scripts/check_repo_contract.py "$@"
