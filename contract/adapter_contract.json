@@ -1,0 +1,113 @@
+{
+  "contract_version": "1.0.0",
+  "updated": "2026-10-02",
+  "owner": "dcc-mcp/.github",
+  "source_issue": "PIP-4104",
+  "description": "Machine-readable definition of the dcc-mcp Python adapter contract: the interface rules that keep 50 adapter packages from re-inventing the same Core API, and the code-convention rules that keep their pyproject.toml files comparable. Consumed by scripts/check_repo_contract.py --contract and by the nightly sweep in .github/workflows/adapter-contract-nightly.yml. Rule ids use the A0xx namespace so that a repository can run this contract alongside contract/repo_contract.json (R0xx) without ambiguity.",
+  "profiles": {
+    "baseline": "Rules every Python adapter package satisfies today. Two interface rules that are mechanically decidable and safe to enforce immediately (no Core floor bump needed).",
+    "strict": "Adds the convergence rules. Everything here is a warning on purpose: this profile is the stock-take list for PIP-4101, not a same-day blocker. Promote a rule with --error-rule once its owning repository is clean."
+  },
+  "rules": [
+    {
+      "id": "A001",
+      "name": "no-deprecated-install-sop-alias",
+      "title": "Adapter code never references Core's deprecated Install SOP alias",
+      "severity": "error",
+      "profiles": ["baseline", "strict"],
+      "source": "PIP-4104",
+      "summary": "Core 0.20.40 renamed INSTALL_SOP_SCHEMA_VERSION to INSTALL_SOP_SCHEMA_REVISION and serves the old name through a __getattr__ that raises DeprecationWarning. The old name is the schema *artifact* revision, not the report field: copying it into a report's schema_version is the defect PIP-4047/4048/4049/4050/4051 fixed one repository at a time. Removing the reference needs no Core floor bump, because every existing reference already sits behind a try/except ImportError fallback."
+    },
+    {
+      "id": "A002",
+      "name": "no-hand-rolled-report-schema-version",
+      "title": "The report schema version is read from Core, not re-declared locally",
+      "severity": "warning",
+      "profiles": ["strict"],
+      "source": "PIP-4104",
+      "summary": "A module-level `*_REPORT_SCHEMA_VERSION = <int>` is a hand-written copy of what install_sop_report_schema_version() now returns by reading the schema `const`. Every copy is a second source of truth that drifts the day Core republishes the artifact. Warns only: converging these needs the Core floor raised to >=0.20.40 first, which PIP-4101 owns."
+    },
+    {
+      "id": "A003",
+      "name": "core-floor-declared",
+      "title": "A declared dcc-mcp-core dependency pins an explicit lower bound",
+      "severity": "error",
+      "profiles": ["baseline", "strict"],
+      "source": "PIP-4104",
+      "summary": "Reads [project.dependencies] and [tool.poetry.dependencies] only. An unversioned `dcc-mcp-core` resolves to whatever happens to be installed, which is how the 54-patch floor spread (>=0.18.2 .. >=0.20.36) appeared. A repository that declares no Core dependency at all is out of scope and is skipped rather than failed."
+    },
+    {
+      "id": "A004",
+      "name": "ruff-line-length",
+      "title": "[tool.ruff] line-length is the organisation baseline",
+      "severity": "warning",
+      "profiles": ["strict"],
+      "source": "PIP-4104",
+      "summary": "Three values (100 / 110 / 120) coexist across the fleet. 120 is the baseline because core, maya, blender, houdini, nuke, zbrush, substance3d-* and touchdesigner already use it, so converging on 120 is the smallest diff. A repository with no [tool.ruff] line-length at all is reported as undeclared rather than as wrong, because the two need different fixes."
+    },
+    {
+      "id": "A005",
+      "name": "requires-python-declared",
+      "title": "project.requires-python is declared",
+      "severity": "warning",
+      "profiles": ["strict"],
+      "source": "PIP-4104",
+      "summary": "An undeclared requires-python lets pip install the package on any interpreter the wheel happens to accept. This rule deliberately does NOT pick a value: host-side constraints are legitimate (zbrush, wwise and obs need >=3.10), and the organisation Python 3.7 red line (PIP-2519) runs to 2026-12-31. Visibility only."
+    },
+    {
+      "id": "A006",
+      "name": "pre-commit-config-exists",
+      "title": ".pre-commit-config.yaml exists at the repository root",
+      "severity": "warning",
+      "profiles": ["strict"],
+      "source": "PIP-4104",
+      "summary": "Without it, the ruff settings in pyproject.toml only run in CI, so a contributor learns about a lint failure after pushing. 6 of 50 packages have one today."
+    }
+  ],
+  "deprecated_symbols": {
+    "INSTALL_SOP_SCHEMA_VERSION": "Core 0.20.40 renamed it to INSTALL_SOP_SCHEMA_REVISION. The old name is the schema *artifact* revision, not the report's schema_version field: where the value genuinely means the artifact revision, rename it; where it feeds a report's schema_version or is a vestigial import, delete the reference and read the field from install_sop_report_schema_version() instead."
+  },
+  "provider_modules": ["dcc_mcp_core"],
+  "provider_package_dirs": [
+    "python/dcc_mcp_core/**",
+    "src/dcc_mcp_core/**",
+    "dcc_mcp_core/**",
+    "pkg/**/dcc_mcp_core/**"
+  ],
+  "hand_rolled_schema_version_globs": ["*_REPORT_SCHEMA_VERSION", "*_SOP_SCHEMA_VERSION"],
+  "scan_suffixes": [".py", ".pyi"],
+  "scan_exclude_dirs": [
+    ".git",
+    ".hg",
+    ".svn",
+    ".venv",
+    "venv",
+    ".tox",
+    ".nox",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "node_modules",
+    "build",
+    "dist",
+    "target",
+    "third_party",
+    "vendor",
+    "_vendor",
+    "__pycache__",
+    "tests",
+    "test"
+  ],
+  "scan_exclude_globs": ["**/conftest.py"],
+  "scan_max_files": 20000,
+  "scan_max_file_bytes": 2000000,
+  "pyproject_file": "pyproject.toml",
+  "core_distributions": ["dcc-mcp-core", "dcc_mcp_core"],
+  "core_dependency_tables": ["project.dependencies", "tool.poetry.dependencies"],
+  "core_floor_operators": [">=", ">", "==", "~=", "~", "^"],
+  "ruff_line_length_target": 120,
+  "ruff_line_length_table": "tool.ruff",
+  "requires_python_table": "project",
+  "requires_python_key": "requires-python",
+  "pre_commit_configs": [".pre-commit-config.yaml", ".pre-commit-config.yml"]
+}
