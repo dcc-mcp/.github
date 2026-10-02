@@ -10,6 +10,11 @@ The rules and their severities are defined once, in
 `vx-repo-contract` skill both read that file, so a criterion is never written
 down twice.
 
+This contract covers every repository in the org. Repositories that publish a
+`dcc-mcp-*` Python package are additionally checked against
+[`contract/adapter_contract.json`](../contract/adapter_contract.json), described
+in [adapter-contract.md](adapter-contract.md).
+
 ## Rules
 
 | Id | Rule | `baseline` | `strict` | Decided by |
