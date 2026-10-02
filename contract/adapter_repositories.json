@@ -1,0 +1,159 @@
+{
+  "$comment": "The 50 dcc-mcp repositories that ship a Python package (pyproject.toml or setup.py at the root), swept nightly by .github/workflows/adapter-contract-nightly.yml against contract/adapter_contract.json. Measured 2026-10-02 over all 94 non-archived repositories in the organisation. A repository belongs here once it ships a Python package; it does not have to be clean first, because the strict profile reports convergence gaps as warnings and only the two baseline rules fail the run.",
+  "defaults": {
+    "profile": "strict",
+    "fail_on": "error"
+  },
+  "repositories": [
+    {
+      "repository": "dcc-mcp/dcc-mcp-3dsmax"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-aftereffects"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-autocad"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-blender"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-cache-inspector"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-capcut"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-cinema4d"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-comfyui"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-core"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-epic"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-fpt"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-freecad"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-gaea"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-gimp"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-godot"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-houdini"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-illustrator"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-katana"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-kdenlive"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-krita"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-liquigen"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-mari"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-marmoset"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-marvelous-designer"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-material-maker"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-maya"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-maya-procedural-architecture"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-mobu"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-nuke"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-obs"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-openscad"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-openscreen"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-openusd"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-photoshop"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-powerpoint"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-premiere"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-renderdoc"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-runtime"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-shogun"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-sketchup"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-speedtree"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-substance3d-designer"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-substance3d-painter"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-tiled"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-touchdesigner"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-tracy"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-unity"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-unreal"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-wwise"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-zbrush"
+    }
+  ]
+}
