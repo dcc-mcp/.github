@@ -14,15 +14,83 @@
       "name": "adapter-python-package",
       "title": "A registered adapter is a Python package that depends on dcc-mcp-core",
       "severity": "warning",
-      "profiles": ["baseline", "strict"],
+      "profiles": [
+        "baseline",
+        "strict"
+      ],
       "source": "PIP-4105",
       "summary": "A repository swept by the adapter contract must ship a pyproject.toml that declares a dcc-mcp-core dependency, or be the core distribution itself. This is the applicability gate for every other A0xx rule: it carries no business constraint of its own, it proves the --contract dispatch reaches the registered repository."
+    },
+    {
+      "id": "A010",
+      "name": "no-deprecated-schema-alias",
+      "title": "Adapter code must not reference the deprecated INSTALL_SOP_SCHEMA_VERSION alias",
+      "severity": "error",
+      "profiles": [
+        "baseline",
+        "strict"
+      ],
+      "source": "PIP-4106",
+      "summary": "dcc-mcp-core 0.20.40 renamed the Install SOP artifact revision to INSTALL_SOP_SCHEMA_REVISION and kept INSTALL_SOP_SCHEMA_VERSION as a deprecated alias that emits a DeprecationWarning through __getattr__. Any identifier occurrence in adapter source or tests is a finding, except in a file that itself defines or serves the alias. Purely static, so it can be an error immediately: it does not depend on which core version resolves at runtime.",
+      "remediation": "Use INSTALL_SOP_SCHEMA_REVISION for the artifact revision, or install_sop_report_schema_version() for the report document's schema_version field. Do not rename blindly: PIP-3990 shipped because six adapters published the artifact revision as the report field, and renaming without fixing the value keeps the defect alive and hides it better."
+    },
+    {
+      "id": "A011",
+      "name": "report-schema-version-source",
+      "title": "The report schema_version field comes from the schema const, never from a literal or the artifact revision",
+      "severity": "warn",
+      "profiles": [
+        "strict"
+      ],
+      "source": "PIP-4106",
+      "summary": "In an Install SOP report envelope, schema_version must come from install_sop_report_schema_version() or from the schema's own properties.schema_version.const. Two failure modes are reported: binding the field to the artifact revision (the defect that shipped in PIP-3990), and hardcoding a literal integer. A hardcoded constant that a test pins to the schema const is accepted as guarded, because the drift this rule exists to catch is then caught by that test. Dicts without an Install SOP marker key are ignored, so an unrelated schema such as a deck IR or patch format is not reported. Known trade-off: the guard is matched by name across files, so a second unrelated constant that happens to share a guarded name is also excused. That is deliberate - the rule is a warning, and a gate people learn to ignore is worse than one that under-reports a defended adapter.",
+      "remediation": "Call install_sop_report_schema_version() from dcc_mcp_core.deployment. That function is only present from core 0.20.40, so an adapter whose declared core floor is lower needs either a guarded import or a floor bump first."
+    },
+    {
+      "id": "A012",
+      "name": "core-floor-policy",
+      "title": "The declared dcc-mcp-core floor is at or above the organisation baseline",
+      "severity": "warn",
+      "profiles": [
+        "strict"
+      ],
+      "source": "PIP-4106",
+      "summary": "The declared lower bound on the dcc-mcp-core dependency must be >= core_floor_baseline. The 2026-10-02 measurement spans 54 patch versions, from >=0.18.2 (dcc-mcp-powerpoint) to >=0.20.36 (autocad, cinema4d, freecad, openscad, sketchup). The baseline is the highest floor any adapter already declares, so the ratchet target is reachable today; core_floor_target records the floor needed for the new Install SOP API and is reported as an advisory when the baseline is met but the target is not. A dependency with no lower bound at all is reported too, because an unbounded floor silently accepts any core.",
+      "remediation": "Raise the floor to at least core_floor_target (0.20.40) so the shared Install SOP API is unconditionally available, and verify the adapter against that core before merging."
+    },
+    {
+      "id": "A013",
+      "name": "doctor-module-present",
+      "title": "An adapter that provides install capability ships a doctor self-check module",
+      "severity": "warn",
+      "profiles": [
+        "strict"
+      ],
+      "source": "PIP-4106",
+      "summary": "An adapter whose source references the Install SOP contract or ships an install module should expose a doctor self-check. Only 8 of 50 adapters do (openusd, material-maker, wwise, freecad, sketchup, openscad, liquigen, capcut), so the rule is a warning and the gap is closed by ratchet. Adapters with no install surface at all are skipped rather than reported.",
+      "remediation": "Add a doctor module that assembles the Install SOP report and validates it with validate_install_sop_report()."
+    },
+    {
+      "id": "A014",
+      "name": "report-validates-against-schema",
+      "title": "A real report is validated with validate_install_sop_report() somewhere in tests or CI",
+      "severity": "warn",
+      "profiles": [
+        "strict"
+      ],
+      "source": "PIP-4106",
+      "summary": "An adapter that assembles an Install SOP report must validate a real report against the schema at least once, in a test or in a CI workflow. Without this the schema is only claimed, and the PIP-3990 class of defect is published silently: every adapter in that incident had a schema and none of them checked a report against it.",
+      "remediation": "Call validate_install_sop_report() on the report a doctor run actually produces, not on a hand-written fixture."
     }
   ],
   "adapter_python_package": {
     "manifest": "pyproject.toml",
-    "core_distribution_names": ["dcc-mcp-core"],
-    "self_distributions": ["dcc-mcp-core"],
+    "core_distribution_names": [
+      "dcc-mcp-core"
+    ],
+    "self_distributions": [
+      "dcc-mcp-core"
+    ],
     "dependency_key_patterns": [
       "^project\\.dependencies$",
       "^project\\.optional-dependencies\\.",
@@ -36,5 +104,92 @@
       "^project\\.name$",
       "^tool\\.poetry\\.name$"
     ]
-  }
+  },
+  "scan_source_globs": [
+    "src/**/*.py",
+    "python/**/*.py",
+    "tests/**/*.py",
+    "test/**/*.py",
+    "tools/**/*.py",
+    "scripts/**/*.py"
+  ],
+  "scan_exclude_dirs": [
+    ".git",
+    ".hg",
+    ".svn",
+    ".eggs",
+    ".mypy_cache",
+    ".nox",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".tox",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "target",
+    "third_party",
+    "vendor",
+    "venv"
+  ],
+  "deprecated_schema_alias": "INSTALL_SOP_SCHEMA_VERSION",
+  "a010_exempt_path_globs": [
+    "python/dcc_mcp_core/**",
+    "tests/test_install_sop_contract.py"
+  ],
+  "install_sop_symbols": [
+    "INSTALL_EXIT_OK",
+    "INSTALL_EXIT_PREFLIGHT",
+    "INSTALL_EXIT_VERIFY",
+    "INSTALL_SOP_SCHEMA_REVISION",
+    "INSTALL_SOP_SCHEMA_VERSION",
+    "install_sop_report_schema_version",
+    "load_install_sop_schema",
+    "validate_install_sop_report"
+  ],
+  "install_source_globs": [
+    "src/**/install*.py",
+    "python/**/install*.py"
+  ],
+  "a011_schema_version_field": "schema_version",
+  "a011_schema_version_sources": [
+    "install_sop_report_schema_version"
+  ],
+  "a011_schema_const_reads": [
+    "install_sop_report_schema_version",
+    "load_install_sop_schema"
+  ],
+  "a011_artifact_revision_symbols": [
+    "INSTALL_SOP_SCHEMA_VERSION",
+    "INSTALL_SOP_SCHEMA_REVISION"
+  ],
+  "a011_report_marker_keys": [
+    "steps",
+    "next_steps",
+    "receipt_path"
+  ],
+  "a011_guard_globs": [
+    "tests/**/*.py",
+    "test/**/*.py"
+  ],
+  "a011_max_resolve_depth": 3,
+  "core_floor_baseline": "0.20.36",
+  "core_floor_target": "0.20.40",
+  "a013_doctor_module_globs": [
+    "src/**/doctor.py",
+    "src/**/doctor/__init__.py",
+    "python/**/doctor.py",
+    "python/**/doctor/__init__.py"
+  ],
+  "a014_validator_symbols": [
+    "validate_install_sop_report"
+  ],
+  "a014_scan_globs": [
+    "tests/**/*.py",
+    "test/**/*.py",
+    ".github/workflows/*.yml",
+    ".github/workflows/*.yaml"
+  ]
 }
