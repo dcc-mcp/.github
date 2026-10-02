@@ -5,6 +5,8 @@ on:
     paths:
       - "profile/**"
       - "scripts/check_profile_contract.py"
+      - "scripts/check_repo_contract.py"
+      - "contract/**"
       - "tests/**"
       - "requirements-profile-check.txt"
       - ".github/workflows/profile-contract.yml"
@@ -15,6 +17,8 @@ on:
     paths:
       - "profile/**"
       - "scripts/check_profile_contract.py"
+      - "scripts/check_repo_contract.py"
+      - "contract/**"
       - "tests/**"
       - "requirements-profile-check.txt"
       - ".github/workflows/profile-contract.yml"

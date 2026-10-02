@@ -1,5 +1,5 @@
 {
-  "$comment": "Python adapter packages swept nightly by .github/workflows/adapter-contract-nightly.yml against contract/adapter_contract.json. A repository belongs here when it ships a pyproject.toml; the A001 warning names the ones that turn out not to be adapter packages. The nightly needs no workflow file in the repository.",
+  "$comment": "Python adapter packages swept nightly by .github/workflows/adapter-contract-nightly.yml against contract/adapter_contract.json. A repository belongs here when it ships a pyproject.toml; the A001 warning names the ones that turn out not to be adapter packages. `excluded` records the dcc-mcp-* repositories that ship no pyproject.toml at all, so the decision to leave them out is written down instead of silently lapsing. The nightly needs no workflow file in the repository.",
   "defaults": {
     "profile": "baseline",
     "fail_on": "error"
@@ -154,6 +154,40 @@
     },
     {
       "repository": "dcc-mcp/dcc-mcp-autocad"
+    }
+  ],
+  "excluded": [
+    {
+      "repository": "dcc-mcp/dcc-mcp-agent-plugins",
+      "reason": "ships no pyproject.toml"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-excel",
+      "reason": "ships no pyproject.toml"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-inkscape",
+      "reason": "ships no pyproject.toml"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-maya-advancedskeleton",
+      "reason": "ships no pyproject.toml"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-maya-mgear",
+      "reason": "ships no pyproject.toml"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-office",
+      "reason": "ships no pyproject.toml"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-outlook",
+      "reason": "ships no pyproject.toml"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-word",
+      "reason": "ships no pyproject.toml"
     }
   ]
 }

@@ -775,6 +775,7 @@ def check_adapter_python_package(root: Path, contract: Contract, ctx: dict) -> l
     manifest_name = str(config.get("manifest", "pyproject.toml"))
     manifest = root / manifest_name
     if not manifest.is_file():
+        ctx["adapter_applicable"] = False
         return [
             Finding(
                 rule["id"],
@@ -804,7 +805,9 @@ def check_adapter_python_package(root: Path, contract: Contract, ctx: dict) -> l
         _normalise_distribution(name) for name in config.get("self_distributions", [])
     }
     declared = _declared_distributions(values, config.get("dependency_key_patterns", []))
-    if declared & core_names:
+    ctx["adapter_dependencies"] = sorted(declared)
+    ctx["adapter_applicable"] = bool(declared & core_names)
+    if ctx["adapter_applicable"]:
         return []
 
     own_names = {
@@ -812,6 +815,8 @@ def check_adapter_python_package(root: Path, contract: Contract, ctx: dict) -> l
         for value in _matched_values(values, config.get("distribution_name_key_patterns", []))
     }
     if own_names & self_names:
+        # The distribution the adapters depend on is in scope without depending
+        # on itself, but it is not what the later rules mean by "an adapter".
         return []
 
     expected = "`, `".join(sorted(core_names)) or "dcc-mcp-core"
@@ -891,8 +896,11 @@ def run_checks(
         "justfile": _find_justfile(files),
         "allow_extra": list(allow_extra),
         # Populated by A001 when the repository ships a pyproject.toml, so later
-        # adapter rules can read the parsed manifest instead of parsing it again.
+        # adapter rules can read the parsed manifest instead of parsing it again,
+        # and can stay silent on a repository that turns out not to be an adapter.
         "pyproject": {},
+        "adapter_applicable": False,
+        "adapter_dependencies": [],
     }
     vx_toml = root / "vx.toml"
     ctx["vx"] = (

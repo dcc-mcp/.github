@@ -790,6 +790,17 @@ class TestMatrix(unittest.TestCase):
             )
         self.assertEqual(code, 2)
 
+    def test_excluded_repositories_are_kept_out_of_the_sweep(self) -> None:
+        # The eight dcc-mcp-* repositories that ship no pyproject.toml are listed
+        # in the manifest under `excluded` with a reason, so the decision not to
+        # sweep them is written down instead of silently lapsing.
+        manifest = json.loads((ROOT / "contract" / "adapter_repositories.json").read_text(encoding="utf-8"))
+        registered = {item["repository"] for item in manifest["repositories"]}
+        excluded = {item["repository"] for item in manifest["excluded"]}
+        self.assertEqual(registered & excluded, set())
+        for item in manifest["excluded"]:
+            self.assertTrue(item.get("reason"), item["repository"])
+
     def test_rejects_an_empty_manifest(self) -> None:
         stderr = io.StringIO()
         with contextlib.redirect_stderr(stderr):
