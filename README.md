@@ -59,6 +59,32 @@ repository. Set `strict: true` to fail on tolerated mismatches as well.
 half-applied manifest edit fails the Profile contract workflow instead of silently
 leaving the nightly gate on an outdated list.
 
+## Adapter contract
+
+The 50 Python adapter packages all depend on `dcc-mcp-core` and have been drifting
+apart in how they use the shared API. `contract/adapter_contract.json` holds the rules
+that only make sense for those packages, so non-Python repositories never have to
+satisfy them.
+
+- `adapter-contract-nightly.yml` - runs the check daily over
+  `contract/adapter_repositories.json` (50 Python adapter packages). Adopting the
+  contract needs no workflow file in the adapter repository.
+- `contract/adapter_contract.json` - the rules, under the `A0xx` namespace.
+- `scripts/check_repo_contract.py --contract contract/adapter_contract.json` - the same
+  checker as the repository contract, pointed at a different rule file.
+
+A001 (`adapter-python-package`) warns when a registered repository is not actually an
+adapter package. It is the applicability gate for the rules that follow; the nightly
+warnings are the backlog. Full write-up in [`docs/adapter-contract.md`](docs/adapter-contract.md).
+
+### Running it locally
+
+```bash
+python scripts/check_repo_contract.py \
+  --contract contract/adapter_contract.json \
+  --root /path/to/dcc-mcp-maya --profile baseline
+```
+
 ## Profile contract
 
 `profile/README.md` is the organization profile. `profile-contract.yml` validates it on

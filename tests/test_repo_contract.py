@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import itertools
 import json
 import os
 import sys
@@ -27,14 +28,20 @@ from check_repo_contract import (  # noqa: E402
 )
 
 CONTRACT = str(DEFAULT_CONTRACT_PATH)
+ADAPTER_CONTRACT = str(ROOT / "contract" / "adapter_contract.json")
+ALL_CONTRACTS = [CONTRACT, ADAPTER_CONTRACT]
+
+
+def run_cli_with(contract: str, root: Path, *args: str) -> tuple[int, list[dict]]:
+    stdout, stderr = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+        code = main(["--root", str(root), "--contract", contract, "--format", "json", *args])
+    payload = stdout.getvalue().strip()
+    return code, (json.loads(payload) if payload else [])
 
 
 def run_cli(root: Path, *args: str) -> tuple[int, list[dict]]:
-    stdout, stderr = io.StringIO(), io.StringIO()
-    with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-        code = main(["--root", str(root), "--contract", CONTRACT, "--format", "json", *args])
-    payload = stdout.getvalue().strip()
-    return code, (json.loads(payload) if payload else [])
+    return run_cli_with(CONTRACT, root, *args)
 
 
 class FixtureRepo:
@@ -88,24 +95,57 @@ class ContractTestCase(unittest.TestCase):
 
 class TestContractFile(ContractTestCase):
     def test_every_rule_has_an_implementation(self) -> None:
-        contract = Contract.load(Path(CONTRACT))
-        self.assertEqual(set(contract.rules), set(RULES))
+        # RULES spans both contracts: --contract picks a rule set, it does not
+        # have its own checker. So every declared rule must be implemented, and
+        # every handler must be claimed by some contract.
+        implemented: set[str] = set()
+        for path in ALL_CONTRACTS:
+            contract = Contract.load(Path(path))
+            self.assertLessEqual(set(contract.rules), set(RULES), path)
+            implemented |= set(contract.rules)
+        self.assertEqual(implemented, set(RULES))
+
+    def test_rule_namespaces_do_not_collide(self) -> None:
+        # R0xx is the repository contract, A0xx the adapter contract. A shared
+        # prefix would let --contract silently select the wrong rule.
+        seen: dict[str, set[str]] = {}
+        for path in ALL_CONTRACTS:
+            contract = Contract.load(Path(path))
+            seen[path] = {rule_id[0] for rule_id in contract.rules}
+        for left, right in itertools.combinations(ALL_CONTRACTS, 2):
+            self.assertEqual(seen[left] & seen[right], set(), f"{left} vs {right}")
 
     def test_every_rule_ids_are_unique_and_ordered(self) -> None:
-        contract = Contract.load(Path(CONTRACT))
-        ids = [rule["id"] for rule in contract.data["rules"]]
-        self.assertEqual(len(ids), len(set(ids)))
+        for path in ALL_CONTRACTS:
+            contract = Contract.load(Path(path))
+            ids = [rule["id"] for rule in contract.data["rules"]]
+            self.assertEqual(len(ids), len(set(ids)), path)
 
     def test_severities_are_normalised(self) -> None:
-        contract = Contract.load(Path(CONTRACT))
-        for rule_id, rule in contract.rules.items():
-            self.assertIn(rule["severity"], {"error", "warning", "notice"}, rule_id)
+        for path in ALL_CONTRACTS:
+            contract = Contract.load(Path(path))
+            for rule_id, rule in contract.rules.items():
+                self.assertIn(rule["severity"], {"error", "warning", "notice"}, f"{rule_id} in {path}")
 
     def test_emit_contract_round_trips(self) -> None:
-        stdout = io.StringIO()
-        with contextlib.redirect_stdout(stdout):
-            self.assertEqual(main(["--contract", CONTRACT, "--emit-contract"]), 0)
-        self.assertEqual(json.loads(stdout.getvalue()), json.loads(Path(CONTRACT).read_text(encoding="utf-8")))
+        for path in ALL_CONTRACTS:
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(main(["--contract", path, "--emit-contract"]), 0)
+            self.assertEqual(
+                json.loads(stdout.getvalue()),
+                json.loads(Path(path).read_text(encoding="utf-8")),
+                path,
+            )
+
+    def test_a_rule_id_is_unknown_to_the_other_contract(self) -> None:
+        self.repo.clean()
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            code = main(
+                ["--root", str(self.repo.root), "--contract", ADAPTER_CONTRACT, "--rule", "R001"]
+            )
+        self.assertEqual(code, 2)
 
     def test_comma_separated_rule_ids_are_accepted(self) -> None:
         self.repo.clean()
@@ -236,7 +276,9 @@ class TestProfiles(ContractTestCase):
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):
             main(["--root", str(self.repo.root), "--contract", CONTRACT, "--profile", "strict", "--list-rules"])
-        self.assertEqual(len(stdout.getvalue().strip().splitlines()), len(RULES))
+        contract = Contract.load(Path(CONTRACT))
+        expected = sum(1 for rule in contract.data["rules"] if "strict" in rule["profiles"])
+        self.assertEqual(len(stdout.getvalue().strip().splitlines()), expected)
 
     def test_clean_fixture_passes_strict_with_zero_findings(self) -> None:
         self.repo.clean()
@@ -546,6 +588,104 @@ class TestR010LlmsTxt(ContractTestCase):
         self.assertIn("R010", self.ids(findings))
 
 
+class TestA001AdapterPythonPackage(ContractTestCase):
+    """A001 is the applicability gate for contract/adapter_contract.json."""
+
+    def adapter(self, *args: str) -> tuple[int, list[dict]]:
+        return run_cli_with(ADAPTER_CONTRACT, self.repo.root, *args)
+
+    def pyproject(self, body: str) -> None:
+        self.repo.write("pyproject.toml", body)
+
+    def test_a001_is_the_only_baseline_rule(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            self.assertEqual(
+                main(["--contract", ADAPTER_CONTRACT, "--profile", "baseline", "--list-rules"]),
+                0,
+            )
+        self.assertEqual(
+            [line.split()[0] for line in stdout.getvalue().strip().splitlines()], ["A001"]
+        )
+
+    def test_missing_pyproject_toml_warns(self) -> None:
+        self.repo.clean()
+        code, findings = self.adapter()
+        self.assertEqual(code, 0)
+        self.assertEqual(self.severities(findings, "A001"), {"warning"})
+        self.assertEqual(findings[0]["path"], "pyproject.toml")
+
+    def test_a_core_dependency_makes_the_repository_an_adapter(self) -> None:
+        self.repo.clean()
+        self.pyproject('[project]\nname = "dcc-mcp-maya"\ndependencies = ["dcc-mcp-core>=0.19.4"]\n')
+        code, findings = self.adapter()
+        self.assertEqual(code, 0)
+        self.assertEqual(findings, [])
+
+    def test_without_a_core_dependency_the_contract_does_not_apply(self) -> None:
+        self.repo.clean()
+        self.pyproject('[project]\nname = "dcc-mcp-runtime"\ndependencies = []\n')
+        _, findings = self.adapter()
+        self.assertEqual(self.severities(findings, "A001"), {"warning"})
+        self.assertIn("adapter_repositories.json", findings[0]["message"])
+
+    def test_the_core_distribution_is_exempt(self) -> None:
+        self.repo.clean()
+        self.pyproject(
+            '[project]\nname = "dcc-mcp-core"\nversion = "0.20.40"\n'
+            'dependencies = ["pydantic>=2"]\n'
+        )
+        self.assertEqual(self.adapter()[1], [])
+
+    def test_multi_line_array_with_a_pep_508_extra_is_read(self) -> None:
+        self.repo.clean()
+        self.pyproject(
+            '[project]\nname = "dcc-mcp-maya"\ndependencies = [\n'
+            '    "dcc-mcp-core[server]>=0.20.40",\n    "mcp>=1.0",\n]\n'
+        )
+        self.assertEqual(self.adapter()[1], [])
+
+    def test_dependency_groups_are_searched_too(self) -> None:
+        self.repo.clean()
+        self.pyproject(
+            '[project]\nname = "dcc-mcp-epic"\ndependencies = ["psutil>=5.9"]\n\n'
+            '[dependency-groups]\ndev = ["dcc-mcp-core", "pytest>=8"]\n'
+        )
+        self.assertEqual(self.adapter()[1], [])
+
+    def test_optional_dependencies_count(self) -> None:
+        self.repo.clean()
+        self.pyproject(
+            '[project.optional-dependencies]\nmcp = ["dcc-mcp-core>=0.20.40"]\n'
+        )
+        self.assertEqual(self.adapter()[1], [])
+
+    def test_environment_markers_are_stripped(self) -> None:
+        self.repo.clean()
+        self.pyproject(
+            '[project.optional-dependencies]\n'
+            'mcp = ["dcc-mcp-core>=0.20.40; python_version >= \'3.10\'"]\n'
+        )
+        self.assertEqual(self.adapter()[1], [])
+
+    def test_distribution_names_are_normalised(self) -> None:
+        self.repo.clean()
+        self.pyproject('[project]\nname = "dcc-mcp-maya"\ndependencies = ["dcc_mcp_core>=0.19.4"]\n')
+        self.assertEqual(self.adapter()[1], [])
+
+    def test_a_malformed_manifest_is_a_finding_not_a_crash(self) -> None:
+        self.repo.clean()
+        self.pyproject("[project\nname = broken\n")
+        _, findings = self.adapter()
+        self.assertEqual(self.severities(findings, "A001"), {"warning"})
+
+    def test_a001_can_be_promoted_to_an_error(self) -> None:
+        self.repo.clean()
+        code, findings = self.adapter("--error-rule", "A001")
+        self.assertEqual(code, 1)
+        self.assertEqual(self.severities(findings, "A001"), {"error"})
+
+
 class TestAnnotationOutput(ContractTestCase):
     def test_github_format_marks_the_file_and_rule(self) -> None:
         self.repo.clean()
@@ -649,6 +789,17 @@ class TestMatrix(unittest.TestCase):
                 ]
             )
         self.assertEqual(code, 2)
+
+    def test_excluded_repositories_are_kept_out_of_the_sweep(self) -> None:
+        # The eight dcc-mcp-* repositories that ship no pyproject.toml are listed
+        # in the manifest under `excluded` with a reason, so the decision not to
+        # sweep them is written down instead of silently lapsing.
+        manifest = json.loads((ROOT / "contract" / "adapter_repositories.json").read_text(encoding="utf-8"))
+        registered = {item["repository"] for item in manifest["repositories"]}
+        excluded = {item["repository"] for item in manifest["excluded"]}
+        self.assertEqual(registered & excluded, set())
+        for item in manifest["excluded"]:
+            self.assertTrue(item.get("reason"), item["repository"])
 
     def test_rejects_an_empty_manifest(self) -> None:
         stderr = io.StringIO()

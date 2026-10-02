@@ -5,6 +5,10 @@ The pass/fail criteria live in ``contract/repo_contract.json``. This script only
 implements the mechanics; both this CI gate and the ``vx-repo-contract`` skill read
 that same file, so a rule is never defined twice.
 
+``--contract`` selects a different rule set. ``contract/adapter_contract.json``
+holds the rules that only apply to the Python adapter packages, and its ids use
+the ``A0xx`` namespace so the two rule sets can never collide.
+
 Rules
 -----
     R001 no-root-artifacts       no build/test artifacts at the repository root
@@ -18,12 +22,17 @@ Rules
     R009 tools-no-latest         [tools] pins are concrete, not `latest`
     R010 llms-txt-fresh          llms.txt exists when a generator exists
 
+    A001 adapter-python-package  a registered adapter declares a dcc-mcp-core
+                                 dependency (contract/adapter_contract.json)
+
 Profiles
 --------
-    baseline  R001-R005, the rules every repository satisfies today.
-    strict    every rule. Rules still being rolled out report as warnings so that a
-              repository can adopt the gate before it is clean; promote them with
-              ``--error-rule`` or fail the job on warnings with ``--fail-on warning``.
+    baseline  R001-R005, the rules every repository satisfies today (A001 for the
+              adapter contract).
+    strict    every rule of the selected contract. Rules still being rolled out
+              report as warnings so that a repository can adopt the gate before it
+              is clean; promote them with ``--error-rule`` or fail the job on
+              warnings with ``--fail-on warning``.
 
 Exit codes
 ----------
@@ -276,6 +285,136 @@ def _justfile_recipes(path: Path) -> set[str]:
         if head and re.fullmatch(r"[A-Za-z0-9_@\-]+", head):
             recipes.add(head.lstrip("@"))
     return recipes
+
+
+# ------------------------------------------------------------------- pyproject
+#
+# The adapter rules need two things out of a pyproject.toml: the dependency
+# lists and the distribution name. A lenient reader is deliberate -- one exotic
+# manifest must not fail the whole organisation sweep -- so this collects raw
+# text rather than modelling TOML values.
+
+TOML_KEY_VALUE_RE = re.compile(r"^(?P<key>[A-Za-z0-9_.\-]+)\s*=\s*(?P<value>.+)$")
+TOML_ARRAY_RE = re.compile(r"^(?P<key>[A-Za-z0-9_.\-]+)\s*=\s*\[(?P<rest>.*)$")
+TOML_STRING_RE = re.compile(r"""["']([^"']*)["']""")
+# Everything after a distribution name in a PEP 508 requirement: extras,
+# version specifiers, environment markers, and direct references.
+REQUIREMENT_TAIL_RE = re.compile(r"[<>=!~;\[\(\s]")
+
+
+def _skip_quoted(text: str, start: int) -> int:
+    """Return the index just past the quoted span that begins at ``start``."""
+    quote = text[start]
+    index = start + 1
+    while index < len(text):
+        if quote == '"' and text[index] == "\\":
+            index += 2
+            continue
+        if text[index] == quote:
+            return index + 1
+        index += 1
+    return len(text)
+
+
+def _consume_array(first: str, lines: list[str], start: int) -> tuple[str, int]:
+    """Join a possibly multi-line TOML array into one raw string.
+
+    ``first`` is the text that follows the opening ``[`` on the key line and
+    ``start`` is the index of the next line. Returns ``(body, next_index)``,
+    where the body excludes the closing bracket and ``next_index`` is the first
+    line that was not consumed.
+
+    Brackets inside quotes are skipped, so a PEP 508 extra such as
+    ``dcc-mcp-core[server]>=0.20.40`` does not close the array early.
+    """
+    depth = 1
+    chunks: list[str] = []
+    text = first
+    cursor = 0
+    index = start
+    while True:
+        while cursor < len(text):
+            char = text[cursor]
+            if char in "\"'":
+                cursor = _skip_quoted(text, cursor)
+                continue
+            if char == "[":
+                depth += 1
+            elif char == "]":
+                depth -= 1
+                if depth == 0:
+                    break
+            cursor += 1
+        chunks.append(text[:cursor])
+        if depth == 0 or index >= len(lines):
+            break
+        text = _strip_comment(lines[index])
+        index += 1
+        cursor = 0
+    return "\n".join(chunks), index
+
+
+def parse_pyproject(text: str) -> dict[str, str]:
+    """Return every ``table.key`` of a pyproject.toml as raw text.
+
+    Scalars and arrays are both collected; an array keeps its joined body so a
+    caller can search it for a distribution name. Lines the reader cannot model
+    are skipped rather than reported: the point is to answer "which
+    distributions does this package declare", not to be a TOML validator.
+    """
+    values: dict[str, str] = {}
+    table = ""
+    lines = text.splitlines()
+    index = 0
+    while index < len(lines):
+        raw = _strip_comment(lines[index]).strip()
+        index += 1
+        if not raw:
+            continue
+        if raw.startswith("[["):
+            table = ""
+            continue
+        if raw.startswith("["):
+            if raw.endswith("]"):
+                table = raw[1:-1].strip().strip("\"'")
+            continue
+        array = TOML_ARRAY_RE.match(raw)
+        if array:
+            body, index = _consume_array(array.group("rest"), lines, index)
+            values[_qualify(table, array.group("key"))] = body
+            continue
+        scalar = TOML_KEY_VALUE_RE.match(raw)
+        if scalar:
+            values[_qualify(table, scalar.group("key"))] = str(
+                _coerce(scalar.group("value").strip())
+            )
+    return values
+
+
+def _qualify(table: str, key: str) -> str:
+    return f"{table}.{key}" if table else key
+
+
+def _normalise_distribution(name: str) -> str:
+    """Normalise a distribution name the way PEP 503 does for comparison."""
+    return re.sub(r"[-_.]+", "-", name.strip()).lower()
+
+
+def _matched_values(values: dict[str, str], patterns: Sequence[str]) -> list[str]:
+    """Return the values whose key matches any of the contract patterns."""
+    compiled = [re.compile(pattern) for pattern in patterns]
+    return [value for key, value in values.items() if any(p.search(key) for p in compiled)]
+
+
+def _declared_distributions(values: dict[str, str], patterns: Sequence[str]) -> set[str]:
+    """Return the normalised distribution names held by the matching arrays."""
+    names: set[str] = set()
+    for body in _matched_values(values, patterns):
+        for element in TOML_STRING_RE.findall(body):
+            name = REQUIREMENT_TAIL_RE.split(element, maxsplit=1)[0].strip()
+            if name:
+                names.add(_normalise_distribution(name))
+    return names
 
 
 # ------------------------------------------------------------------------- rules
@@ -621,7 +760,83 @@ def check_llms_txt_fresh(root: Path, contract: Contract, ctx: dict) -> list[Find
     ]
 
 
+def check_adapter_python_package(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
+    """A001 -- the applicability gate for every other adapter rule.
+
+    A repository swept by ``contract/adapter_repositories.json`` is only an
+    adapter when it ships a ``pyproject.toml`` that declares a ``dcc-mcp-core``
+    dependency. The core package cannot depend on itself, so its own
+    distribution name is exempt. The rule carries no business constraint: it
+    reports the registrations that are wrong so that the rest of the contract
+    is not silently applied to repositories it was never written for.
+    """
+    rule = contract.rules["A001"]
+    config = contract.value("adapter_python_package") or {}
+    manifest_name = str(config.get("manifest", "pyproject.toml"))
+    manifest = root / manifest_name
+    if not manifest.is_file():
+        ctx["adapter_applicable"] = False
+        return [
+            Finding(
+                rule["id"],
+                rule["name"],
+                rule["severity"],
+                manifest_name,
+                (
+                    f"`{manifest_name}` is missing; a repository swept by the adapter "
+                    "contract must be a Python package -- drop it from "
+                    "contract/adapter_repositories.json or add the manifest"
+                ),
+            )
+        ]
+
+    try:
+        text = manifest.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        text = ""
+    values = parse_pyproject(text)
+    # Later adapter rules read pyproject.toml too; parse it once.
+    ctx["pyproject"] = values
+
+    core_names = {
+        _normalise_distribution(name) for name in config.get("core_distribution_names", [])
+    }
+    self_names = {
+        _normalise_distribution(name) for name in config.get("self_distributions", [])
+    }
+    declared = _declared_distributions(values, config.get("dependency_key_patterns", []))
+    ctx["adapter_dependencies"] = sorted(declared)
+    ctx["adapter_applicable"] = bool(declared & core_names)
+    if ctx["adapter_applicable"]:
+        return []
+
+    own_names = {
+        _normalise_distribution(value)
+        for value in _matched_values(values, config.get("distribution_name_key_patterns", []))
+    }
+    if own_names & self_names:
+        # The distribution the adapters depend on is in scope without depending
+        # on itself, but it is not what the later rules mean by "an adapter".
+        return []
+
+    expected = "`, `".join(sorted(core_names)) or "dcc-mcp-core"
+    return [
+        Finding(
+            rule["id"],
+            rule["name"],
+            rule["severity"],
+            manifest_name,
+            (
+                f"`{manifest_name}` declares no `{expected}` dependency; the adapter "
+                "contract does not apply to this repository -- declare the dependency "
+                "or drop it from contract/adapter_repositories.json"
+            ),
+        )
+    ]
+
+
 RULES: dict[str, Callable[[Path, Contract, dict], list[Finding]]] = {
+    "A001": check_adapter_python_package,
     "R001": check_no_root_artifacts,
     "R002": check_justfile_lowercase,
     "R003": check_agents_md_exists,
@@ -680,6 +895,12 @@ def run_checks(
         "dirs": dirs,
         "justfile": _find_justfile(files),
         "allow_extra": list(allow_extra),
+        # Populated by A001 when the repository ships a pyproject.toml, so later
+        # adapter rules can read the parsed manifest instead of parsing it again,
+        # and can stay silent on a repository that turns out not to be an adapter.
+        "pyproject": {},
+        "adapter_applicable": False,
+        "adapter_dependencies": [],
     }
     vx_toml = root / "vx.toml"
     ctx["vx"] = (
