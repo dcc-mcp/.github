@@ -206,13 +206,16 @@ def _consume_multiline_value(
         return value, index
     # An array may span lines (`dependencies = [...]`). Join it, dropping the
     # trailing comments line by line so that a comment cannot swallow the rest
-    # of the array, and stop as soon as the brackets balance.
+    # of the array, and stop as soon as the brackets balance. The opening line
+    # carries the `value` the caller already split off, so it needs the same
+    # comment stripping as every continuation line: a `dependencies = [  # note`
+    # head would otherwise parse as the bare `[` and drop the whole array.
     collected: list[str] = []
     depth = 0
     quote = ""
     cursor = index
     while cursor < len(lines):
-        line = _strip_comment(lines[cursor]) if cursor != index else value.strip()
+        line = _strip_comment(lines[cursor] if cursor != index else value)
         collected.append(line)
         for char in line:
             if quote:
@@ -575,6 +578,30 @@ def _string_list(value: Any) -> list[str]:
     if isinstance(value, str):
         return [value]
     return []
+
+
+def _requirement_strings(value: Any) -> list[str]:
+    """Flatten a dependency table into PEP 508 requirement strings.
+
+    ``[project.dependencies]`` is a list of strings, while poetry spells the
+    same thing as a table of ``name = spec`` entries. A rule that promises to
+    read both tables has to flatten the table form too, or the poetry half of
+    that promise inspects nothing and reports no finding at all.
+    """
+    if not isinstance(value, dict):
+        return _string_list(value)
+    requirements: list[str] = []
+    for name, spec in value.items():
+        if isinstance(spec, str):
+            requirements.append(f"{name} {spec}" if spec else name)
+        elif isinstance(spec, list):
+            # Poetry allows several constraints: `dcc-mcp-core = [">=0.20.40", "<1"]`.
+            constraints = [item for item in spec if isinstance(item, str)]
+            if constraints:
+                requirements.append(f"{name} {','.join(constraints)}")
+        elif isinstance(spec, dict) and isinstance(spec.get("version"), str):
+            requirements.append(f"{name} {spec['version']}")
+    return requirements
 
 
 # ------------------------------------------------------------------------- rules
@@ -1043,6 +1070,10 @@ def check_core_floor_declared(root: Path, contract: Contract, ctx: dict) -> list
     `dcc-mcp-core[test]` in a dev extra is a self-reference, not a deployment
     requirement. A repository that declares no Core dependency at all is out of
     scope for an adapter contract and is skipped rather than failed.
+
+    Both spellings of a dependency table are flattened first: `[project.dependencies]`
+    is a list of requirement strings, `[tool.poetry.dependencies]` is a table of
+    `name = spec` entries.
     """
     rule = contract.rules["A003"]
     data = _pyproject(contract, ctx)
@@ -1053,7 +1084,7 @@ def check_core_floor_declared(root: Path, contract: Contract, ctx: dict) -> list
     findings = []
     seen = False
     for table_name in tables:
-        for requirement in _string_list(_value(data, table_name)):
+        for requirement in _requirement_strings(_value(data, table_name)):
             distribution = re.split(r"[<>=!~;\s\[]", requirement, maxsplit=1)[0].strip()
             if distribution.lower() not in names:
                 continue

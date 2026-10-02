@@ -86,9 +86,16 @@ adapter contract turns that into a gate.
   are errors in `baseline`; `A002`, `A004`, `A005` and `A006` are warnings in `strict`.
 
 `A001` is an error from day one because every existing reference already sits behind a
-`try/except ImportError` fallback, so deleting it needs no Core floor bump - but the fix is
-deletion, never a rename. Renaming would keep the artifact revision flowing into the report
-field, which is the defect PIP-4047/4048/4049/4050/4051 fixed one repository at a time.
+`try/except ImportError` fallback, so deleting it needs no Core floor bump. Which fix applies
+depends on what the value means, and the two cases need opposite edits: where the value is the
+schema *artifact revision* only the name is deprecated, so rename it to
+`INSTALL_SOP_SCHEMA_REVISION`; where the value feeds a report's `schema_version`, or is a
+vestigial import, delete the reference and read the field from
+`install_sop_report_schema_version()`. What is never allowed is a rename that only makes the
+gate go green: where the value reaches a report's `schema_version`, that keeps the artifact
+revision flowing into a field the schema pins at `1`, which is the defect
+PIP-4047/4048/4049/4050/4051 fixed one repository at a time. The full rule, with the counts per
+case, is in [docs/adapter-contract.md](docs/adapter-contract.md).
 
 Run it locally against any adapter:
 

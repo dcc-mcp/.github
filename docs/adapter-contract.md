@@ -149,7 +149,7 @@ repositories:
 |---|---|---|
 | A001 | 12 | 8 use the alias as an artifact revision (rename), 4 feed it into a report field or import it vestigially (delete) |
 | A002 | 12 | 13 hard-coded constants in total |
-| A003 | 0 | 4 repositories declare no Core dependency and are skipped |
+| A003 | 0 | 45 of 50 declare a Core dependency with a lower bound; the other 5 declare none and are skipped (`dcc-mcp-cache-inspector`, `dcc-mcp-epic`, `dcc-mcp-maya-procedural-architecture`, `dcc-mcp-runtime`, and `dcc-mcp-core`, which owns the distribution) |
 | A004 | 33 | 30 declare `line-length = 100`, 3 declare none |
 | A005 | 1 | `dcc-mcp-cache-inspector` |
 | A006 | 44 | 6 have a `.pre-commit-config.yaml` |

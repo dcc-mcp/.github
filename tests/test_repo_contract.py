@@ -820,6 +820,66 @@ class TestA003CoreFloor(AdapterContractTestCase):
         code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
         self.assertEqual(code, 0, findings)
 
+    def test_a_comment_on_the_opening_line_does_not_hide_the_array(self) -> None:
+        """`dependencies = [  # note` must still parse as an array, not as `[`."""
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[project]\n"
+            'name = "dcc-mcp-demo"\n'
+            'requires-python = ">=3.9"\n'
+            "dependencies = [  # Core floor\n"
+            '    "dcc-mcp-core",\n'
+            '    "pydantic>=2",\n'
+            "]\n",
+        )
+        code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 1)
+        self.assertEqual(self.severities(findings, "A003"), {"error"})
+
+    def test_a_poetry_dependency_table_is_read(self) -> None:
+        """`[tool.poetry.dependencies]` is a table, so the floor lives in the value."""
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[tool.poetry]\n"
+            'name = "dcc-mcp-demo"\n'
+            "\n[tool.poetry.dependencies]\n"
+            'python = "^3.10"\n'
+            'dcc-mcp-core = "*"\n',
+        )
+        code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 1)
+        hits = self.findings_for("A003", findings)
+        self.assertEqual(len(hits), 1)
+        self.assertIn("tool.poetry.dependencies", hits[0]["message"])
+
+    def test_a_poetry_dependency_with_a_lower_bound_passes(self) -> None:
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[tool.poetry]\n"
+            'name = "dcc-mcp-demo"\n'
+            "\n[tool.poetry.dependencies]\n"
+            'python = "^3.10"\n'
+            'dcc-mcp-core = ">=0.20.40"\n',
+        )
+        code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 0, findings)
+
+    def test_a_poetry_declared_constraint_list_is_read(self) -> None:
+        """Poetry allows `dcc-mcp-core = [">=0.20.40", "<1.0.0"]`."""
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[tool.poetry]\n"
+            'name = "dcc-mcp-demo"\n'
+            "\n[tool.poetry.dependencies]\n"
+            'dcc-mcp-core = [">=0.20.40", "<1.0.0"]\n',
+        )
+        code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 0, findings)
+
     def test_a_repository_without_core_is_out_of_scope(self) -> None:
         self.adapter_clean()
         self.repo.write(
