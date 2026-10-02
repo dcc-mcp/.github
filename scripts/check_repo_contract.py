@@ -635,6 +635,21 @@ RULES: dict[str, Callable[[Path, Contract, dict], list[Finding]]] = {
 }
 
 
+def all_rules() -> dict[str, Callable[..., list[Finding]]]:
+    """Every rule the checker can dispatch, across every contract.
+
+    ``RULES`` stays exactly the rule set of contract/repo_contract.json so that
+    "every contract rule has an implementation" keeps a precise meaning. Rules
+    for other contracts live in their own modules -- the adapter families under
+    ``adapter_contract_rules`` -- and are imported here rather than at module
+    scope, because those modules import ``Finding`` and ``Contract`` back out of
+    this one and a module-level import would be a cycle.
+    """
+    from adapter_contract_rules import ADAPTER_RULES
+
+    return {**RULES, **ADAPTER_RULES}
+
+
 # ----------------------------------------------------------------------- driver
 
 
@@ -661,7 +676,7 @@ def resolve_plan(
     plan = {}
     for rule_id in sorted(selected):
         rule = contract.rules[rule_id]
-        handler = RULES.get(rule_id)
+        handler = all_rules().get(rule_id)
         if handler is None:
             raise ContractError(
                 f"contract defines rule {rule_id} but no checker implements it"
