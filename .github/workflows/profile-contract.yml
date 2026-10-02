@@ -4,7 +4,9 @@ on:
   pull_request:
     paths:
       - "profile/**"
+      - "contract/**"
       - "scripts/check_profile_contract.py"
+      - "scripts/check_repo_contract.py"
       - "tests/**"
       - "requirements-profile-check.txt"
       - ".github/workflows/profile-contract.yml"
@@ -14,7 +16,9 @@ on:
       - main
     paths:
       - "profile/**"
+      - "contract/**"
       - "scripts/check_profile_contract.py"
+      - "scripts/check_repo_contract.py"
       - "tests/**"
       - "requirements-profile-check.txt"
       - ".github/workflows/profile-contract.yml"
