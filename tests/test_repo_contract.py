@@ -22,6 +22,7 @@ from check_repo_contract import (  # noqa: E402
     ADAPTER_CONTRACT_PATH,
     DEFAULT_CONTRACT_PATH,
     RULES,
+    all_rules,
     Contract,
     main,
     parse_vx_toml,
@@ -91,16 +92,18 @@ class ContractTestCase(unittest.TestCase):
 
 class TestContractFile(ContractTestCase):
     def test_every_rule_has_an_implementation(self) -> None:
+        # all_rules(), not RULES: a rule family may live in its own module and
+        # be folded in by all_rules() rather than written into RULES directly.
         for path in ALL_CONTRACTS:
             with self.subTest(contract=path):
                 contract = Contract.load(Path(path))
-                self.assertEqual(set(contract.rules) - set(RULES), set())
+                self.assertEqual(set(contract.rules) - set(all_rules()), set())
 
     def test_every_implementation_is_declared_by_a_contract(self) -> None:
         declared: set[str] = set()
         for path in ALL_CONTRACTS:
             declared |= set(Contract.load(Path(path)).rules)
-        self.assertEqual(set(RULES) - declared, set())
+        self.assertEqual(set(all_rules()) - declared, set())
 
     def test_the_two_contracts_do_not_share_rule_ids(self) -> None:
         repo_rules = set(Contract.load(Path(CONTRACT)).rules)
