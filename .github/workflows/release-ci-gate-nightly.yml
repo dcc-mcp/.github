@@ -15,6 +15,13 @@ on:
 
 permissions:
   contents: read
+  # A reusable workflow cannot raise the permissions its caller was granted, so the
+  # caller has to declare them or the called workflow runs with a token that cannot
+  # read workflow runs or pull requests. Without these two lines the nightly sweep
+  # gets 403, exits 2, and reports "could not be performed" every night instead of
+  # listing the pull requests that are actually blocked - the alert becomes noise.
+  actions: read
+  pull-requests: read
 
 concurrency:
   group: release-ci-gate-nightly

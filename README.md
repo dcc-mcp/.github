@@ -100,8 +100,17 @@ the next reader looking for a test failure that does not exist.
 `no_evidence` carries a reason: `awaiting_approval` (a run sits in the approval queue),
 `approval_invalidated` (a zero-job failure — a workflow that never ran, usually an
 approval overtaken by the merge), or `no_runs` (nothing was ever triggered). Partial
-evidence is not green either: a pull request whose CI passed but whose E2E never ran is
-`no_evidence`, because merging it ships a version only part of the suite saw.
+evidence is not green either: if CI passed but E2E produced a run that executed zero
+jobs, the verdict is `no_evidence`, because merging ships a version only part of the
+suite saw.
+
+Be precise about the limit of that rule, because the difference matters to anyone
+writing automation against this gate. What is caught is a suite that **produced a run
+which executed no jobs**. A suite that was **never triggered at all** is invisible
+here — if a pull request has only a CI run and no E2E run object exists, the verdict is
+`green`. Telling those two apart needs a per-repository list of which suites are
+expected, which this check does not have. Do not read `green` as "every suite in the
+repository passed"; read it as "every run that exists produced jobs and succeeded".
 
 ### Sweeping the open release pull requests
 

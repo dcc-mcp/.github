@@ -43,10 +43,17 @@ Two modes:
   and lists the runs that are parked in the approval queue or ended with zero jobs.
 
 Exit codes:
-    0 - no ``no_evidence`` finding, and no red/pull-request finding when
-        ``--fail-on`` asks for one
-    1 - at least one finding at or above the requested ``--fail-on`` level
+    0 - every evaluated pull request is mergeable
+    1 - at least one pull request is blocked: ``no_evidence`` or ``pending``, or
+        ``red`` while ``--fail-on`` is not ``none``
     2 - the check could not be performed (bad input, unreachable API, ...)
+
+``--fail-on`` tunes a real failure only. It can never turn ``no_evidence`` or
+``pending`` into a pass: nothing may merge on the absence of CI, whatever the
+caller asked for. The exit code is the contract an automation actually reads, so it
+has to agree with ``merge_allowed`` - a verdict that prints ``DO NOT MERGE`` while
+exiting 0 would be read as clearance by the very release window this gate exists
+to stop.
 """
 
 from __future__ import annotations
@@ -69,6 +76,14 @@ VERDICT_PENDING = "pending"
 VERDICT_NO_EVIDENCE = "no_evidence"
 
 MERGEABLE_VERDICTS = frozenset({VERDICT_GREEN})
+
+# Verdicts that mean "there is no CI evidence yet". Both block a merge, and both
+# block unconditionally: `--fail-on` can tune a real failure away, but it can never
+# tune away the absence of evidence, because that is the whole point of this gate.
+# `pending` belongs here for the same reason `no_evidence` does - a run that has not
+# finished has not validated anything, and a release window that reads exit code 0
+# as "clear to merge" would ship on it.
+BLOCKING_VERDICTS = frozenset({VERDICT_NO_EVIDENCE, VERDICT_PENDING})
 
 # Conclusions that mean "this run did not succeed". ``action_required`` is listed for
 # completeness; it is detected by name before the conclusion is ever consulted.
@@ -619,7 +634,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--fail-on",
         choices=FAIL_ON_CHOICES,
         default="no_evidence",
-        help="severity that makes the run exit 1 (default: no_evidence)",
+        help="whether a real failure (red) fails the run: none, red, or no_evidence. "
+        "Never affects no_evidence/pending, which always block (default: no_evidence)",
     )
     parser.add_argument(
         "--approve",
@@ -640,15 +656,22 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         if args.pr:
-            if "#" not in args.pr:
-                raise CheckError(f"--pr must look like org/repo#123, got {args.pr!r}")
             repository, _, number = args.pr.partition("#")
+            # Every part must be checked, not just the separator. A bare `#19` leaves
+            # an empty repository, and `gh pr view --repo ""` silently falls back to
+            # whatever repository the current directory happens to be in - the gate
+            # would then evaluate, and possibly clear, a pull request belonging to a
+            # different repository. A non-numeric number would otherwise escape as a
+            # ValueError traceback, which exits 1 and so reads as "found a finding".
+            owner, _, name = repository.partition("/")
+            if not owner or not name or not number.isdigit():
+                raise CheckError(f"--pr must look like org/repo#123, got {args.pr!r}")
             result = check_pr(repository, int(number), args.timeout, args.per_page)
             if args.format == "json":
                 print(json.dumps(result.as_dict(), indent=2))
             else:
                 print(render_gate_text(result))
-            if result.verdict == VERDICT_NO_EVIDENCE:
+            if result.verdict in BLOCKING_VERDICTS:
                 return 1
             if result.verdict == VERDICT_RED and args.fail_on in {"red", "no_evidence"}:
                 return 1
@@ -679,7 +702,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 for result in results:
                     print(render_gate_text(result))
                     print()
-            blocked = [r for r in results if r.verdict == VERDICT_NO_EVIDENCE]
+            blocked = [r for r in results if r.verdict in BLOCKING_VERDICTS]
             red = [r for r in results if r.verdict == VERDICT_RED]
             if blocked:
                 return 1

@@ -13,6 +13,8 @@ pending approval. Both look like "no CI" to `gh pr checks`, and both used to be 
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import sys
 import unittest
@@ -138,6 +140,120 @@ class BadInputTest(unittest.TestCase):
         # "check could not be performed" code, so a release window stops instead of
         # reading an empty result as "nothing to do".
         self.assertEqual(gate.main(["--pr", "dcc-mcp/dcc-mcp-premiere"]), 2)
+
+    def test_pr_flag_without_a_repository_is_rejected(self):
+        # The fail-open case. `gh pr view --repo ""` falls back to whatever repository
+        # the current directory is in, so accepting this would silently evaluate - and
+        # potentially clear - a pull request belonging to a different repository.
+        self.assertEqual(gate.main(["--pr", "#19"]), 2)
+        self.assertEqual(gate.main(["--pr", "/repo#19"]), 2)
+
+    def test_pr_flag_with_a_non_numeric_number_is_rejected(self):
+        # Must exit 2 ("could not be performed"), not crash with a traceback that
+        # happens to exit 1 - 1 means "found a finding", which would be misread.
+        self.assertEqual(gate.main(["--pr", "dcc-mcp/dcc-mcp-premiere#abc"]), 2)
+
+
+def _gate_result(verdict):
+    """A synthetic gate result carrying just the verdict under test."""
+    return gate.GateResult(
+        repository="o/r",
+        pr_number=1,
+        title="chore(main): release 0.0.1",
+        url="https://example.invalid/pr/1",
+        state="OPEN",
+        head_sha="0" * 40,
+        verdict=verdict,
+        reason=None,
+        message="",
+        merge_allowed=verdict in gate.MERGEABLE_VERDICTS,
+    )
+
+
+def _run_main(argv):
+    """Run ``main()`` and return ``(exit_code, stdout)``, swallowing the output."""
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        status = gate.main(argv)
+    return status, buffer.getvalue()
+
+
+class ExitCodeContractTest(unittest.TestCase):
+    """The exit code is the contract an automation actually reads.
+
+    A run that prints ``DO NOT MERGE`` while exiting 0 is read as clearance by exactly
+    the release window this gate exists to stop, so the exit code has to agree with
+    ``merge_allowed``. Verdict-level tests cannot catch a disagreement, which is how a
+    ``pending`` verdict could exit 0: the verdict was right and the exit code was not.
+    """
+
+    def _status_for(self, verdict, extra=()):
+        with mock.patch.object(gate, "check_pr", return_value=_gate_result(verdict)):
+            status, output = _run_main(["--pr", "o/r#1", *extra])
+        return status, output
+
+    def test_green_exits_zero(self):
+        self.assertEqual(self._status_for(gate.VERDICT_GREEN)[0], 0)
+
+    def test_no_evidence_exits_one(self):
+        self.assertEqual(self._status_for(gate.VERDICT_NO_EVIDENCE)[0], 1)
+
+    def test_pending_exits_one(self):
+        # A run that has not finished has validated nothing. It is not evidence, and
+        # it must not read as clear.
+        self.assertEqual(self._status_for(gate.VERDICT_PENDING)[0], 1)
+
+    def test_red_exits_one_by_default(self):
+        self.assertEqual(self._status_for(gate.VERDICT_RED)[0], 1)
+
+    def test_red_is_tunable_by_fail_on_none(self):
+        self.assertEqual(self._status_for(gate.VERDICT_RED, ["--fail-on", "none"])[0], 0)
+
+    def test_missing_evidence_is_never_tunable(self):
+        # --fail-on tunes a real failure only. It cannot turn the absence of CI into a
+        # pass, in either of the two shapes that absence takes.
+        for verdict in (gate.VERDICT_NO_EVIDENCE, gate.VERDICT_PENDING):
+            with self.subTest(verdict=verdict):
+                self.assertEqual(self._status_for(verdict, ["--fail-on", "none"])[0], 1)
+
+    def test_blocked_verdicts_renders_as_do_not_merge(self):
+        # The two channels must not disagree: whatever exits non-zero also has to say
+        # so in the text a human reads.
+        for verdict in gate.BLOCKING_VERDICTS:
+            with self.subTest(verdict=verdict):
+                status, output = self._status_for(verdict)
+                self.assertEqual(status, 1)
+                self.assertIn("DO NOT MERGE", output)
+
+
+class OpenPrsExitCodeTest(unittest.TestCase):
+    """The same contract for the sweep a release window runs before merging."""
+
+    def _status_for(self, verdicts, extra=()):
+        results = [_gate_result(verdict) for verdict in verdicts]
+        prs = [{"number": str(index + 1)} for index in range(len(verdicts))]
+        with mock.patch.object(gate, "open_release_prs", return_value=prs), mock.patch.object(
+            gate, "check_pr", side_effect=results
+        ):
+            return _run_main(["--repositories", "o/r", "--open-prs", *extra])[0]
+
+    def test_all_green_exits_zero(self):
+        self.assertEqual(self._status_for([gate.VERDICT_GREEN, gate.VERDICT_GREEN]), 0)
+
+    def test_one_pending_exits_one(self):
+        self.assertEqual(self._status_for([gate.VERDICT_GREEN, gate.VERDICT_PENDING]), 1)
+
+    def test_one_no_evidence_exits_one(self):
+        self.assertEqual(self._status_for([gate.VERDICT_GREEN, gate.VERDICT_NO_EVIDENCE]), 1)
+
+    def test_one_red_exits_one_by_default(self):
+        self.assertEqual(self._status_for([gate.VERDICT_GREEN, gate.VERDICT_RED]), 1)
+
+    def test_all_red_is_tunable_by_fail_on_none(self):
+        self.assertEqual(self._status_for([gate.VERDICT_RED], ["--fail-on", "none"]), 0)
+
+    def test_no_open_pull_requests_exits_zero(self):
+        self.assertEqual(self._status_for([]), 0)
 
 
 class PrArgumentTest(unittest.TestCase):
