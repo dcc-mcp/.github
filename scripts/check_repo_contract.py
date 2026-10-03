@@ -29,6 +29,7 @@ Rules (adapter_contract.json)
     A001 no-deprecated-install-sop-alias    no reference to Core's deprecated alias
     A002 no-hand-rolled-report-schema-version  read the report schema version from Core
     A003 core-floor-declared                a declared Core dep pins a lower bound
+    A012 core-floor-baseline                the declared floor is at/above the org baseline
     A004 ruff-line-length                   [tool.ruff] line-length is the baseline
     A005 requires-python-declared           project.requires-python is declared
     A006 pre-commit-config-exists           .pre-commit-config.yaml is present
@@ -655,6 +656,38 @@ def _requirement_strings(value: Any) -> list[str]:
     return requirements
 
 
+def _version_tuple(value: str) -> tuple[int, ...]:
+    """Parse the leading numeric part of a version, ignoring any pre-release."""
+    numbers: list[int] = []
+    for part in re.split(r"[.\-+]", str(value).strip()):
+        if not part.isdigit():
+            break
+        numbers.append(int(part))
+    return tuple(numbers)
+
+
+def _version_cmp(left: tuple[int, ...], right: tuple[int, ...]) -> int:
+    """Compare release tuples, padding the shorter one with zeros."""
+    width = max(len(left), len(right))
+    a = tuple(list(left) + [0] * (width - len(left)))
+    b = tuple(list(right) + [0] * (width - len(right)))
+    return (a > b) - (a < b)
+
+
+def _floor_versions(requirement: str, operators: Sequence[str]) -> list[str]:
+    """Every version a requirement pins as a lower bound.
+
+    Upper bounds are ignored because ``core_floor_operators`` never contains
+    ``<``; the operators are matched longest-first so that ``>=`` wins over the
+    ``>`` it starts with.
+    """
+    versions: list[str] = []
+    for operator in sorted(operators, key=len, reverse=True):
+        pattern = re.escape(operator) + r"\s*([0-9][0-9A-Za-z.\-+]*)"
+        versions.extend(match.group(1) for match in re.finditer(pattern, requirement))
+    return versions
+
+
 # ------------------------------------------------------------------------- rules
 
 
@@ -1159,6 +1192,84 @@ def check_core_floor_declared(root: Path, contract: Contract, ctx: dict) -> list
     return findings
 
 
+def check_core_floor_baseline(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
+    """A012 — the declared Core floor is at or above the organisation baseline.
+
+    A003 already fails a Core dependency that pins no bound at all, so this rule
+    stays silent in that case: one gap, one finding. What it adds is the ratchet.
+    The floor a repository has to *declare* and the floor the organisation has
+    agreed to *sit at* are different numbers, and only the second one moves the
+    fleet.
+
+    ``core_floor_baseline`` is the highest floor any adapter already declares, so
+    the target is reachable on the day the rule lands rather than aspirational —
+    a baseline nobody meets is noise, not a signal. ``core_floor_target`` is where
+    the shared Install SOP API becomes unconditionally available; sitting above
+    the baseline but short of the target is a notice, which is reported but can
+    never fail a run.
+    """
+    rule = contract.rules["A012"]
+    baseline_value = contract.value("core_floor_baseline")
+    target_value = contract.value("core_floor_target")
+    if not baseline_value and not target_value:
+        return []
+    data = _pyproject(contract, ctx)
+    names = {name.lower() for name in contract.value("core_distributions", [])}
+    tables = contract.value("core_dependency_tables", [])
+    operators = list(contract.value("core_floor_operators", [">="]))
+    name = contract.value("pyproject_file", "pyproject.toml")
+
+    declared = False
+    best: tuple[tuple[int, ...], str] | None = None
+    for table_name in tables:
+        for requirement in _requirement_strings(_value(data, table_name)):
+            distribution = re.split(r"[<>=!~;\s\[]", requirement, maxsplit=1)[0].strip()
+            if distribution.lower() not in names:
+                continue
+            declared = True
+            for version in _floor_versions(requirement, operators):
+                parsed = _version_tuple(version)
+                if parsed and (best is None or _version_cmp(parsed, best[0]) > 0):
+                    best = (parsed, version)
+    if not declared or best is None:
+        # No Core dependency at all (out of scope), or A003 is already reporting
+        # the missing bound.
+        return []
+
+    baseline = _version_tuple(baseline_value) if baseline_value else None
+    target = _version_tuple(target_value) if target_value else None
+    if baseline and _version_cmp(best[0], baseline) < 0:
+        return [
+            Finding(
+                rule["id"],
+                rule["name"],
+                rule["severity"],
+                name,
+                (
+                    f"declared Core floor `{best[1]}` is below the organisation baseline "
+                    f"`{baseline_value}`; the fleet spans 54 patch versions from "
+                    ">=0.18.2 (dcc-mcp-powerpoint) to >=0.20.36"
+                ),
+            )
+        ]
+    if target and _version_cmp(best[0], target) < 0:
+        return [
+            Finding(
+                rule["id"],
+                rule["name"],
+                "notice",
+                name,
+                (
+                    f"declared Core floor `{best[1]}` meets the baseline "
+                    f"`{baseline_value}` but is below the target `{target_value}`; "
+                    "`install_sop_report_schema_version()` and "
+                    "`validate_install_sop_report()` are only present from 0.20.40"
+                ),
+            )
+        ]
+    return []
+
+
 def check_ruff_line_length(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
     """A004 — [tool.ruff] line-length converges on one value."""
     rule = contract.rules["A004"]
@@ -1388,6 +1499,7 @@ RULES: dict[str, Callable[[Path, Contract, dict], list[Finding]]] = {
     "A001": check_no_deprecated_install_sop_alias,
     "A002": check_no_hand_rolled_report_schema_version,
     "A003": check_core_floor_declared,
+    "A012": check_core_floor_baseline,
     "A004": check_ruff_line_length,
     "A005": check_requires_python_declared,
     "A006": check_pre_commit_config_exists,

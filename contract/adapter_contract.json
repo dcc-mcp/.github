@@ -37,6 +37,15 @@
       "summary": "Reads [project.dependencies] and [tool.poetry.dependencies] only. An unversioned `dcc-mcp-core` resolves to whatever happens to be installed, which is how the 54-patch floor spread (>=0.18.2 .. >=0.20.36) appeared. A repository that declares no Core dependency at all is out of scope and is skipped rather than failed."
     },
     {
+      "id": "A012",
+      "name": "core-floor-baseline",
+      "title": "The declared dcc-mcp-core floor is at or above the organisation baseline",
+      "severity": "warning",
+      "profiles": ["strict"],
+      "source": "PIP-4106",
+      "summary": "A003 makes a lower bound mandatory; this rule decides whether the bound is high enough. core_floor_baseline (0.20.36) is the highest floor any adapter already declares, so the target is reachable the day the rule lands rather than aspirational — a baseline nobody meets is noise, not a signal. core_floor_target (0.20.40) is where the shared Install SOP API becomes unconditionally available; sitting above the baseline but short of the target is a notice, which is reported but can never fail a run. A Core dependency that pins no bound at all is left to A003, so one gap produces one finding."
+    },
+    {
       "id": "A004",
       "name": "ruff-line-length",
       "title": "[tool.ruff] line-length is the organisation baseline",
@@ -156,6 +165,8 @@
   "core_distributions": ["dcc-mcp-core", "dcc_mcp_core"],
   "core_dependency_tables": ["project.dependencies", "tool.poetry.dependencies"],
   "core_floor_operators": [">=", ">", "==", "~=", "~", "^"],
+  "core_floor_baseline": "0.20.36",
+  "core_floor_target": "0.20.40",
   "ruff_line_length_target": 120,
   "ruff_line_length_table": "tool.ruff",
   "requires_python_table": "project",
