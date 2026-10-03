@@ -40,6 +40,14 @@ without a `pyproject.toml` and belongs here.
 | A004 | `ruff-line-length` — `[tool.ruff] line-length` is `120` | — | warning | convention |
 | A005 | `requires-python-declared` — `project.requires-python` is declared | — | warning | convention |
 | A006 | `pre-commit-config-exists` — `.pre-commit-config.yaml` is present | — | warning | convention |
+| A013 | `doctor-module-present` — an adapter that installs ships a `doctor` self-check | — | warning | interface |
+| A014 | `report-validates-against-schema` — a real report runs through `validate_install_sop_report()` | — | warning | interface |
+
+Ids A007–A012 are unassigned on purpose. The Install SOP interface family was
+numbered A010–A014 by PIP-4106 before A001–A006 existed; three of those five
+rules were already covered here as A001, A002 and A003 when the family was
+landed, so only the two that were not — the `doctor` module and the report
+validation — were added, under their original ids.
 
 ### Why A001 can be an error on day one
 
@@ -122,6 +130,30 @@ highest floor any repository declares today is `>=0.20.36` (autocad, cinema4d,
 freecad, openscad, sketchup). Raising 50 floors is PIP-4101's job, not this
 gate's, so the rule reports the gap and does not fail on it.
 
+### Why A013 and A014 are warnings
+
+Both rules describe a gap that is expensive to close rather than a defect, so
+they report without failing. 8 of the 50 swept adapters ship a `doctor` module
+today (openusd, material-maker, wwise, freecad, sketchup, openscad, liquigen,
+capcut), and A013 flags **28** of the 45 packages the sweep could read. A014 is
+the sharper of the two: it flags **27**, including five of those eight
+(capcut, material-maker, openscad, sketchup, wwise), because a doctor that
+assembles a report is not the same thing as a doctor that validates one. Both
+columns are PIP-4101's work queue.
+
+Both rules are scoped to repositories that actually have an install surface —
+one of the `install_sop_symbols` appearing in a scanned module, or a module
+matching `install_source_globs`. Repositories with no install capability are
+skipped rather than reported, so the rule set stays silent for the packages it
+was never written for.
+
+Both are matched by name or by text, which makes them satisfiable in the letter
+without being satisfied in spirit: a `doctor` that never validates a report
+passes A013, and a `# TODO: use validate_install_sop_report` in a workflow
+passes A014. That is the right trade for a warning — a noisy gate gets switched
+off, while a permissive one still points at the right file — and it is why
+neither rule belongs in `baseline` until the ratchet closes the gap.
+
 ### Why A005 does not pick a value
 
 `requires-python` has four legitimate values in the fleet (`>=3.7` through
@@ -153,9 +185,19 @@ repositories:
 | A004 | 33 | 30 declare `line-length = 100`, 3 declare none |
 | A005 | 1 | `dcc-mcp-cache-inspector` |
 | A006 | 44 | 6 have a `.pre-commit-config.yaml` |
+| A013 | 28 | measured 2026-10-03 over the 45 repositories that cloned (see below) |
+| A014 | 27 | includes 5 of the 8 that already ship a `doctor` module |
 
-`dcc-mcp-core` reports nothing: it owns the deprecated alias, so
-`provider_package_dirs` exempts its package tree.
+The A001–A006 rows were measured 2026-10-02 over all 50 repositories. The A013
+and A014 rows were measured 2026-10-03 over the same sweep; five repositories
+failed to clone in that run (`dcc-mcp-cache-inspector`,
+`dcc-mcp-marvelous-designer`, `dcc-mcp-maya-procedural-architecture`,
+`dcc-mcp-substance3d-designer`, `dcc-mcp-substance3d-painter`), so those two
+counts are a lower bound over 45 packages.
+
+`dcc-mcp-core` reports nothing under A001–A006: it owns the deprecated alias, so
+`provider_package_dirs` exempts its package tree. It does report A013, because
+it ships install machinery and no `doctor` module of its own.
 
 Two repositories carry a file that does not parse as Python at all —
 `dcc-mcp-3dsmax/import_balls_fbx.py` (a `for` statement with no body) and

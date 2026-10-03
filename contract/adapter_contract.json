@@ -1,6 +1,6 @@
 {
-  "contract_version": "1.0.0",
-  "updated": "2026-10-02",
+  "contract_version": "1.1.0",
+  "updated": "2026-10-03",
   "owner": "dcc-mcp/.github",
   "source_issue": "PIP-4104",
   "description": "Machine-readable definition of the dcc-mcp Python adapter contract: the interface rules that keep 50 adapter packages from re-inventing the same Core API, and the code-convention rules that keep their pyproject.toml files comparable. Consumed by scripts/check_repo_contract.py --contract and by the nightly sweep in .github/workflows/adapter-contract-nightly.yml. Rule ids use the A0xx namespace so that a repository can run this contract alongside contract/repo_contract.json (R0xx) without ambiguity.",
@@ -62,6 +62,33 @@
       "profiles": ["strict"],
       "source": "PIP-4104",
       "summary": "Without it, the ruff settings in pyproject.toml only run in CI, so a contributor learns about a lint failure after pushing. 6 of 50 packages have one today."
+    },
+    {
+      "id": "A013",
+      "name": "doctor-module-present",
+      "title": "An adapter that provides install capability ships a doctor self-check module",
+      "severity": "warning",
+      "profiles": ["strict"],
+      "source": "PIP-4106",
+      "summary": "The doctor is where an adapter assembles its Install SOP report and validates it before the report is published. 8 of 50 adapters have one (openusd, material-maker, wwise, freecad, sketchup, openscad, liquigen, capcut), so the rule is a convergence warning and the gap closes by ratchet. Adapters with no install surface are skipped rather than reported. Ids A007-A012 are unassigned: this family was numbered A010-A014 by PIP-4106 before A001-A006 existed, and its first three rules were superseded by A001, A002 and A003 rather than renumbered.",
+      "known_boundaries": [
+        "The module is matched by name, so a doctor that assembles a report without validating it satisfies the rule.",
+        "install_source_globs matches src/**/install*.py, so install_preflight_docs.py counts as install capability while uninstall.py does not."
+      ],
+      "remediation": "Add a doctor module that assembles the Install SOP report and validates it with validate_install_sop_report()."
+    },
+    {
+      "id": "A014",
+      "name": "report-validates-against-schema",
+      "title": "A real report is validated with validate_install_sop_report() in tests or CI",
+      "severity": "warning",
+      "profiles": ["strict"],
+      "source": "PIP-4106",
+      "summary": "An adapter that assembles an Install SOP report has to validate a real report against the schema at least once, in a test or in a CI workflow: those are the only places that run before the artefact is published. Every adapter in the PIP-3990 incident shipped a schema and none of them ran a report through it, which is how the wrong value reached a release.",
+      "known_boundaries": [
+        "The validator is matched as text over the scan globs, so a mention in a comment or in a TODO line satisfies the rule."
+      ],
+      "remediation": "Call validate_install_sop_report() on the report a doctor run actually produces, not on a hand-written fixture."
     }
   ],
   "deprecated_symbols": {
@@ -75,6 +102,30 @@
     "pkg/**/dcc_mcp_core/**"
   ],
   "hand_rolled_schema_version_globs": ["*_REPORT_SCHEMA_VERSION", "*_SOP_SCHEMA_VERSION"],
+  "install_sop_symbols": [
+    "INSTALL_EXIT_OK",
+    "INSTALL_EXIT_PREFLIGHT",
+    "INSTALL_EXIT_VERIFY",
+    "INSTALL_SOP_SCHEMA_REVISION",
+    "INSTALL_SOP_SCHEMA_VERSION",
+    "install_sop_report_schema_version",
+    "load_install_sop_schema",
+    "validate_install_sop_report"
+  ],
+  "install_source_globs": ["src/**/install*.py", "python/**/install*.py"],
+  "a013_doctor_module_globs": [
+    "src/**/doctor.py",
+    "src/**/doctor/__init__.py",
+    "python/**/doctor.py",
+    "python/**/doctor/__init__.py"
+  ],
+  "a014_scan_globs": [
+    "tests/**/*.py",
+    "test/**/*.py",
+    ".github/workflows/*.yml",
+    ".github/workflows/*.yaml"
+  ],
+  "a014_validator_symbols": ["validate_install_sop_report"],
   "scan_suffixes": [".py", ".pyi"],
   "scan_exclude_dirs": [
     ".git",

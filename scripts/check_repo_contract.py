@@ -32,6 +32,12 @@ Rules (adapter_contract.json)
     A004 ruff-line-length                   [tool.ruff] line-length is the baseline
     A005 requires-python-declared           project.requires-python is declared
     A006 pre-commit-config-exists           .pre-commit-config.yaml is present
+    A013 doctor-module-present              install adapters ship a doctor self-check
+    A014 report-validates-against-schema    a real report is validated once
+
+A007–A012 are unassigned: the Install SOP interface family was numbered A010–A014
+by its owning issue (PIP-4106) before A001–A006 existed, and the three rules that
+overlapped A001–A003 were superseded by them rather than renumbered.
 
 Profiles
 --------
@@ -471,6 +477,51 @@ def _prepare_scan(
         ctx["scan_notices_pending"] = False
         return ctx["modules"], ctx["scan_notices"]
     return ctx["modules"], []
+
+
+def _read_text(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def _source_texts(
+    modules: Sequence[tuple[Path, ast.Module]]
+) -> list[tuple[Path, str]]:
+    """Return the scanned sources as (path, text) for the rules that read text.
+
+    A013 and A014 look for names anywhere in a module, including in a literal or
+    a workflow file, which is a text question rather than a syntax question. The
+    text is not cached in ``ctx``: a repository this gate scans is small enough
+    that a second read costs far less than a cache that can go stale.
+    """
+    return [(path, _read_text(path) or "") for path, _ in modules]
+
+
+def _has_install_sop_surface(
+    root: Path, contract: Contract, sources: Sequence[tuple[Path, str]]
+) -> bool:
+    """True when the repository assembles an Install SOP report at all.
+
+    A013 and A014 are about the report, so they are skipped for the ~42 adapters
+    that have no install capability rather than reported. Two signals count: a
+    source file that touches one of the Core symbols a report assembler has to
+    touch, or a module named for installation -- the second catches an adapter
+    that has not yet adopted the shared symbols.
+    """
+    symbols = [symbol for symbol in contract.value("install_sop_symbols", []) if symbol]
+    if symbols:
+        pattern = re.compile(
+            "|".join(r"\b" + re.escape(symbol) + r"\b" for symbol in symbols)
+        )
+        for _path, text in sources:
+            if pattern.search(text):
+                return True
+    for pattern in contract.value("install_source_globs", []):
+        if any(root.glob(pattern)):
+            return True
+    return False
 
 
 def _dotted_name(node: ast.AST) -> str:
@@ -1219,6 +1270,110 @@ def check_pre_commit_config_exists(root: Path, contract: Contract, ctx: dict) ->
     ]
 
 
+def _install_sop_sources(
+    root: Path, contract: Contract, ctx: dict, rule: dict
+) -> tuple[list[tuple[Path, str]] | None, list[Finding]]:
+    """Scan once, then answer whether this repository is in scope.
+
+    The sources are ``None`` when the repository has no Install SOP surface, so
+    that both report rules stay silent for the adapters that never install
+    anything. The scan notices are returned either way: a skipped file is a blind
+    spot for the whole run, not for one rule.
+    """
+    modules, notices = _prepare_scan(root, contract, ctx, rule)
+    sources = _source_texts(modules)
+    if not _has_install_sop_surface(root, contract, sources):
+        return None, notices
+    return sources, notices
+
+
+def check_doctor_module_present(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
+    """A013 — an adapter that installs ships a `doctor` self-check module.
+
+    The doctor is where an adapter assembles its Install SOP report and, ideally,
+    validates it before it is published. 8 of the 50 swept adapters have one, so
+    this is a convergence warning rather than a baseline error: the gate reports
+    the gap instead of blocking a release.
+
+    Known boundary: the module is matched by name, so a `doctor` that does not
+    validate a report satisfies the rule, and `install_preflight_docs.py` matches
+    `src/**/install*.py` even though it only documents a preflight. Both are
+    acceptable at warning severity, where the finding is a starting point.
+    """
+    rule = contract.rules["A013"]
+    sources, notices = _install_sop_sources(root, contract, ctx, rule)
+    if sources is None:
+        return list(notices)
+    for pattern in contract.value("a013_doctor_module_globs", []):
+        if any(root.glob(pattern)):
+            return list(notices)
+    anchor = "src"
+    for pattern in contract.value("install_source_globs", []):
+        matches = sorted(root.glob(pattern))
+        if matches:
+            anchor = _rel(root, matches[0])
+            break
+    return [
+        *notices,
+        Finding(
+            rule["id"],
+            rule["name"],
+            rule["severity"],
+            anchor,
+            (
+                "this adapter provides install capability but ships no `doctor` "
+                "self-check module; add one that assembles the Install SOP report and "
+                "validates it with `validate_install_sop_report()` (8 of 50 adapters had "
+                "one when the rule was written)"
+            ),
+        ),
+    ]
+
+
+def check_report_validates_against_schema(
+    root: Path, contract: Contract, ctx: dict
+) -> list[Finding]:
+    """A014 — a real report is validated with `validate_install_sop_report()`.
+
+    A schema nobody checks is a claim, not a contract: every adapter in the
+    PIP-3990 incident shipped a schema and none of them ran a report through it,
+    which is how the wrong value reached a release. The validation has to live in
+    a test or in a CI workflow, because those are the only places that run before
+    the artefact is published.
+
+    Known boundary: the symbol is matched as text, so an occurrence in a comment
+    or in a `TODO` satisfies the rule. That trades a false negative for a false
+    positive on a warning-severity rule, which is the same trade the ratchet plan
+    makes everywhere.
+    """
+    rule = contract.rules["A014"]
+    sources, notices = _install_sop_sources(root, contract, ctx, rule)
+    if sources is None:
+        return list(notices)
+    symbols = [name for name in contract.value("a014_validator_symbols", []) if name]
+    if symbols:
+        pattern = re.compile("|".join(r"\b" + re.escape(name) + r"\b" for name in symbols))
+        for path_glob in contract.value("a014_scan_globs", []):
+            for path in sorted(root.glob(path_glob)):
+                text = _read_text(path)
+                if text and pattern.search(text):
+                    return list(notices)
+    return [
+        *notices,
+        Finding(
+            rule["id"],
+            rule["name"],
+            rule["severity"],
+            "tests",
+            (
+                "no test or CI workflow validates a real report with "
+                "`validate_install_sop_report()`; schema compliance is only claimed, and "
+                "that is how the PIP-3990 defect reached a release"
+            ),
+        ),
+    ]
+
+
 RULES: dict[str, Callable[[Path, Contract, dict], list[Finding]]] = {
     "R001": check_no_root_artifacts,
     "R002": check_justfile_lowercase,
@@ -1236,6 +1391,8 @@ RULES: dict[str, Callable[[Path, Contract, dict], list[Finding]]] = {
     "A004": check_ruff_line_length,
     "A005": check_requires_python_declared,
     "A006": check_pre_commit_config_exists,
+    "A013": check_doctor_module_present,
+    "A014": check_report_validates_against_schema,
 }
 
 
