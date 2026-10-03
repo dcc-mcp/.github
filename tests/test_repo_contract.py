@@ -908,6 +908,101 @@ class TestA003CoreFloor(AdapterContractTestCase):
         self.assertEqual(code, 0, findings)
 
 
+class TestA012CoreFloorBaseline(AdapterContractTestCase):
+    """A012 — the declared floor is high enough, not merely declared.
+
+    A003 already fails an unversioned Core dependency, so this rule stays silent
+    there: one gap, one finding.
+    """
+
+    def strict(self) -> tuple[int, list[dict]]:
+        return run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+
+    def a012(self, findings: list[dict]) -> list[dict]:
+        return self.findings_for("A012", findings)
+
+    def core(self, requirements: str, table: str = "[project]") -> None:
+        header = table if table == "[project]" else table
+        body = (
+            f'name = "dcc-mcp-demo"\ndependencies = [\n{requirements}\n]\n'
+            if header == "[project]"
+            else f'name = "dcc-mcp-demo"\n{requirements}\n'
+        )
+        self.repo.write("pyproject.toml", f"{header}\n{body}")
+
+    def test_a_floor_at_the_target_passes(self) -> None:
+        self.adapter_clean()
+        _code, findings = self.strict()
+        self.assertEqual(self.a012(findings), [])
+
+    def test_a_floor_at_the_baseline_is_a_notice(self) -> None:
+        self.adapter_clean()
+        self.core('    "dcc-mcp-core>=0.20.36,<1.0.0",')
+        code, findings = self.strict()
+        self.assertEqual(self.severities(findings, "A012"), {"notice"})
+        self.assertEqual(code, 0, "a notice must never fail the build")
+
+    def test_a_floor_below_the_baseline_warns(self) -> None:
+        self.adapter_clean()
+        self.core('    "dcc-mcp-core>=0.18.2,<1.0.0",')
+        _code, findings = self.strict()
+        self.assertEqual(self.severities(findings, "A012"), {"warning"})
+        self.assertIn("0.20.36", self.a012(findings)[0]["message"])
+
+    def test_an_upper_bound_is_not_mistaken_for_a_floor(self) -> None:
+        # `,<1.0.0` must not be read as a 1.0.0 floor and mask the real one.
+        self.adapter_clean()
+        self.core('    "dcc-mcp-core>=0.19.0,<1.0.0",')
+        _code, findings = self.strict()
+        self.assertEqual(self.severities(findings, "A012"), {"warning"})
+
+    def test_the_highest_declared_bound_wins(self) -> None:
+        self.adapter_clean()
+        self.core('    "dcc-mcp-core>=0.18.2",\n    "dcc-mcp-core>=0.20.36",')
+        _code, findings = self.strict()
+        self.assertEqual(self.severities(findings, "A012"), {"notice"})
+
+    def test_a_caret_operator_is_a_floor(self) -> None:
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[tool.poetry.dependencies]\n"
+            'name = "dcc-mcp-demo"\n'
+            'dcc-mcp-core = "^0.18.2"\n',
+        )
+        _code, findings = self.strict()
+        self.assertEqual(self.severities(findings, "A012"), {"warning"})
+
+    def test_poetry_multi_constraint_uses_the_highest(self) -> None:
+        self.repo.write(
+            "pyproject.toml",
+            "[tool.poetry.dependencies]\n"
+            'name = "dcc-mcp-demo"\n'
+            'dcc-mcp-core = [">=0.18.2", "<1.0.0"]\n',
+        )
+        _code, findings = self.strict()
+        self.assertEqual(self.severities(findings, "A012"), {"warning"})
+
+    def test_an_unversioned_dependency_is_left_to_a003(self) -> None:
+        self.adapter_clean()
+        self.core('    "dcc-mcp-core",')
+        _code, findings = self.strict()
+        self.assertEqual(self.a012(findings), [])
+        self.assertEqual(self.severities(findings, "A003"), {"error"})
+
+    def test_a_repository_without_core_is_out_of_scope(self) -> None:
+        self.adapter_clean()
+        self.core('    "pydantic>=2",')
+        _code, findings = self.strict()
+        self.assertEqual(self.a012(findings), [])
+
+    def test_the_rule_is_not_in_the_baseline_profile(self) -> None:
+        self.adapter_clean()
+        self.core('    "dcc-mcp-core>=0.18.2,<1.0.0",')
+        _code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(self.a012(findings), [])
+
+
 class TestA004LineLength(AdapterContractTestCase):
     def test_the_baseline_value_passes(self) -> None:
         self.adapter_clean()

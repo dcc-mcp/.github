@@ -37,6 +37,7 @@ without a `pyproject.toml` and belongs here.
 | A001 | `no-deprecated-install-sop-alias` — no reference to Core's deprecated `INSTALL_SOP_SCHEMA_VERSION` | error | error | interface |
 | A002 | `no-hand-rolled-report-schema-version` — no locally hard-coded `*_REPORT_SCHEMA_VERSION` | — | warning | interface |
 | A003 | `core-floor-declared` — a declared `dcc-mcp-core` dependency pins a lower bound | error | error | interface |
+| A012 | `core-floor-baseline` — the declared floor is at or above the organisation baseline | — | warning | interface |
 | A004 | `ruff-line-length` — `[tool.ruff] line-length` is `120` | — | warning | convention |
 | A005 | `requires-python-declared` — `project.requires-python` is declared | — | warning | convention |
 | A006 | `pre-commit-config-exists` — `.pre-commit-config.yaml` is present | — | warning | convention |
@@ -130,6 +131,43 @@ highest floor any repository declares today is `>=0.20.36` (autocad, cinema4d,
 freecad, openscad, sketchup). Raising 50 floors is PIP-4101's job, not this
 gate's, so the rule reports the gap and does not fail on it.
 
+### Why A012 separates a baseline from a target
+
+A003 makes a lower bound mandatory. A012 answers the separate question of
+whether the bound is *high enough*, and it carries two numbers because the two
+questions it has to serve have different answers:
+
+```json
+"core_floor_baseline": "0.20.36",
+"core_floor_target": "0.20.40"
+```
+
+`core_floor_baseline` is the highest floor any adapter already declares, so the
+target is reachable on the day the rule lands rather than aspirational. That is
+not a stylistic preference — it is what makes the finding a signal. Measured
+2026-10-03 over the 45 repositories that declare a Core floor:
+
+| Verdict | Count | Repositories |
+|---|---|---|
+| warning (below `0.20.36`) | **40** | floors from `>=0.18.2` (powerpoint) to `>=0.20.34` (premiere) |
+| notice (at `0.20.36`, below `0.20.40`) | **5** | autocad, cinema4d, freecad, openscad, sketchup |
+| pass (at or above `0.20.40`) | **0** | — |
+
+Had the baseline been set at `0.20.40`, all 45 would have warned and the rule
+would have said nothing about which repository is furthest behind. At `0.20.36`
+it ranks the fleet: the 40 warnings are a backlog ordered by how far each
+repository has drifted, and the 5 notices are the repositories that are one
+bump away.
+
+`core_floor_target` is where the shared Install SOP API
+(`install_sop_report_schema_version()`, `validate_install_sop_report()`) becomes
+unconditionally available. Sitting above the baseline but short of the target is
+a **notice**, which is reported but can never fail a run: it is the reason A002
+cannot be promoted to an error yet, not a defect in its own right.
+
+A Core dependency that pins no bound at all is left to A003. One gap, one
+finding.
+
 ### Why A013 and A014 are warnings
 
 Both rules describe a gap that is expensive to close rather than a defect, so
@@ -185,6 +223,7 @@ repositories:
 | A004 | 33 | 30 declare `line-length = 100`, 3 declare none |
 | A005 | 1 | `dcc-mcp-cache-inspector` |
 | A006 | 44 | 6 have a `.pre-commit-config.yaml` |
+| A012 | 40 | plus 5 notices; see below |
 | A013 | 28 | measured 2026-10-03 over the 45 repositories that cloned (see below) |
 | A014 | 27 | includes 5 of the 8 that already ship a `doctor` module |
 
