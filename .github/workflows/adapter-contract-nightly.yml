@@ -59,7 +59,7 @@ jobs:
               repos = json.load(handle)["include"]
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
-              handle.write("repos=" + json.dumps(repos) + "\n")
+              handle.write("repos=" + json.dumps({"include": repos}) + "\n")
               handle.write("has_repos=" + ("true" if repos else "false") + "\n")
           PY
 
