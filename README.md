@@ -59,6 +59,121 @@ repository. Set `strict: true` to fail on tolerated mismatches as well.
 half-applied manifest edit fails the Profile contract workflow instead of silently
 leaving the nightly gate on an outdated list.
 
+## Release CI gate
+
+Release integrity answers "did the release reach PyPI?". This gate answers the question
+that comes *before* the merge: **has CI actually run for this release pull request?**
+
+Those are not the same question, and the second one is harder than it looks. A pull
+request whose CI is parked in GitHub's manual approval queue has **no check runs at
+all**: `gh pr checks` prints nothing, `statusCheckRollup` is empty (or one all-`null`
+entry), and `mergeable` is `MERGEABLE`. Nothing tells you CI is waiting — it looks
+exactly like a pull request that has no CI. A release window that trusts `mergeable`
+then publishes a version no CI ever validated, which is how `dcc-mcp-premiere` v0.6.2
+shipped.
+
+The runs behind this are all authored by `github-actions[bot]`: release-please opens
+the pull request with `secrets.GITHUB_TOKEN`, GitHub does not treat that bot as a
+trusted collaborator, so its `pull_request` runs go to the approval queue. The same
+branch pushed from an account with write access runs immediately — which is why some
+repositories never see this. `dcc-mcp-houdini` proves the fix: its `release.yml` passes
+`secrets.PERSONAL_ACCESS_TOKEN`, so its release pull requests are authored by a real
+collaborator and their CI runs at once.
+
+A second silent shape is worse, because it inverts the signal. Merging a pull request
+that still has a run in the approval queue makes GitHub flip that run to
+`conclusion=failure` — **while it still has zero jobs**. So "CI is red" on a release
+pull request frequently means "an approval request was invalidated by the merge", not
+"a test failed". Treating it as red is as wrong as treating it as green, and it sends
+the next reader looking for a test failure that does not exist.
+
+`scripts/check_release_ci_gate.py` therefore never trusts `conclusion`. It counts
+**jobs**, and returns one of four verdicts:
+
+| Verdict | Meaning | Mergeable |
+|---|---|---|
+| `green` | every run completed successfully and at least one job ran | yes |
+| `red` | a run executed jobs and did not succeed | no |
+| `pending` | a run has not finished yet | no |
+| `no_evidence` | no run produced a single job | no |
+
+`no_evidence` carries a reason: `awaiting_approval` (a run sits in the approval queue),
+`approval_invalidated` (a zero-job failure — a workflow that never ran, usually an
+approval overtaken by the merge), or `no_runs` (nothing was ever triggered). Partial
+evidence is not green either: if CI passed but E2E produced a run that executed zero
+jobs, the verdict is `no_evidence`, because merging ships a version only part of the
+suite saw.
+
+Be precise about the limit of that rule, because the difference matters to anyone
+writing automation against this gate. What is caught is a suite that **produced a run
+which executed no jobs**. A suite that was **never triggered at all** is invisible
+here — if a pull request has only a CI run and no E2E run object exists, the verdict is
+`green`. Telling those two apart needs a per-repository list of which suites are
+expected, which this check does not have. Do not read `green` as "every suite in the
+repository passed"; read it as "every run that exists produced jobs and succeeded".
+
+### Sweeping the open release pull requests
+
+This is what a release window runs before merging anything:
+
+```bash
+python scripts/check_release_ci_gate.py --open-prs
+python scripts/check_release_ci_gate.py --open-prs --repositories dcc-mcp/dcc-mcp-maya,dcc-mcp/dcc-mcp-nuke
+```
+
+### Deciding one pull request
+
+```bash
+python scripts/check_release_ci_gate.py --pr dcc-mcp/dcc-mcp-premiere#19
+```
+
+The verdict is always against the **exact head commit**, never the merge commit. When
+the pull request is already merged the report also shows the push runs of the merge
+commit, as labelled context: it tells you whether an already-published release has to
+be rolled back, and it is never a substitute for the head-commit verdict.
+
+### Listing the parked runs
+
+```bash
+python scripts/check_release_ci_gate.py --org dcc-mcp --format json
+```
+
+Add `--approve` to approve the parked runs the sweep finds. It is off by default:
+approving only lets an already-queued run execute, but it is a live action and should
+be deliberate.
+
+Exit codes: `0` no finding, `1` at least one finding at or above `--fail-on`
+(default `no_evidence`), `2` the check could not be performed.
+
+### Running it from a repository
+
+- `release-ci-gate.yml` - the reusable check (`workflow_call` + `workflow_dispatch`).
+- `release-ci-gate-nightly.yml` - sweeps every open release pull request in the
+  organization once a day and **fails** on any `no_evidence` verdict, so a parked run
+  stops being silent.
+
+```yaml
+jobs:
+  release-ci-gate:
+    uses: dcc-mcp/.github/.github/workflows/release-ci-gate.yml@main
+```
+
+### Removing the cause
+
+The gate stops the merge; it does not stop the queue. To stop runs from parking in the
+first place, give release-please a token that belongs to an account with write access
+instead of `secrets.GITHUB_TOKEN`:
+
+```yaml
+- uses: googleapis/release-please-action@v5
+  with:
+    token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+```
+
+That is the single change that removes the failure mode, and it is per-repository:
+`dcc-mcp-houdini` already works this way. Until every repository does, the gate is what
+keeps a parked run from being read as "no CI, therefore fine".
+
 ## Repository contract
 
 Two machine-readable contracts share one checker, `scripts/check_repo_contract.py`, which
