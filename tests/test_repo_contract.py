@@ -1003,6 +1003,123 @@ class TestA006PreCommit(AdapterContractTestCase):
         self.assertIn(".pre-commit-config.yaml", hits[0]["path"])
 
 
+class TestA013DoctorModule(AdapterContractTestCase):
+    """A013 — an install adapter ships a doctor self-check."""
+
+    def install_surface(self) -> None:
+        """Give the fixture an Install SOP surface without tripping A001."""
+        self.repo.write(
+            "src/dcc_mcp_demo/install.py",
+            "from dcc_mcp_core.deployment import INSTALL_EXIT_OK\n",
+        )
+
+    def strict(self) -> list[dict]:
+        _code, findings = run_cli(
+            self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT
+        )
+        return findings
+
+    def test_an_adapter_without_an_install_surface_is_skipped(self) -> None:
+        self.adapter_clean()
+        self.assertEqual(self.findings_for("A013", self.strict()), [])
+
+    def test_an_install_module_without_a_doctor_warns(self) -> None:
+        self.adapter_clean()
+        self.install_surface()
+        hits = self.findings_for("A013", self.strict())
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["severity"], "warning")
+        self.assertEqual(hits[0]["path"], "src/dcc_mcp_demo/install.py")
+
+    def test_a_doctor_module_satisfies_the_rule(self) -> None:
+        self.adapter_clean()
+        self.install_surface()
+        self.repo.write("src/dcc_mcp_demo/doctor.py", "REPORT = {}\n")
+        self.assertEqual(self.findings_for("A013", self.strict()), [])
+
+    def test_a_doctor_package_satisfies_the_rule(self) -> None:
+        self.adapter_clean()
+        self.install_surface()
+        self.repo.write("src/dcc_mcp_demo/doctor/__init__.py", "")
+        self.assertEqual(self.findings_for("A013", self.strict()), [])
+
+    def test_a_module_named_for_installing_is_surface_enough(self) -> None:
+        """An adapter that has not adopted the shared symbols is still in scope."""
+        self.adapter_clean()
+        self.repo.write("src/dcc_mcp_demo/install.py", "STEPS = []\n")
+        hits = self.findings_for("A013", self.strict())
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["path"], "src/dcc_mcp_demo/install.py")
+
+    def test_an_unrelated_doctor_named_file_is_not_a_module(self) -> None:
+        self.adapter_clean()
+        self.install_surface()
+        self.repo.write("src/dcc_mcp_demo/doctor_notes.md", "# doctor\n")
+        self.assertEqual(len(self.findings_for("A013", self.strict())), 1)
+
+
+class TestA014ReportValidates(AdapterContractTestCase):
+    """A014 — a real report runs through validate_install_sop_report()."""
+
+    def install_surface(self) -> None:
+        self.repo.write(
+            "src/dcc_mcp_demo/install.py",
+            "from dcc_mcp_core.deployment import INSTALL_EXIT_OK\n",
+        )
+
+    def strict(self) -> list[dict]:
+        _code, findings = run_cli(
+            self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT
+        )
+        return findings
+
+    def test_an_adapter_without_an_install_surface_is_skipped(self) -> None:
+        self.adapter_clean()
+        self.assertEqual(self.findings_for("A014", self.strict()), [])
+
+    def test_an_assembled_report_that_is_never_validated_warns(self) -> None:
+        self.adapter_clean()
+        self.install_surface()
+        hits = self.findings_for("A014", self.strict())
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["severity"], "warning")
+        self.assertEqual(hits[0]["path"], "tests")
+
+    def test_validation_in_a_test_satisfies_the_rule(self) -> None:
+        self.adapter_clean()
+        self.install_surface()
+        self.repo.write(
+            "tests/test_report.py",
+            "from dcc_mcp_core.deployment import validate_install_sop_report\n"
+            "def test_report():\n"
+            "    validate_install_sop_report(build())\n",
+        )
+        self.assertEqual(self.findings_for("A014", self.strict()), [])
+
+    def test_validation_in_a_workflow_satisfies_the_rule(self) -> None:
+        self.adapter_clean()
+        self.install_surface()
+        self.repo.write(
+            ".github/workflows/ci.yml",
+            "jobs:\n  check:\n    steps:\n      - run: python -c 'validate_install_sop_report(r)'\n",
+        )
+        self.assertEqual(self.findings_for("A014", self.strict()), [])
+
+    def test_a_different_validator_does_not_satisfy_the_rule(self) -> None:
+        self.adapter_clean()
+        self.install_surface()
+        self.repo.write("tests/test_report.py", "def test_report():\n    check(report)\n")
+        self.assertEqual(len(self.findings_for("A014", self.strict())), 1)
+
+    def test_a_longer_symbol_name_is_not_the_validator(self) -> None:
+        self.adapter_clean()
+        self.install_surface()
+        self.repo.write(
+            "tests/test_report.py", "def test_report():\n    validate_install_sop_report_v2(r)\n"
+        )
+        self.assertEqual(len(self.findings_for("A014", self.strict())), 1)
+
+
 class TestMatrix(unittest.TestCase):
     def write_manifest(self, payload: dict) -> Path:
         handle = tempfile.NamedTemporaryFile(
