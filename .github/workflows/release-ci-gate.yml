@@ -1,0 +1,153 @@
+name: Release CI gate
+
+# Decides, for a set of open release pull requests, whether merging is allowed.
+#
+# The whole point is the distinction `gh pr checks` cannot make: a release pull
+# request whose CI is parked in GitHub's approval queue has *no* check runs at all,
+# so it looks identical to a pull request that simply has no CI. `mergeable` is green
+# in both cases, and a release window that trusts `mergeable` publishes a version that
+# no CI ever validated - which is exactly how dcc-mcp-premiere v0.6.2 shipped.
+#
+# `scripts/check_release_ci_gate.py` counts *jobs* instead of trusting `conclusion`,
+# because a run can carry `conclusion=failure` while having executed zero jobs: that
+# is a pending approval being invalidated by the merge, not a failing test.
+
+on:
+  workflow_call:
+    inputs:
+      org:
+        description: "Organization whose open release pull requests are swept."
+        required: false
+        type: string
+        default: dcc-mcp
+      repositories:
+        description: >
+          Comma-separated `org/repo` list. Empty means every repository of `org`.
+        required: false
+        type: string
+        default: ""
+      branch_prefix:
+        description: "Branch prefix that identifies a release pull request."
+        required: false
+        type: string
+        default: "release-please--"
+      fail_on:
+        description: "Severity that fails the run: none, red, or no_evidence."
+        required: false
+        type: string
+        default: "no_evidence"
+      ref:
+        description: "Git ref of dcc-mcp/.github that holds the check script."
+        required: false
+        type: string
+        default: main
+  workflow_dispatch:
+    inputs:
+      org:
+        description: "Organization whose open release pull requests are swept."
+        required: false
+        type: string
+        default: dcc-mcp
+      repositories:
+        description: 'Comma-separated `org/repo` list, for example "dcc-mcp/dcc-mcp-maya".'
+        required: false
+        type: string
+        default: ""
+      branch_prefix:
+        description: "Branch prefix that identifies a release pull request."
+        required: false
+        type: string
+        default: "release-please--"
+      fail_on:
+        description: "Severity that fails the run: none, red, or no_evidence."
+        required: false
+        type: string
+        default: "no_evidence"
+      ref:
+        description: "Git ref of dcc-mcp/.github that holds the check script."
+        required: false
+        type: string
+        default: main
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+concurrency:
+  group: release-ci-gate
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Release pull request CI gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: dcc-mcp/.github
+          ref: ${{ inputs.ref || 'main' }}
+          sparse-checkout: scripts
+          path: release-ci-gate
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Evaluate the merge gate of every open release pull request
+        id: gate
+        working-directory: release-ci-gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ORG: ${{ inputs.org }}
+          REPOSITORIES: ${{ inputs.repositories }}
+          BRANCH_PREFIX: ${{ inputs.branch_prefix }}
+          FAIL_ON: ${{ inputs.fail_on }}
+        run: |
+          set -euo pipefail
+          args=(--org "$ORG" --open-prs --branch-prefix "$BRANCH_PREFIX" --fail-on "$FAIL_ON")
+          if [ -n "${REPOSITORIES:-}" ]; then
+            args+=(--repositories "$REPOSITORIES")
+          fi
+          set +e
+          python scripts/check_release_ci_gate.py "${args[@]}" | tee gate.log
+          status=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "status=$status"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Summarise the verdicts
+        if: always()
+        working-directory: release-ci-gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "## Release pull request CI gate"
+            echo
+            echo 'A `no_evidence` verdict means CI never ran for that head commit:'
+            echo 'either the run is parked in the GitHub approval queue, or it finished'
+            echo 'with zero jobs. Neither is green, and neither may be merged.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -f gate.log ]; then
+            printf '```\n' >> "$GITHUB_STEP_SUMMARY"
+            cat gate.log >> "$GITHUB_STEP_SUMMARY"
+            printf '```\n' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Fail on blocked release pull requests
+        env:
+          GATE_STATUS: ${{ steps.gate.outputs.status }}
+        run: |
+          if [ "$GATE_STATUS" = "2" ]; then
+            echo "::error::the release CI gate could not be performed"
+            exit 1
+          fi
+          if [ "$GATE_STATUS" != "0" ]; then
+            echo "::error::at least one release pull request has no CI evidence or is red"
+            exit 1
+          fi
+          echo "every open release pull request has CI evidence"

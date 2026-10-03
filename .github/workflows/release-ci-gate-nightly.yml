@@ -1,0 +1,25 @@
+name: Release CI gate (nightly)
+
+# Turns a silent failure into a visible one.
+#
+# A release pull request whose CI is parked in GitHub's approval queue shows no check
+# runs at all, so nothing alerts: not the pull request page, not `gh pr checks`, not
+# `mergeable`. This sweep runs the merge gate over every open release pull request in
+# the organization once a day and fails whenever one of them would be merged without
+# CI having run.
+
+on:
+  schedule:
+    - cron: "43 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-ci-gate-nightly
+  cancel-in-progress: false
+
+jobs:
+  release-ci-gate:
+    uses: ./.github/workflows/release-ci-gate.yml
