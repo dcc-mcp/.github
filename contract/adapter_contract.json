@@ -193,6 +193,9 @@
     ".pre-commit-config.yaml",
     ".pre-commit-config.yml"
   ],
-  "ruff_standalone_configs": ["ruff.toml", ".ruff.toml"],
+  "ruff_standalone_configs": [
+    ".ruff.toml",
+    "ruff.toml"
+  ],
   "release_please_files": ["release-please-config.json", ".release-please-manifest.json"]
 }

@@ -75,7 +75,7 @@ def _ruff_config(root: Path, contract: Contract) -> RuffConfig:
     parsed = _read_toml(root, pyproject)
     if parsed is None:
         return pyproject, None, False
-    table = contract.value("ruff_pyproject_table", "tool.ruff")
+    table = contract.value("ruff_line_length_table", "tool.ruff")
     settings = parsed.get(table)
     return pyproject, settings if isinstance(settings, dict) else None, True
 

@@ -10,6 +10,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -125,6 +126,33 @@ class TestContractFile(ContractTestCase):
                 contract = Contract.load(Path(path))
                 for rule_id, rule in contract.rules.items():
                     self.assertIn(rule["severity"], {"error", "warning", "notice"}, rule_id)
+
+    def test_every_contract_key_the_checkers_read_is_defined(self) -> None:
+        """A threshold the code reads has to exist in one of the contracts.
+
+        contract.value() takes a default, so a key that is misspelled or left
+        behind after a rename falls back silently and every test still passes.
+        This pins the vocabulary instead: the checkers may only read keys the
+        contracts actually declare.
+        """
+        declared: set[str] = set()
+        for path in ALL_CONTRACTS:
+            declared |= set(Contract.load(Path(path)).data)
+
+        referenced: set[str] = set()
+        for module in (
+            Path("scripts/check_repo_contract.py"),
+            Path("scripts/adapter_contract_rules.py"),
+        ):
+            source = (ROOT / module).read_text(encoding="utf-8")
+            referenced |= {
+                key
+                for key, default in re.findall(
+                    r'contract\.value\(\s*"([^"]+)"\s*(?:,\s*([^)]*))?\)', source
+                )
+            }
+        self.assertTrue(referenced, "the regex found no contract.value() calls")
+        self.assertEqual(referenced - declared, set())
 
     def test_adapter_contract_baseline_is_enforceable_immediately(self) -> None:
         """The two baseline rules need no Core floor bump to satisfy."""

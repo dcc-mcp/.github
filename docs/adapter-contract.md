@@ -266,13 +266,13 @@ repositories:
 | A001 | 12 | 8 use the alias as an artifact revision (rename), 4 feed it into a report field or import it vestigially (delete) |
 | A002 | 12 | 13 hard-coded constants in total |
 | A003 | 0 | 45 of 50 declare a Core dependency with a lower bound; the other 5 declare none and are skipped (`dcc-mcp-cache-inspector`, `dcc-mcp-epic`, `dcc-mcp-maya-procedural-architecture`, `dcc-mcp-runtime`, and `dcc-mcp-core`, which owns the distribution) |
-| A004 | 33 | 30 declare `line-length = 100`, 3 declare none |
+| A004 | 30 | all 30 declare `line-length = 100`, against a baseline of 120 |
 | A005 | 1 | `dcc-mcp-cache-inspector` |
 | A006 | 44 | 6 have a `.pre-commit-config.yaml` |
 | A012 | 40 | plus 5 notices; see below |
 | A013 | 28 | measured 2026-10-03 over the 45 repositories that cloned (see below) |
 | A014 | 27 | includes 5 of the 8 that already ship a `doctor` module |
-| A021 | 4 | `dcc-mcp-powerpoint`, `dcc-mcp-openscreen` and `dcc-mcp-gaea` have a `pyproject.toml` without `[tool.ruff]`; `fpt-cli` has no `pyproject.toml` at all and is reported by A005 instead |
+| A021 | 3 | `dcc-mcp-powerpoint`, `dcc-mcp-openscreen` and `dcc-mcp-gaea` have a `pyproject.toml` without `[tool.ruff]`. A repository with no `pyproject.toml` at all is A005's gap, not this one |
 | A024 | 1 | `dcc-mcp-cache-inspector`, missing both files |
 
 The A001–A006 rows were measured 2026-10-02 over all 50 repositories. The A013
