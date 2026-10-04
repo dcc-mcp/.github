@@ -43,12 +43,23 @@ without a `pyproject.toml` and belongs here.
 | A006 | `pre-commit-config-exists` — `.pre-commit-config.yaml` is present | — | warning | convention |
 | A013 | `doctor-module-present` — an adapter that installs ships a `doctor` self-check | — | warning | interface |
 | A014 | `report-validates-against-schema` — a real report runs through `validate_install_sop_report()` | — | warning | interface |
+| A021 | `ruff-config-present` — the repository configures ruff at all | — | warning | convention |
+| A024 | `release-please-present` — release-please config and manifest exist | — | warning | convention |
 
 Ids A007–A012 are unassigned on purpose. The Install SOP interface family was
 numbered A010–A014 by PIP-4106 before A001–A006 existed; three of those five
 rules were already covered here as A001, A002 and A003 when the family was
 landed, so only the two that were not — the `doctor` module and the report
 validation — were added, under their original ids.
+
+A021 and A024 are the code-convention family added by PIP-4107. They are the
+two rules this contract did not already have: the line-length **value** is
+A004's, `requires-python` is A005's and the pre-commit hook is A006's, so a
+second id for any of those would turn one gap into two findings and give the
+ratchet two places to move. Where PIP-4107 measured something the existing
+rules could not see, the capability moved into the rule that owns it rather
+than into a new one — A004 now resolves a standalone `ruff.toml` the way ruff
+itself does, and A006 accepts the `.yml` spelling of the pre-commit config.
 
 ### Why A001 can be an error on day one
 
@@ -201,6 +212,41 @@ organisation Python 3.7 red line (PIP-2519) holds until **2026-12-31**. The rule
 therefore checks only that the range is *visible to pip*, and leaves the value
 to the host.
 
+### What A021 and A024 judge
+
+Each rule covers exactly one gap, and no gap is covered twice.
+
+**A024** requires every file in `release_please_files`, reporting each missing
+one separately so the annotation points at the file to add. release-please is
+how the organisation versions and publishes, so a repository without it
+releases by hand.
+
+**A021** reports a repository that has a `pyproject.toml` but no ruff
+configuration anywhere: no standalone `ruff.toml` or `.ruff.toml`, and no
+`[tool.ruff]` table. Without one, ruff runs on its own defaults and the lint
+settings differ between a developer machine and CI. A repository with no
+`pyproject.toml` at all is left to A005 — one gap, one finding.
+
+### Where A004 and A006 absorbed the rest
+
+**A004** resolves `line-length` the way ruff itself does: a standalone
+`ruff.toml` or `.ruff.toml` wins, and only then does `[tool.ruff]` in
+`pyproject.toml` apply. This is a latent-false-positive fix rather than a new
+check — no registered repository uses a standalone configuration today, but the
+moment one does, reading only `pyproject.toml` would report "declares no
+line-length" when the setting is simply in the other file. A004 reports a
+`[tool.ruff]` table that omits `line-length`, because ruff would then fall back
+to its own default of 88 and that silence is the drift; it stays quiet when
+there is no ruff configuration at all, which is A021's gap, and when there is
+no `pyproject.toml`, which is A005's.
+
+**A006** accepts `.pre-commit-config.yaml` and `.pre-commit-config.yml`,
+matching both spellings pre-commit itself looks for. It is a contract-only
+change: the rule already iterates `pre_commit_configs`.
+
+Values that are not judged are still visible in the finding messages: the
+nightly output is the backlog list, and every message says what to do next.
+
 ## The two-tier profile
 
 `baseline` holds A001 and A003. Both are mechanical, both are satisfied by
@@ -220,12 +266,14 @@ repositories:
 | A001 | 12 | 8 use the alias as an artifact revision (rename), 4 feed it into a report field or import it vestigially (delete) |
 | A002 | 12 | 13 hard-coded constants in total |
 | A003 | 0 | 45 of 50 declare a Core dependency with a lower bound; the other 5 declare none and are skipped (`dcc-mcp-cache-inspector`, `dcc-mcp-epic`, `dcc-mcp-maya-procedural-architecture`, `dcc-mcp-runtime`, and `dcc-mcp-core`, which owns the distribution) |
-| A004 | 33 | 30 declare `line-length = 100`, 3 declare none |
+| A004 | 30 | all 30 declare `line-length = 100`, against a baseline of 120 |
 | A005 | 1 | `dcc-mcp-cache-inspector` |
 | A006 | 44 | 6 have a `.pre-commit-config.yaml` |
 | A012 | 40 | plus 5 notices; see below |
 | A013 | 28 | measured 2026-10-03 over the 45 repositories that cloned (see below) |
 | A014 | 27 | includes 5 of the 8 that already ship a `doctor` module |
+| A021 | 3 | `dcc-mcp-powerpoint`, `dcc-mcp-openscreen` and `dcc-mcp-gaea` have a `pyproject.toml` without `[tool.ruff]`. A repository with no `pyproject.toml` at all is A005's gap, not this one |
+| A024 | 1 | `dcc-mcp-cache-inspector`, missing both files |
 
 The A001–A006 rows were measured 2026-10-02 over all 50 repositories. The A013
 and A014 rows were measured 2026-10-03 over the same sweep; five repositories

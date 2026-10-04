@@ -98,6 +98,24 @@
         "The validator is matched as text over the scan globs, so a mention in a comment or in a TODO line satisfies the rule."
       ],
       "remediation": "Call validate_install_sop_report() on the report a doctor run actually produces, not on a hand-written fixture."
+    },
+    {
+      "id": "A021",
+      "name": "ruff-config-present",
+      "title": "The repository configures ruff",
+      "severity": "warn",
+      "profiles": ["strict"],
+      "source": "PIP-4107",
+      "summary": "A standalone ruff.toml or a [tool.ruff] section in pyproject.toml must exist. Without it ruff runs on its own defaults and the lint settings differ per developer."
+    },
+    {
+      "id": "A024",
+      "name": "release-please-present",
+      "title": "release-please config and manifest exist",
+      "severity": "warn",
+      "profiles": ["strict"],
+      "source": "PIP-4107",
+      "summary": "Every file in release_please_files must exist. release-please is how the org versions and publishes, so a repository without it releases by hand."
     }
   ],
   "deprecated_symbols": {
@@ -171,5 +189,13 @@
   "ruff_line_length_table": "tool.ruff",
   "requires_python_table": "project",
   "requires_python_key": "requires-python",
-  "pre_commit_configs": [".pre-commit-config.yaml", ".pre-commit-config.yml"]
+  "pre_commit_configs": [
+    ".pre-commit-config.yaml",
+    ".pre-commit-config.yml"
+  ],
+  "ruff_standalone_configs": [
+    ".ruff.toml",
+    "ruff.toml"
+  ],
+  "release_please_files": ["release-please-config.json", ".release-please-manifest.json"]
 }

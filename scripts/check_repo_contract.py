@@ -1270,28 +1270,24 @@ def check_core_floor_baseline(root: Path, contract: Contract, ctx: dict) -> list
     return []
 
 
-def check_ruff_line_length(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
-    """A004 — [tool.ruff] line-length converges on one value."""
-    rule = contract.rules["A004"]
-    target = contract.value("ruff_line_length_target", 120)
-    table_name = contract.value("ruff_line_length_table", "tool.ruff")
-    name = contract.value("pyproject_file", "pyproject.toml")
-    data = _pyproject(contract, ctx)
-    if not data:
-        # A005 already reports the missing pyproject.toml; piling a second
-        # finding on it would say the same thing twice.
-        return []
-    declared = _table(data, table_name).get("line-length")
+def _line_length_finding(
+    rule: dict, path: str, target: object, declared: object
+) -> list[Finding]:
+    """The single verdict A004 renders, wherever line-length was declared.
+
+    ``path`` is the file the setting was read from, so the finding points at the
+    file a contributor actually has to edit.
+    """
     if declared is None:
         return [
             Finding(
                 rule["id"],
                 rule["name"],
                 rule["severity"],
-                name,
+                path,
                 (
-                    f"[{table_name}] declares no line-length; set `line-length = {target}` to "
-                    "match the organisation baseline"
+                    f"declares no line-length; set `line-length = {target}` to match "
+                    "the organisation baseline"
                 ),
             )
         ]
@@ -1303,8 +1299,8 @@ def check_ruff_line_length(root: Path, contract: Contract, ctx: dict) -> list[Fi
                 rule["id"],
                 rule["name"],
                 rule["severity"],
-                name,
-                f"[{table_name}] line-length = {declared!r} is not an integer",
+                path,
+                f"line-length = {declared!r} is not an integer",
             )
         ]
     if value == int(target):
@@ -1314,13 +1310,52 @@ def check_ruff_line_length(root: Path, contract: Contract, ctx: dict) -> list[Fi
             rule["id"],
             rule["name"],
             rule["severity"],
-            name,
+            path,
             (
-                f"[{table_name}] line-length = {value}; converge on {target} "
-                "(core, maya, blender, houdini, nuke, zbrush and substance3d-* already use it)"
+                f"line-length = {value}; converge on {target} (core, maya, blender, houdini, "
+                "nuke, zbrush and substance3d-* already use it)"
             ),
         )
     ]
+
+
+def check_ruff_line_length(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
+    """A004 — the ruff line-length converges on one value.
+
+    The setting is read the way ruff itself resolves it: a standalone
+    ``ruff.toml`` (or ``.ruff.toml``) wins, and only then does the
+    ``[tool.ruff]`` table in pyproject.toml apply. A repository that moves its
+    configuration into ``ruff.toml`` would otherwise be reported as "declares no
+    line-length" when the setting is simply in the other file.
+
+    Two gaps belong to other rules and are deliberately left silent here:
+    a missing pyproject.toml is A005's, and a repository with no ruff
+    configuration at all is A021's. One gap, one finding.
+    """
+    rule = contract.rules["A004"]
+    target = contract.value("ruff_line_length_target", 120)
+    table_name = contract.value("ruff_line_length_table", "tool.ruff")
+    name = contract.value("pyproject_file", "pyproject.toml")
+
+    for standalone in contract.value("ruff_standalone_configs", []):
+        path = root / standalone
+        if not path.is_file():
+            continue
+        settings = parse_vx_toml(_read_text(path) or "")[0]
+        declared = settings.get("line-length")
+        declared = None if isinstance(declared, dict) else declared
+        return _line_length_finding(rule, standalone, target, declared)
+
+    data = _pyproject(contract, ctx)
+    if not data:
+        # A005 already reports the missing pyproject.toml; piling a second
+        # finding on it would say the same thing twice.
+        return []
+    table = _table(data, table_name)
+    if not table:
+        # No [tool.ruff] table and no standalone file: A021 owns that gap.
+        return []
+    return _line_length_finding(rule, name, target, table.get("line-length"))
 
 
 def check_requires_python_declared(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
@@ -1508,6 +1543,21 @@ RULES: dict[str, Callable[[Path, Contract, dict], list[Finding]]] = {
 }
 
 
+def all_rules() -> dict[str, Callable[..., list[Finding]]]:
+    """Every rule the checker can dispatch, across every contract.
+
+    ``RULES`` stays exactly the rule set of contract/repo_contract.json so that
+    "every contract rule has an implementation" keeps a precise meaning. Rules
+    for other contracts live in their own modules -- the adapter families under
+    ``adapter_contract_rules`` -- and are imported here rather than at module
+    scope, because those modules import ``Finding`` and ``Contract`` back out of
+    this one and a module-level import would be a cycle.
+    """
+    from adapter_contract_rules import ADAPTER_RULES
+
+    return {**RULES, **ADAPTER_RULES}
+
+
 # ----------------------------------------------------------------------- driver
 
 
@@ -1534,7 +1584,7 @@ def resolve_plan(
     plan = {}
     for rule_id in sorted(selected):
         rule = contract.rules[rule_id]
-        handler = RULES.get(rule_id)
+        handler = all_rules().get(rule_id)
         if handler is None:
             raise ContractError(
                 f"contract defines rule {rule_id} but no checker implements it"
