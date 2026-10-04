@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Adapter contract rules: the Python code-style family, A020-A024.
+"""Adapter contract rules: the code-convention family, A021 and A024.
 
 The rules and their thresholds live in ``contract/adapter_contract.json``; this
 module only implements the mechanics, exactly like ``check_repo_contract.py``
@@ -14,14 +14,16 @@ editing the middle of the same array.
 
 Rules
 -----
-    A020 ruff-line-length          [tool.ruff] line-length is the org baseline
-    A021 ruff-config-present       the repository configures ruff at all
-    A022 pre-commit-present        a .pre-commit-config.yaml runs the checks locally
-    A023 requires-python-declared  pyproject.toml declares requires-python
-    A024 release-please-present    release-please config and manifest exist
+    A021 ruff-config-present     the repository configures ruff at all
+    A024 release-please-present  release-please config and manifest exist
 
-A020 and A021 read the same configuration. When there is no ruff configuration
-at all A021 reports it and A020 stays silent: one gap, one finding.
+Only the two rules the rest of the adapter contract does not already cover.
+The line-length value itself is A004's, the presence of a pre-commit hook is
+A006's, and `requires-python` is A005's: each of those already exists in main,
+so a second id for the same gap would give the nightly sweep two findings for
+one defect and two places to ratchet. A021 and A024 fill the two holes the
+existing rules leave -- a repository with no ruff configuration at all, and one
+with no release-please automation.
 """
 
 from __future__ import annotations
@@ -57,8 +59,10 @@ def _ruff_config(root: Path, contract: Contract) -> RuffConfig:
     """Return ``(path, settings, pyproject_exists)`` for the ruff configuration.
 
     A standalone ``ruff.toml`` wins over ``pyproject.toml`` because that is the
-    order ruff itself resolves them in. Settings is None when the file exists
-    but carries no ruff table -- A021 reports that, A020 must not double-report.
+    order ruff itself resolves them in -- the same order A004 now walks when it
+    reads ``line-length``, so the two rules can never disagree about which file
+    the setting lives in. Settings is None when the file exists but carries no
+    ruff table; that is the gap A021 reports.
     """
     for name in contract.value("ruff_standalone_configs", []):
         parsed = _read_toml(root, name)
@@ -87,99 +91,24 @@ def _finding(rule: dict[str, Any], path: str, message: str) -> Finding:
 # ------------------------------------------------------------------------- rules
 
 
-def check_ruff_line_length(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
-    rule = contract.rules["A020"]
-    path, settings, _ = _ruff_config(root, contract)
-    if settings is None:
-        return []
-    baseline = contract.value("ruff_line_length", 120)
-    declared = settings.get("line-length")
-    if declared is None:
-        return [
-            _finding(
-                rule,
-                path,
-                (
-                    "declares no line-length, so ruff silently falls back to its own "
-                    f"default instead of the org baseline of {baseline}; set "
-                    f"line-length = {baseline} explicitly"
-                ),
-            )
-        ]
-    if _as_text(declared) != _as_text(baseline):
-        return [
-            _finding(
-                rule,
-                path,
-                (
-                    f"line-length = {declared}, but the org baseline is {baseline}; either "
-                    f"reformat to {baseline} or record the exception in the contract so the "
-                    "difference is a decision rather than drift"
-                ),
-            )
-        ]
-    return []
-
-
 def check_ruff_config_present(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
     rule = contract.rules["A021"]
     path, settings, pyproject_exists = _ruff_config(root, contract)
     if settings is not None:
         return []
-    table = contract.value("ruff_pyproject_table", "tool.ruff")
-    if pyproject_exists:
-        message = (
-            f"has no [{table}] section; ruff then runs on its own defaults, so the "
-            "lint rules differ between a developer machine and CI"
-        )
-    else:
-        message = (
-            "no ruff configuration found; add a standalone ruff.toml or a "
-            f"[{table}] section in {path} so formatting and linting are decided once"
-        )
-    return [_finding(rule, path, message)]
-
-
-def check_pre_commit_present(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
-    rule = contract.rules["A022"]
-    names = contract.value("pre_commit_config_names", [".pre-commit-config.yaml"])
-    for name in names:
-        if (root / name).is_file():
-            return []
-    expected = ", ".join(f"`{name}`" for name in names)
-    return [
-        _finding(
-            rule,
-            names[0] if names else ".pre-commit-config.yaml",
-            (
-                f"no pre-commit configuration ({expected}); without a hook the contract is "
-                "only enforced in CI, so feedback moves from seconds to minutes"
-            ),
-        )
-    ]
-
-
-def check_requires_python_declared(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
-    rule = contract.rules["A023"]
-    pyproject = contract.value("pyproject_file", "pyproject.toml")
-    parsed = _read_toml(root, pyproject)
-    if parsed is None:
-        # Not a Python package; whether that is correct is the applicability
-        # rule's question, not this one.
+    if not pyproject_exists:
+        # A registered adapter with no pyproject.toml at all is A005's gap:
+        # one gap, one finding.
         return []
-    tables = contract.value("requires_python_tables", ["project"])
-    for table in tables:
-        section = parsed.get(table)
-        if isinstance(section, dict) and "requires-python" in section:
-            return []
+    table = contract.value("ruff_line_length_table", "tool.ruff")
     return [
         _finding(
             rule,
-            pyproject,
+            path,
             (
-                "declares no requires-python; pip then installs the package on any "
-                "interpreter and the failure surfaces inside a DCC host instead of at "
-                f"resolve time. Declare it in [{tables[0]}]"
+                f"has no [{table}] section and no standalone ruff configuration; ruff "
+                "then runs on its own defaults, so the lint rules differ between a "
+                "developer machine and CI"
             ),
         )
     ]
@@ -205,9 +134,6 @@ def check_release_please_present(root: Path, contract: Contract, ctx: dict) -> l
 
 
 ADAPTER_RULES: dict[str, Callable[..., list[Finding]]] = {
-    "A020": check_ruff_line_length,
     "A021": check_ruff_config_present,
-    "A022": check_pre_commit_present,
-    "A023": check_requires_python_declared,
     "A024": check_release_please_present,
 }

@@ -100,15 +100,6 @@
       "remediation": "Call validate_install_sop_report() on the report a doctor run actually produces, not on a hand-written fixture."
     },
     {
-      "id": "A020",
-      "name": "ruff-line-length",
-      "title": "[tool.ruff] line-length is the org baseline",
-      "severity": "warn",
-      "profiles": ["strict"],
-      "source": "PIP-4107",
-      "summary": "The declared line-length must equal ruff_line_length. A repository without any ruff configuration is reported by A021, not here."
-    },
-    {
       "id": "A021",
       "name": "ruff-config-present",
       "title": "The repository configures ruff",
@@ -116,24 +107,6 @@
       "profiles": ["strict"],
       "source": "PIP-4107",
       "summary": "A standalone ruff.toml or a [tool.ruff] section in pyproject.toml must exist. Without it ruff runs on its own defaults and the lint settings differ per developer."
-    },
-    {
-      "id": "A022",
-      "name": "pre-commit-present",
-      "title": "A pre-commit configuration runs the checks locally",
-      "severity": "warn",
-      "profiles": ["strict"],
-      "source": "PIP-4107",
-      "summary": "One of pre_commit_config_names must exist. It is the premise for enforcing any convention locally: without a hook the contract is only enforced in CI."
-    },
-    {
-      "id": "A023",
-      "name": "requires-python-declared",
-      "title": "pyproject.toml declares requires-python",
-      "severity": "warn",
-      "profiles": ["strict"],
-      "source": "PIP-4107",
-      "summary": "requires-python must be present in one of requires_python_tables. This rule checks that it is declared, not what it says: the org Python 3.7 red line (PIP-2519) runs to 2026-12-31, so the value itself stays a per-host decision until then."
     },
     {
       "id": "A024",
@@ -216,11 +189,10 @@
   "ruff_line_length_table": "tool.ruff",
   "requires_python_table": "project",
   "requires_python_key": "requires-python",
-  "pre_commit_configs": [".pre-commit-config.yaml", ".pre-commit-config.yml"],
+  "pre_commit_configs": [
+    ".pre-commit-config.yaml",
+    ".pre-commit-config.yml"
+  ],
   "ruff_standalone_configs": ["ruff.toml", ".ruff.toml"],
-  "ruff_pyproject_table": "tool.ruff",
-  "ruff_line_length": 120,
-  "pre_commit_config_names": [".pre-commit-config.yaml", ".pre-commit-config.yml"],
-  "requires_python_tables": ["project"],
   "release_please_files": ["release-please-config.json", ".release-please-manifest.json"]
 }

@@ -1030,7 +1030,29 @@ class TestA004LineLength(AdapterContractTestCase):
         self.assertIn("line-length = 100", hits[0]["message"])
         self.assertIn("120", hits[0]["message"])
 
-    def test_an_undeclared_value_is_reported_as_undeclared(self) -> None:
+    def test_a_ruff_table_that_omits_line_length_is_reported(self) -> None:
+        # The table is there but silent on line-length, so ruff falls back to
+        # its own default of 88. That silence is the drift the rule exists for.
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[project]\n"
+            'name = "dcc-mcp-demo"\n'
+            'requires-python = ">=3.9"\n'
+            'dependencies = ["dcc-mcp-core>=0.20.40"]\n'
+            "\n[tool.ruff]\n"
+            'target-version = "py39"\n',
+        )
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        hits = self.findings_for("A004", findings)
+        self.assertEqual(len(hits), 1)
+        self.assertIn("declares no line-length", hits[0]["message"])
+        # The gap is not reported twice: A021 sees a ruff configuration.
+        self.assertEqual(self.findings_for("A021", findings), [])
+
+    def test_a_repository_with_no_ruff_table_is_left_to_a021(self) -> None:
+        # Used to be reported here as "declares no line-length". The setting
+        # cannot be wrong when it is nowhere, and A021 already reports it.
         self.adapter_clean()
         self.repo.write(
             "pyproject.toml",
@@ -1040,12 +1062,84 @@ class TestA004LineLength(AdapterContractTestCase):
             'dependencies = ["dcc-mcp-core>=0.20.40"]\n',
         )
         _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
-        hits = self.findings_for("A004", findings)
-        self.assertEqual(len(hits), 1)
-        self.assertIn("declares no line-length", hits[0]["message"])
+        self.assertEqual(self.findings_for("A004", findings), [])
+        self.assertEqual(len(self.findings_for("A021", findings)), 1)
 
     def test_a_repository_without_pyproject_is_left_to_a005(self) -> None:
         self.repo.clean()
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        self.assertEqual(self.findings_for("A004", findings), [])
+
+    def test_a_standalone_ruff_toml_is_read_first(self) -> None:
+        # ruff resolves a standalone ruff.toml before pyproject.toml, so the
+        # gate has to as well -- otherwise a repository that moves its config
+        # is reported as "declares no line-length" when the value is simply in
+        # the other file.
+        self.adapter_clean()
+        self.repo.write("ruff.toml", 'line-length = 100\n\n[lint]\nselect = ["E"]\n')
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        hits = self.findings_for("A004", findings)
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["path"], "ruff.toml")
+        self.assertIn("line-length = 100", hits[0]["message"])
+
+    def test_a_standalone_ruff_toml_at_the_baseline_passes(self) -> None:
+        self.adapter_clean()
+        self.repo.write("ruff.toml", "line-length = 120\n")
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        self.assertEqual(self.findings_for("A004", findings), [])
+
+    def test_silent_when_there_is_no_ruff_config_at_all(self) -> None:
+        # A021 owns that gap; reporting it twice would double the backlog.
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[project]\n"
+            'name = "dcc-mcp-demo"\n'
+            'requires-python = ">=3.9"\n',
+        )
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        self.assertEqual(self.findings_for("A004", findings), [])
+        self.assertEqual(len(self.findings_for("A021", findings)), 1)
+
+    def test_a_real_core_shaped_pyproject_parses(self) -> None:
+        # Guards the lenient TOML parser against what the org actually ships:
+        # sub-tables, inline tables, multi-line arrays and trailing comments.
+        self.repo.clean()
+        self.repo.write(
+            "pyproject.toml",
+            "\n".join(
+                [
+                    "[build-system]",
+                    'requires = ["maturin>=1.0,<2.0"]',
+                    "",
+                    "[project]",
+                    'name = "dcc-mcp-core"',
+                    'version = "0.20.40" # x-release-please-version',
+                    'requires-python = ">=3.7"',
+                    "authors = [",
+                    '    {name = "Hal Long", email = "hal.long@outlook.com"}',
+                    "]",
+                    "dependencies = [",
+                    "    # a comment inside the array",
+                    '    "dcc-mcp-server>=0.18.17,<1.0.0",',
+                    "]",
+                    "",
+                    "[project.optional-dependencies]",
+                    "test = [",
+                    "    \"pytest>=8.3.0; python_version>='3.8'\",",
+                    "]",
+                    "",
+                    "[tool.ruff]",
+                    "line-length = 120",
+                    'target-version = "py37"',
+                    "",
+                    "[tool.ruff.lint]",
+                    'select = ["E", "F"]',
+                    "",
+                ]
+            ),
+        )
         _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
         self.assertEqual(self.findings_for("A004", findings), [])
 

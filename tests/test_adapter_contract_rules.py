@@ -1,4 +1,4 @@
-"""Tests for scripts/adapter_contract_rules.py (contract family A020-A024).
+"""Tests for scripts/adapter_contract_rules.py (contract family A021/A024).
 
 The tests drive the real CLI entry point with ``--contract`` pointed at
 ``contract/adapter_contract.json``, so the dispatch path, the profile selection
@@ -57,7 +57,7 @@ class FixtureRepo:
         return path
 
     def clean(self) -> None:
-        """Write the smallest adapter that passes every A020-A024 rule."""
+        """Write the smallest adapter that passes every rule in this family."""
         self.write(
             "pyproject.toml",
             '[project]\nname = "demo"\nrequires-python = ">=3.9"\n\n'
@@ -124,7 +124,7 @@ class TestAdapterContractFile(AdapterContractTestCase):
 
     def test_baseline_profile_selects_nothing_from_this_family(self) -> None:
         # baseline holds A001 and A003 from the other family, so the assertion
-        # is that no A020-A024 rule has joined it yet.
+        # is that no rule from this family has joined it yet.
         self.repo.clean()
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):
@@ -152,101 +152,7 @@ class TestAdapterContractFile(AdapterContractTestCase):
         self.repo.write("pyproject.toml", '[project]\nname = "demo"\n')
         code, findings = run_adapter(self.repo.root, "--profile", "strict", "--fail-on", "warning")
         self.assertEqual(code, 1)
-        self.assertIn("A022", self.ids(findings))
-
-
-class TestA020RuffLineLength(AdapterContractTestCase):
-    def test_baseline_value_passes(self) -> None:
-        self.repo.clean()
-        _, findings = run_adapter(self.repo.root, "--profile", "strict")
-        self.assertNotIn("A020", self.ids(findings))
-
-    def test_a_shorter_value_is_reported(self) -> None:
-        self.repo.clean()
-        self.repo.write(
-            "pyproject.toml", '[project]\nname = "demo"\n\n[tool.ruff]\nline-length = 100\n'
-        )
-        _, findings = run_adapter(self.repo.root, "--profile", "strict")
-        self.assertIn("A020", self.ids(findings))
-        message = self.finding_for(findings, "A020")["message"]
-        self.assertIn("line-length = 100", message)
-        self.assertIn("120", message)
-
-    def test_a_missing_line_length_is_reported(self) -> None:
-        # Ruff would silently fall back to 88, which is exactly the drift.
-        self.repo.clean()
-        self.repo.write("pyproject.toml", '[project]\nname = "demo"\n\n[tool.ruff]\nsrc = ["src"]\n')
-        _, findings = run_adapter(self.repo.root, "--profile", "strict")
-        self.assertIn("A020", self.ids(findings))
-        self.assertIn("no line-length", self.finding_for(findings, "A020")["message"])
-
-    def test_a_standalone_ruff_toml_is_honoured(self) -> None:
-        self.repo.clean()
-        self.repo.write("ruff.toml", 'line-length = 100\n\n[lint]\nselect = ["E"]\n')
-        _, findings = run_adapter(self.repo.root, "--profile", "strict")
-        self.assertIn("A020", self.ids(findings))
-        self.assertEqual(self.finding_for(findings, "A020")["path"], "ruff.toml")
-
-    def test_silent_when_there_is_no_ruff_config_at_all(self) -> None:
-        # A021 owns that gap; reporting it twice would double the backlog.
-        self.repo.write("pyproject.toml", '[project]\nname = "demo"\n')
-        _, findings = run_adapter(self.repo.root, "--profile", "strict")
-        self.assertNotIn("A020", self.ids(findings))
-        self.assertIn("A021", self.ids(findings))
-
-    def test_a_real_core_shaped_pyproject_parses(self) -> None:
-        # Guards the lenient TOML parser against what the org actually ships:
-        # sub-tables, inline tables, multi-line arrays and trailing comments.
-        self.repo.clean()
-        self.repo.write(
-            "pyproject.toml",
-            "\n".join(
-                [
-                    "[build-system]",
-                    'requires = ["maturin>=1.0,<2.0"]',
-                    "",
-                    "[project]",
-                    'name = "dcc-mcp-core"',
-                    'version = "0.20.40" # x-release-please-version',
-                    "requires-python = \">=3.7\"",
-                    "authors = [",
-                    '    {name = "Hal Long", email = "hal.long@outlook.com"}',
-                    "]",
-                    "dependencies = [",
-                    '    # a comment inside the array',
-                    '    "dcc-mcp-server>=0.18.17,<1.0.0",',
-                    "]",
-                    "",
-                    "[project.optional-dependencies]",
-                    "test = [",
-                    "    \"pytest>=8.3.0; python_version>='3.8'\",",
-                    "]",
-                    "",
-                    "[tool.ruff]",
-                    "line-length = 120",
-                    'target-version = "py37"',
-                    "",
-                    "[tool.ruff.lint]",
-                    'select = ["E", "F"]',
-                    "",
-                ]
-            ),
-        )
-        _, findings = run_adapter(self.repo.root, "--profile", "strict")
-        self.assertNotIn("A020", self.ids(findings))
-
-    def test_the_baseline_comes_from_the_contract(self) -> None:
-        # 100 is only correct because this contract says so: the value is never
-        # written down in the script.
-        contract = json.loads(Path(ADAPTER_CONTRACT).read_text(encoding="utf-8"))
-        contract["ruff_line_length"] = 100
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "contract.json"
-            path.write_text(json.dumps(contract), encoding="utf-8")
-            self.repo.clean()
-            _, findings = run_adapter(self.repo.root, "--profile", "strict", contract=str(path))
-            self.assertIn("A020", self.ids(findings))
-            self.assertIn("line-length = 120", self.finding_for(findings, "A020")["message"])
+        self.assertIn("A024", self.ids(findings))
 
 
 class TestA021RuffConfigPresent(AdapterContractTestCase):
@@ -269,68 +175,14 @@ class TestA021RuffConfigPresent(AdapterContractTestCase):
         _, findings = run_adapter(self.repo.root, "--profile", "strict")
         self.assertNotIn("A021", self.ids(findings))
 
-    def test_a_missing_pyproject_is_reported(self) -> None:
+    def test_a_missing_pyproject_is_left_to_a005(self) -> None:
+        # A registered adapter with no pyproject.toml at all is A005's gap:
+        # one gap, one finding.
         self.repo.clean()
         (self.repo.root / "pyproject.toml").unlink()
         _, findings = run_adapter(self.repo.root, "--profile", "strict")
-        self.assertIn("A021", self.ids(findings))
-        self.assertIn("no ruff configuration", self.finding_for(findings, "A021")["message"])
-
-
-class TestA022PreCommitPresent(AdapterContractTestCase):
-    def test_the_yaml_spelling_satisfies_it(self) -> None:
-        self.repo.clean()
-        _, findings = run_adapter(self.repo.root, "--profile", "strict")
-        self.assertNotIn("A022", self.ids(findings))
-
-    def test_the_yml_spelling_satisfies_it(self) -> None:
-        self.repo.clean()
-        (self.repo.root / ".pre-commit-config.yaml").unlink()
-        self.repo.write(".pre-commit-config.yml", "repos: []\n")
-        _, findings = run_adapter(self.repo.root, "--profile", "strict")
-        self.assertNotIn("A022", self.ids(findings))
-
-    def test_a_missing_config_is_reported(self) -> None:
-        self.repo.clean()
-        (self.repo.root / ".pre-commit-config.yaml").unlink()
-        _, findings = run_adapter(self.repo.root, "--profile", "strict")
-        self.assertIn("A022", self.ids(findings))
-        self.assertEqual(self.finding_for(findings, "A022")["path"], ".pre-commit-config.yaml")
-
-
-class TestA023RequiresPythonDeclared(AdapterContractTestCase):
-    def test_a_declared_floor_passes(self) -> None:
-        self.repo.clean()
-        _, findings = run_adapter(self.repo.root, "--profile", "strict")
-        self.assertNotIn("A023", self.ids(findings))
-
-    def test_an_undeclared_floor_is_reported(self) -> None:
-        self.repo.clean()
-        self.repo.write("pyproject.toml", '[project]\nname = "demo"\nversion = "1.0.0"\n')
-        _, findings = run_adapter(self.repo.root, "--profile", "strict")
-        reported = [item for item in findings if item["rule_id"] == "A023"]
-        self.assertEqual(len(reported), 1)
-        self.assertIn("requires-python", reported[0]["message"])
-
-    def test_the_value_itself_is_not_judged(self) -> None:
-        # Deliberate: the org Python 3.7 red line (PIP-2519) runs to 2026-12-31,
-        # so this rule only makes the declaration visible.
-        for floor in (">=3.7", ">=3.8", ">=3.9", ">=3.10"):
-            with self.subTest(floor=floor):
-                self.repo.clean()
-                self.repo.write(
-                    "pyproject.toml",
-                    f'[project]\nname = "demo"\nrequires-python = "{floor}"\n',
-                )
-                _, findings = run_adapter(self.repo.root, "--profile", "strict")
-                self.assertNotIn("A023", self.ids(findings))
-
-    def test_silent_without_a_pyproject(self) -> None:
-        # Whether a repository should have one is the applicability rule's call.
-        self.repo.clean()
-        (self.repo.root / "pyproject.toml").unlink()
-        _, findings = run_adapter(self.repo.root, "--profile", "strict")
-        self.assertNotIn("A023", self.ids(findings))
+        self.assertNotIn("A021", self.ids(findings))
+        self.assertIn("A005", self.ids(findings))
 
 
 class TestA024ReleasePleasePresent(AdapterContractTestCase):
