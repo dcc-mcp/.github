@@ -267,50 +267,56 @@ class RenderTextTest(unittest.TestCase):
 
 
 class MainTest(unittest.TestCase):
-    def run_main(self, argv, findings):
-        calls = []
+    """End-to-end exit codes, with every network call replaced.
+
+    `organization_repositories` must be stubbed too. Without `--repositories` the
+    sweep enumerates the org through `gh`, which needs a token a plain unittest
+    run does not have -- and a test that silently depends on the developer's
+    authenticated `gh` passes locally only to fail in CI.
+    """
+
+    def run_main(self, argv, entry_finding=None):
         source = snapshot(published_entry("dcc-mcp-maya", version="0.9.22", install={"type": "pip"}))
-        published = source
-
-        def evaluate_entry(name, snap, package, timeout):
-            return None
-
+        finding = entry_finding or (lambda _n, _s, _p, _t: None)
         with mock.patch.object(ccs, "fetch_source_catalog", lambda *a, **k: source):
-            with mock.patch.object(ccs, "fetch_published_catalog", lambda *a, **k: published):
-                with mock.patch.object(ccs, "evaluate_entry", evaluate_entry):
+            with mock.patch.object(ccs, "fetch_published_catalog", lambda *a, **k: source):
+                with mock.patch.object(ccs, "evaluate_entry", finding):
                     with mock.patch.object(ccs, "evaluate_missing", lambda *a, **k: None):
-                        return ccs.main(argv)
+                        with mock.patch.object(ccs, "organization_repositories", lambda *a, **k: []):
+                            return ccs.main(argv)
 
     def test_clean_run_exits_zero(self):
-        self.assertEqual(self.run_main(["--format", "json"], []), 0)
+        self.assertEqual(self.run_main(["--format", "json"]), 0)
 
     def test_fail_open_is_the_default(self):
         # The check exists to be read, not to block. Drift must not fail a pipeline
         # that adopted it before the backlog was cleared.
-        argv = ["--format", "json"]
-
         def finding(_n, _s, _p, _t):
             return ccs.Finding(name="x", state=ccs.STATE_STALE_PIN, message="m")
 
-        source = snapshot(published_entry("dcc-mcp-maya", version="0.9.22", install={"type": "pip"}))
-        with mock.patch.object(ccs, "fetch_source_catalog", lambda *a, **k: source):
-            with mock.patch.object(ccs, "fetch_published_catalog", lambda *a, **k: source):
-                with mock.patch.object(ccs, "evaluate_entry", finding):
-                    with mock.patch.object(ccs, "evaluate_missing", lambda *a, **k: None):
-                        self.assertEqual(ccs.main(argv), 0)
+        self.assertEqual(self.run_main(["--format", "json"], finding), 0)
 
     def test_fail_on_any_reports_drift(self):
-        argv = ["--format", "json", "--fail-on", "any"]
-
         def finding(_n, _s, _p, _t):
             return ccs.Finding(name="x", state=ccs.STATE_STALE_PIN, message="m")
 
-        source = snapshot(published_entry("dcc-mcp-maya", version="0.9.22", install={"type": "pip"}))
-        with mock.patch.object(ccs, "fetch_source_catalog", lambda *a, **k: source):
-            with mock.patch.object(ccs, "fetch_published_catalog", lambda *a, **k: source):
-                with mock.patch.object(ccs, "evaluate_entry", finding):
-                    with mock.patch.object(ccs, "evaluate_missing", lambda *a, **k: None):
-                        self.assertEqual(ccs.main(argv), 1)
+        self.assertEqual(self.run_main(["--format", "json", "--fail-on", "any"], finding), 1)
+
+    def test_fail_on_missing_entry_ignores_a_stale_pin(self):
+        def finding(_n, _s, _p, _t):
+            return ccs.Finding(name="x", state=ccs.STATE_STALE_PIN, message="m")
+
+        self.assertEqual(
+            self.run_main(["--format", "json", "--fail-on", "missing_entry"], finding), 0
+        )
+
+    def test_fail_on_missing_entry_catches_a_missing_entry(self):
+        def finding(_n, _s, _p, _t):
+            return ccs.Finding(name="x", state=ccs.STATE_MISSING_ENTRY, message="m")
+
+        self.assertEqual(
+            self.run_main(["--format", "json", "--fail-on", "missing_entry"], finding), 1
+        )
 
     def test_unreachable_source_exits_two(self):
         def boom(*_args, **_kwargs):
