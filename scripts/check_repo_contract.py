@@ -293,15 +293,19 @@ def _parse_string_array(raw: str) -> list[str] | None:
     return items
 
 
-def parse_vx_toml(text: str) -> tuple[dict[str, Any], list[tuple[int, str]]]:
+def parse_vx_toml(
+    text: str,
+) -> tuple[dict[str, Any], list[tuple[int, str]], dict[str, int]]:
     """Parse the TOML subset used by ``vx.toml``.
 
-    Returns the parsed mapping plus the lines that could not be understood. The
-    parser is deliberately lenient: it never raises, because a syntax error is a
-    reportable finding rather than a crash.
+    Returns the parsed mapping, the lines that could not be understood, and the
+    1-based line number of every ``table.key`` that was assigned. The parser is
+    deliberately lenient: it never raises, because a syntax error is a reportable
+    finding rather than a crash.
     """
     data: dict[str, Any] = {}
     unparsed: list[tuple[int, str]] = []
+    positions: dict[str, int] = {}
     table: str | None = None
     lines = text.splitlines()
     index = 0
@@ -315,6 +319,7 @@ def parse_vx_toml(text: str) -> tuple[dict[str, Any], list[tuple[int, str]]]:
         if line.startswith("[") and line.endswith("]") and not line.startswith("[["):
             table = line[1:-1].strip().strip("\"'")
             data.setdefault(table, {})
+            positions[table] = lineno
             index += 1
             continue
         if "=" not in line:
@@ -335,8 +340,9 @@ def parse_vx_toml(text: str) -> tuple[dict[str, Any], list[tuple[int, str]]]:
             if array is not None:
                 value = array
         target[key] = value
+        positions[f"{table}.{key}" if table else key] = lineno
         index += 1
-    return data, unparsed
+    return data, unparsed, positions
 
 
 # --------------------------------------------------------------------- utilities
@@ -764,7 +770,7 @@ def check_vx_toml_parses(root: Path, contract: Contract, ctx: dict) -> list[Find
     if not vx_toml.is_file():
         return []
     text = vx_toml.read_text(encoding="utf-8", errors="replace")
-    parsed, unparsed = parse_vx_toml(text)
+    parsed, unparsed, _positions = parse_vx_toml(text)
     findings = []
     for lineno, raw in unparsed:
         findings.append(
@@ -945,6 +951,7 @@ def check_no_scripts_with_justfile(root: Path, contract: Contract, ctx: dict) ->
     recipes = {
         _normalise_recipe_name(name, separators) for name in _justfile_recipes(justfile)
     }
+    positions: dict[str, int] = ctx.get("vx_positions") or {}
     findings = []
     for name in sorted(scripts):
         command = scripts[name]
@@ -959,12 +966,16 @@ def check_no_scripts_with_justfile(root: Path, contract: Contract, ctx: dict) ->
             reason = f"shares the name of justfile recipe `{name}`"
         else:
             continue
+        # The parser records the line of the assignment, so the finding points at
+        # the entry itself rather than at the file: in a repository with 64
+        # entries, a report that only names vx.toml is unusable.
+        lineno = positions.get(f"scripts.{name}")
         findings.append(
             Finding(
                 rule["id"],
                 rule["name"],
                 rule["severity"],
-                "vx.toml",
+                f"vx.toml:{lineno}" if lineno else "vx.toml",
                 (
                     f"[scripts] {name} = {command!r} duplicates `{justfile.name}`: {reason}; "
                     "run the recipe from the justfile or drop it from [scripts]"
@@ -1747,11 +1758,15 @@ def run_checks(
         "allow_extra": list(allow_extra),
     }
     vx_toml = root / "vx.toml"
-    ctx["vx"] = (
-        parse_vx_toml(vx_toml.read_text(encoding="utf-8", errors="replace"))[0]
-        if vx_toml.is_file()
-        else {}
-    )
+    if vx_toml.is_file():
+        parsed, _unparsed, positions = parse_vx_toml(
+            vx_toml.read_text(encoding="utf-8", errors="replace")
+        )
+        ctx["vx"] = parsed
+        ctx["vx_positions"] = positions
+    else:
+        ctx["vx"] = {}
+        ctx["vx_positions"] = {}
 
     findings: list[Finding] = []
     for rule_id, (handler, severity) in plan.items():
