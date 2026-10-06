@@ -370,7 +370,7 @@
     ".flake8": "Flake8 is superseded by ruff. Move settings into [tool.ruff] in pyproject.toml.",
     ".pylintrc": "Pylint is superseded by ruff. Move settings into [tool.ruff] in pyproject.toml.",
     ".travis.yaml": "Travis CI is retired. Move the pipeline to .github/workflows/.",
-    "skills": "Agent skills are not vendored per repository. For a Monica-managed run the workspace skill registry is authoritative (`monica skill get <id> --with-content`); `loonghao/vx` `skills/` is the global `vx ai setup` install source. Some IDE/CLI runtimes do load a committed copy from their own directory, which is why committing one is worse than redundant: it forks from the registry and silently drifts."
+    "skills": "Agent skills are not vendored per repository. A managed agent run mounts them from the skill registry at task startup, so the registry is authoritative and a committed copy is never read; `loonghao/vx` `skills/` is the global `vx ai setup` install source. Some IDE/CLI runtimes do load a committed copy from their own directory, which is why committing one is worse than redundant: it forks from the registry and silently drifts."
   },
   "agents_source_file": "AGENTS.md",
   "agents_derived_files": [
