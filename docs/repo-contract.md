@@ -29,6 +29,7 @@ in [adapter-contract.md](adapter-contract.md).
 | R008 | `agents-derived-symlink` — `CLAUDE.md` and friends are symlinks or generated | — | warning | PIP-3736 |
 | R009 | `tools-no-latest` — `[tools]` pins are concrete, not `latest` | — | warning | PIP-3737 |
 | R010 | `llms-txt-fresh` — `llms.txt` exists when a generator exists | — | warning | PIP-3738 |
+| R011 | `no-tracked-agent-dirs` — nothing is tracked under an `agents_ide_dir` | — | error | org-agent-dirs-policy |
 
 R006 reports two classes of finding at different severities: a stray generated
 report or a loose `*.py` at the root is an **error** (they are never legitimate),
@@ -36,10 +37,14 @@ while an entry that is simply unknown is a **warning** you can silence with
 `--allow-extra` once you have decided it belongs there.
 
 The first five rules are mechanical: they need no product decision, and a
-repository either satisfies them or it does not. The last five are being rolled
-out by their owning issues, so they start as warnings and get promoted when the
-rollout lands. That is the ratchet — a repository adopts the gate before it is
-clean, and the warnings are the to-do list.
+repository either satisfies them or it does not. The last six are being rolled
+out by their owning issues, so they start out limited to `strict` and get
+promoted when the rollout lands. That is the ratchet — a repository adopts the
+gate before it is clean, and the warnings are the to-do list. R011 is the
+exception to the "starts as a warning" pattern: it is an `error`, because by the
+time it fires there is already a tracked file that has to be removed. It is
+scoped to `strict` only while the handful of repositories with a pre-existing
+committed agent tree are cleaned up.
 
 ### Delegation sentinels (R005)
 
@@ -154,6 +159,31 @@ whichever runtime reads it.
 
 Export the registry copy when a byte-identical offline copy is genuinely
 needed; do not commit it under an `agents_ide_dir`.
+
+### R011: catching a committed copy
+
+R008 warns that an agent directory exists. R011 goes one step further and
+reports **each tracked file** under one, at `error` severity, with the exact
+remediation:
+
+```
+.kimi/skills/code-review/SKILL.md is tracked under the agent/IDE directory
+`.kimi/`; add `/.kimi/` to .gitignore and untrack it, or move the asset to a
+committed path outside the agent directories
+```
+
+The distinction matters. A single warning naming a directory is easy to scroll
+past, and a whole skill tree is twenty files — which is why a committed tree
+survived review and CI in the first place. Listing the files also makes the
+migration reviewable: every path in the output is a decision about where that
+content should live.
+
+R008 stands down on a directory once R011 has reported files under it, so a
+committed tree produces one set of findings rather than two.
+
+The check asks `git ls-files` which files are version-controlled, so output
+sitting inside an already-ignored agent directory is not reported. Outside a git
+working tree it falls back to listing the directory.
 
 ## Changing a rule
 
