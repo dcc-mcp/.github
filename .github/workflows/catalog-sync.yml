@@ -1,0 +1,151 @@
+name: Catalog sync
+
+# Compares the published install catalog against the ground truth it claims to
+# describe: the curated source, the GitHub Releases API and PyPI.
+#
+# The public catalog is what `dcc-mcp-cli` searches and what the website quotes, so
+# a stale entry does not fail a build -- it tells users that a working adapter
+# cannot be installed, and nothing reports it. This check is the report.
+#
+# Fail-open by design: drift is written into the run log and the job summary for a
+# human to read. It does not block a release, because the backlog it uncovered
+# (33 of 41 entries pinned behind PyPI) would otherwise fail every run and train
+# everyone to ignore it.
+
+on:
+  workflow_call:
+    inputs:
+      repositories:
+        description: >-
+          Comma-separated repository names to sweep for catalog entries that are
+          missing entirely. Defaults to every non-archived repository of the org.
+        required: false
+        type: string
+        default: ""
+      fail-on:
+        description: "none (fail-open), missing_entry, or any drift."
+        required: false
+        type: string
+        default: "none"
+      ref:
+        description: "Git ref of dcc-mcp/.github that holds the check script."
+        required: false
+        type: string
+        default: main
+  workflow_dispatch:
+    inputs:
+      repositories:
+        description: >-
+          Comma-separated repository names to sweep for missing catalog entries.
+          Empty sweeps every non-archived repository of the org.
+        required: false
+        type: string
+        default: ""
+      fail-on:
+        description: "none (fail-open), missing_entry, or any drift."
+        required: false
+        type: string
+        default: "none"
+      ref:
+        description: "Git ref of dcc-mcp/.github that holds the check script."
+        required: false
+        type: string
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    name: Compare catalog with PyPI and GitHub
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: dcc-mcp/.github
+          ref: ${{ inputs.ref || 'main' }}
+          sparse-checkout: scripts
+          path: catalog-sync
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Compare the catalog against PyPI and GitHub
+        id: compare
+        working-directory: catalog-sync
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORIES: ${{ inputs.repositories }}
+          FAIL_ON: ${{ inputs.fail_on }}
+        run: |
+          set -- --format json
+          if [[ -n "$REPOSITORIES" ]]; then
+            set -- "$@" --repositories "$REPOSITORIES"
+          fi
+          set -- "$@" --fail-on "$FAIL_ON"
+          # Exit code 2 means the check could not run (unreachable API, bad ref);
+          # that must fail the job. Drift itself is reported, not fatal.
+          python scripts/check_catalog_sync.py "$@" > report.json || {
+            code=$?
+            if [[ $code -ne 0 && $code -ne 1 ]]; then
+              echo "error: the check could not be performed (exit $code)" >&2
+              exit "$code"
+            fi
+          }
+          python - <<'PY'
+          import json
+          import os
+
+          with open("report.json", encoding="utf-8") as handle:
+              report = json.load(handle)
+
+          findings = report["findings"]
+          counts = report["counts"]
+          published = report["published"]
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
+              out.write("## Catalog drift\n\n")
+              out.write(
+                  f"{len(findings)} finding(s) across {published['entries']} published "
+                  f"entries ({published['install_available']} install available).\n\n"
+              )
+              if not findings:
+                  out.write("OK - the catalog agrees with PyPI and GitHub.\n")
+              if counts:
+                  out.write("| Class | Count |\n|---|---|\n")
+                  for state, count in sorted(counts.items()):
+                      out.write(f"| `{state}` | {count} |\n")
+                  out.write("\n")
+              for finding in findings:
+                  out.write(f"- **{finding['name']}** (`{finding['state']}`): {finding['message']}\n")
+                  if finding.get("reason"):
+                      out.write(f"  - reason: {finding['reason']}\n")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"findings={len(findings)}\n")
+          PY
+
+      - name: Render the report
+        if: always()
+        working-directory: catalog-sync
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ -f report.json ]]; then
+            python - <<'PY'
+          import json
+
+          with open("report.json", encoding="utf-8") as handle:
+              print(json.dumps(json.load(handle)["findings"], indent=2))
+          PY
+          fi
+
+      - name: Upload the drift report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: catalog-drift-report
+          path: catalog-sync/report.json
+          if-no-files-found: ignore

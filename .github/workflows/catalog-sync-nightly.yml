@@ -1,0 +1,25 @@
+name: Catalog sync (nightly)
+
+# Runs the catalog drift check once a day across every repository of the
+# organization.
+#
+# A bad pin in the curated catalog does not fail a build: the publisher drops the
+# install block and records only a `policy.reason`, and the website keeps quoting
+# the stale count. One adapter sat quietly mislabeled as uninstallable for three
+# weeks that way. This sweep is what makes that visible.
+
+on:
+  schedule:
+    - cron: "29 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-sync-nightly
+  cancel-in-progress: false
+
+jobs:
+  catalog-sync:
+    uses: ./.github/workflows/catalog-sync.yml
