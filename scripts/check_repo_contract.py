@@ -19,7 +19,7 @@ Rules (repo_contract.json)
     R004 vx-toml-parses          vx.toml parses and only uses known tables
     R005 tools-version-format    [tools] pins are stable/latest/X[.Y[.Z]]
     R006 root-allowlist          every top-level entry is allowlisted
-    R007 no-scripts-with-justfile no vx.toml [scripts] when a justfile exists
+    R007 no-scripts-with-justfile no [scripts] entry forwards to just or shadows a recipe
     R008 agents-derived-symlink  CLAUDE.md & friends are symlinks or generated
     R009 tools-no-latest         [tools] pins are concrete, not `latest`
     R010 llms-txt-fresh          llms.txt exists when a generator exists
@@ -886,6 +886,45 @@ def check_root_allowlist(root: Path, contract: Contract, ctx: dict) -> list[Find
     return findings
 
 
+def _normalise_recipe_name(name: str, separators: Sequence[str]) -> str:
+    """Fold the separators that just and vx treat as interchangeable."""
+    folded = name
+    for sep in separators:
+        folded = folded.replace(sep, "-")
+    return folded.lower()
+
+
+def _script_forwards_to_just(command: Any, commands: Sequence[str]) -> str | None:
+    """Return the recipe a [scripts] value delegates to, or None.
+
+    A script may be a single line or a triple-quoted block; only the leading
+    command matters, so leading whitespace and the block delimiters are stripped
+    before matching. Nothing after the recipe name is considered: `just test --
+    --nocapture` still forwards to `test`.
+    """
+    if not isinstance(command, str):
+        return None
+    text = command.strip()
+    for fence in ('"""', "'''"):
+        if text.startswith(fence):
+            text = text[len(fence) :]
+        if text.endswith(fence):
+            text = text[: -len(fence)]
+    for line in text.splitlines():
+        stripped = line.strip().strip('"').strip("'").strip()
+        if not stripped:
+            continue
+        for prefix in sorted(commands, key=len, reverse=True):
+            if stripped == prefix:
+                return ""
+            lead = prefix + " "
+            if stripped.startswith(lead):
+                recipe = stripped[len(lead) :].split(None, 1)[0].strip('"').strip("'")
+                return recipe
+        break
+    return None
+
+
 def check_no_scripts_with_justfile(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
     rule = contract.rules["R007"]
     justfile = ctx.get("justfile")
@@ -895,9 +934,31 @@ def check_no_scripts_with_justfile(root: Path, contract: Contract, ctx: dict) ->
     scripts = vx.get("scripts")
     if not isinstance(scripts, dict) or not scripts:
         return []
+    commands = contract.value("scripts_just_forward_commands", ["just", "vx just"])
+    if not isinstance(commands, list) or not all(isinstance(item, str) for item in commands):
+        commands = ["just", "vx just"]
+    separators = contract.value("scripts_recipe_name_separators", ["-", "_"])
+    if not isinstance(separators, list) or not all(
+        isinstance(item, str) and item for item in separators
+    ):
+        separators = ["-", "_"]
+    recipes = {
+        _normalise_recipe_name(name, separators) for name in _justfile_recipes(justfile)
+    }
     findings = []
     for name in sorted(scripts):
         command = scripts[name]
+        forwarded = _script_forwards_to_just(command, commands)
+        if forwarded is not None:
+            reason = (
+                f"forwards to `{forwarded or 'just'}`"
+                if forwarded
+                else "forwards to just itself"
+            )
+        elif _normalise_recipe_name(name, separators) in recipes:
+            reason = f"shares the name of justfile recipe `{name}`"
+        else:
+            continue
         findings.append(
             Finding(
                 rule["id"],
@@ -905,8 +966,8 @@ def check_no_scripts_with_justfile(root: Path, contract: Contract, ctx: dict) ->
                 rule["severity"],
                 "vx.toml",
                 (
-                    f"[scripts] {name} = {command!r} duplicates `{justfile.name}`; keep recipes "
-                    "in the justfile and reserve [scripts] for repositories without one"
+                    f"[scripts] {name} = {command!r} duplicates `{justfile.name}`: {reason}; "
+                    "run the recipe from the justfile or drop it from [scripts]"
                 ),
             )
         )

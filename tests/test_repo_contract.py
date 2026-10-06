@@ -519,24 +519,81 @@ class TestR006RootAllowlist(ContractTestCase):
 
 
 class TestR007ScriptsVsJustfile(ContractTestCase):
-    def test_scripts_next_to_a_justfile_warns_per_entry(self) -> None:
+    def r007(self, findings) -> list[dict]:
+        return [item for item in findings if item["rule_id"] == "R007"]
+
+    def test_forwarding_to_just_is_reported(self) -> None:
         self.repo.clean()
-        self.repo.write("vx.toml", '[scripts]\nci = "just ci"\ntest = "just test"\n')
+        self.repo.write("vx.toml", '[scripts]\nci = "just ci"\nother = "vx just lint"\n')
         code, findings = run_cli(self.repo.root, "--profile", "strict")
         self.assertEqual(code, 0)
-        r007 = [item for item in findings if item["rule_id"] == "R007"]
-        self.assertEqual(len(r007), 2)
+        found = self.r007(findings)
+        self.assertEqual(len(found), 2)
+        self.assertTrue(all("forwards to" in item["message"] for item in found))
+
+    def test_forwarding_survives_leading_whitespace_and_a_block(self) -> None:
+        self.repo.clean()
+        self.repo.write(
+            "vx.toml",
+            '[scripts]\n'
+            'block = """\n'
+            "    just docs\n"
+            '"""\n'
+            'indented = "   just fmt   "\n',
+        )
+        code, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(code, 0)
+        self.assertEqual(len(self.r007(findings)), 2)
+
+    def test_sharing_a_recipe_name_is_reported(self) -> None:
+        self.repo.clean()
+        self.repo.write("justfile", "lint:\n    @echo lint\n")
+        self.repo.write("vx.toml", '[scripts]\nlint = "uvx ruff check ."\n')
+        code, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(code, 0)
+        found = self.r007(findings)
+        self.assertEqual(len(found), 1)
+        self.assertIn("shares the name", found[0]["message"])
+
+    def test_dash_and_underscore_are_the_same_recipe(self) -> None:
+        self.repo.clean()
+        self.repo.write("justfile", "test-cov:\n    @echo cov\n")
+        self.repo.write("vx.toml", '[scripts]\ntest_cov = "pytest --cov"\n')
+        code, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(code, 0)
+        self.assertEqual(len(self.r007(findings)), 1)
+
+    def test_unrelated_entry_next_to_a_justfile_is_allowed(self) -> None:
+        """The whole point of per-entry judging: a real entry point is kept."""
+        self.repo.clean()
+        self.repo.write(
+            "vx.toml",
+            '[env]\nUE_ROOT = "C:/ue"\n\n'
+            '[scripts]\nbuild-ue = "RunUAT.bat BuildPlugin ${UE_ROOT}"\n',
+        )
+        code, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.r007(findings), [])
 
     def test_scripts_without_a_justfile_are_allowed(self) -> None:
         self.repo.clean()
         (self.repo.root / "justfile").unlink()
         self.repo.write("vx.toml", '[scripts]\ncheck = "prek run --all-files"\n')
-        self.assertEqual(run_cli(self.repo.root, "--profile", "strict")[0], 0)
+        code, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.r007(findings), [])
 
     def test_empty_scripts_table_is_not_reported(self) -> None:
         self.repo.clean()
         self.repo.write("vx.toml", "[scripts]\n")
         self.assertEqual(run_cli(self.repo.root, "--profile", "strict")[0], 0)
+
+    def test_promoted_to_error_it_fails_the_run(self) -> None:
+        self.repo.clean()
+        self.repo.write("vx.toml", '[scripts]\nci = "just ci"\n')
+        self.assertEqual(run_cli(self.repo.root, "--profile", "strict")[0], 0)
+        code, _ = run_cli(self.repo.root, "--profile", "strict", "--error-rule", "R007")
+        self.assertEqual(code, 1)
 
 
 class TestR008AgentsDerived(ContractTestCase):
