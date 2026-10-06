@@ -125,6 +125,44 @@ Findings are emitted as GitHub annotations
 (`::error file=vx.toml,title=Repo contract R005::...`) so they appear on the file
 in the PR diff.
 
+## Where agent skills live (R008 / `agents_ide_dirs`)
+
+`agents_ide_dirs` is not an allowlist. A directory on that list that is present
+in a repository is reported by R008 as a warning: agent directories are meant to
+be generated at setup time and kept out of version control.
+
+That makes a committed `skills/` tree under one of those directories a contract
+finding rather than a supported pattern. The reason is **scope-dependent**, and
+getting the scope right matters:
+
+- **Monica-managed runs** mount skills from the **workspace skill registry**,
+  materialised into the task's `agents_ide_dir` at startup. For these runs the
+  registry is the authoritative source and a committed copy is never read.
+
+- **Some IDE/CLI runtimes do read the repository copy.** Kimi CLI, for example,
+  picks one brand group — `.kimi/skills/`, `.claude/skills/` or
+  `.codex/skills/` — and scans `Project > User > Extra > Built-in`, so a
+  `.kimi/skills/<id>/SKILL.md` with valid frontmatter *is* what a Kimi run in
+  that repository loads.
+
+So a committed copy is not harmless — it is worse than redundant, because it
+forks from the registry and the two silently diverge. A change that lands only
+in a repository looks done in review while leaving every subsequent Monica run
+on the previous version, which is the failure this entry was written to prevent
+(PIP-4292). Land the change in the registry, and treat a repository copy as
+drift whichever runtime reads it.
+
+```bash
+monica skill list --output json                       # canonical source of truth
+monica skill get <skill-id> --with-content            # read the mounted bytes
+monica skill files upsert <skill-id> --path scripts/x.py --content-file x.py
+monica skill update <skill-id> --content-file SKILL.md
+```
+
+Export the registry copy with `monica skill export <skill-id> --dir <dir>`
+when a byte-identical offline copy is genuinely needed; do not commit it under
+an `agents_ide_dir`.
+
 ## Changing a rule
 
 Edit `contract/repo_contract.json` — not the script. The script only implements
