@@ -1,6 +1,6 @@
 {
-  "contract_version": "1.1.0",
-  "updated": "2026-09-29",
+  "contract_version": "1.2.0",
+  "updated": "2026-10-07",
   "owner": "dcc-mcp/.github",
   "source_issue": "PIP-3741",
   "description": "Machine-readable definition of the dcc-mcp repository contract. Consumed by scripts/check_repo_contract.py (CI gate) and by the vx-repo-contract skill (local check). Both read this file, so the pass/fail criteria are defined exactly once.",
@@ -66,11 +66,11 @@
     {
       "id": "R007",
       "name": "no-scripts-with-justfile",
-      "title": "A repository with a justfile has no vx.toml [scripts]",
+      "title": "No [scripts] entry duplicates the justfile",
       "severity": "warn",
       "profiles": ["strict"],
       "source": "PIP-3734",
-      "summary": "[scripts] entries that only shell out to `just <recipe>` duplicate the justfile and drift. Keep recipes in justfile; keep [scripts] only when there is no justfile."
+      "summary": "Judged per entry, not per table. An entry is reported when it forwards to the justfile (`just <recipe>` / `vx just <recipe>`, ignoring leading whitespace and triple-quoted blocks) or when its key names a recipe that exists in the justfile, with `-` and `_` treated as equivalent. Every other entry is legitimate: a repository with a justfile may still keep [scripts] for entry points the justfile does not provide."
     },
     {
       "id": "R008",
@@ -441,5 +441,7 @@
     "scripts/generate_llms_txt.py",
     "scripts/llms_txt.py"
   ],
-  "llms_justfile_recipes": ["llms", "llms-txt", "llms_txt", "generate-llms"]
+  "llms_justfile_recipes": ["llms", "llms-txt", "llms_txt", "generate-llms"],
+  "scripts_just_forward_commands": ["just", "vx just"],
+  "scripts_recipe_name_separators": ["-", "_"]
 }

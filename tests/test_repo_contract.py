@@ -204,7 +204,7 @@ class TestContractFile(ContractTestCase):
 
 class TestVxTomlParser(unittest.TestCase):
     def test_reads_tables_comments_and_scalars(self) -> None:
-        parsed, unparsed = parse_vx_toml(
+        parsed, unparsed, _ = parse_vx_toml(
             "\n".join(
                 [
                     "# leading comment",
@@ -225,20 +225,20 @@ class TestVxTomlParser(unittest.TestCase):
         self.assertIs(parsed["settings"]["auto_install"], True)
 
     def test_keeps_unquoted_versions_as_written(self) -> None:
-        parsed, _ = parse_vx_toml("[tools]\nrust = 1.90.0\n")
+        parsed, _, _ = parse_vx_toml("[tools]\nrust = 1.90.0\n")
         self.assertEqual(parsed["tools"]["rust"], "1.90.0")
 
     def test_dotted_sub_table_is_its_own_key(self) -> None:
-        parsed, _ = parse_vx_toml('[tools.pwsh]\nversion = "7.4.13"\n')
+        parsed, _, _ = parse_vx_toml('[tools.pwsh]\nversion = "7.4.13"\n')
         self.assertEqual(parsed["tools.pwsh"]["version"], "7.4.13")
 
     def test_reports_unparseable_lines(self) -> None:
-        _, unparsed = parse_vx_toml("[tools]\nthis is not toml\n")
+        _, unparsed, _ = parse_vx_toml("[tools]\nthis is not toml\n")
         self.assertEqual(len(unparsed), 1)
         self.assertEqual(unparsed[0][0], 2)
 
     def test_multi_line_string_is_one_value(self) -> None:
-        parsed, unparsed = parse_vx_toml(
+        parsed, unparsed, _ = parse_vx_toml(
             "\n".join(
                 [
                     "[scripts]",
@@ -254,7 +254,7 @@ class TestVxTomlParser(unittest.TestCase):
         self.assertEqual(parsed["scripts"]["other"], "x")
 
     def test_escaped_quotes_inside_a_string(self) -> None:
-        parsed, unparsed = parse_vx_toml(
+        parsed, unparsed, _ = parse_vx_toml(
             '[env]\nUE_5_ROOT = "C:\\\\Program Files\\\\Epic Games\\\\UE_5.7"\n'
         )
         self.assertEqual(unparsed, [])
@@ -266,7 +266,7 @@ class TestVxTomlParser(unittest.TestCase):
         self.assertEqual(run_cli(self.repo.root)[0], 0)
 
     def test_inline_table_reduces_to_its_version(self) -> None:
-        parsed, unparsed = parse_vx_toml(
+        parsed, unparsed, _ = parse_vx_toml(
             '[tools]\nrcedit = { version = "latest", os = ["windows"] }\n'
             'msvc = { version = "14.42", os = ["windows"] }\n'
         )
@@ -275,18 +275,45 @@ class TestVxTomlParser(unittest.TestCase):
         self.assertEqual(parsed["tools"]["msvc"], "14.42")
 
     def test_inline_table_without_a_version_is_left_alone(self) -> None:
-        parsed, _ = parse_vx_toml('[tools]\nfoo = { os = ["windows"] }\n')
+        parsed, _, _ = parse_vx_toml('[tools]\nfoo = { os = ["windows"] }\n')
         self.assertTrue(parsed["tools"]["foo"].startswith("{"))
 
     def test_project_table_is_known(self) -> None:
-        parsed, _ = parse_vx_toml('[project]\nname = "demo"\n\n[tools]\nnode = "22"\n')
+        parsed, _, _ = parse_vx_toml('[project]\nname = "demo"\n\n[tools]\nnode = "22"\n')
         self.assertEqual(parsed["project"]["name"], "demo")
         self.assertEqual(parsed["tools"]["node"], "22")
 
     def test_ignores_array_of_tables_headers(self) -> None:
         # Not supported, but it must not be reported as a value line either.
-        _, unparsed = parse_vx_toml("[[bin]]\nname = \"vx\"\n")
+        _, unparsed, _ = parse_vx_toml("[[bin]]\nname = \"vx\"\n")
         self.assertEqual([line for _, line in unparsed], ["[[bin]]"])
+
+    def test_records_the_line_of_every_table_and_key(self) -> None:
+        _, _, positions = parse_vx_toml(
+            "\n".join(
+                [
+                    "# leading comment",
+                    "[tools]",
+                    'just = "latest"',
+                    "",
+                    "[scripts]",
+                    'ci = "just ci"',
+                ]
+            )
+        )
+        self.assertEqual(positions["tools"], 2)
+        self.assertEqual(positions["tools.just"], 3)
+        self.assertEqual(positions["scripts"], 5)
+        self.assertEqual(positions["scripts.ci"], 6)
+
+    def test_a_multi_line_entry_points_at_its_first_line(self) -> None:
+        _, _, positions = parse_vx_toml(
+            "\n".join(["[scripts]", "build = '''", "python build.py", "'''", 'x = "y"'])
+        )
+        self.assertEqual(positions["scripts.build"], 2)
+        # The continuation lines are part of `build`, so the next entry starts
+        # after the closing delimiter rather than on the line after the key.
+        self.assertEqual(positions["scripts.x"], 5)
 
 
 class TestProfiles(ContractTestCase):
@@ -519,24 +546,108 @@ class TestR006RootAllowlist(ContractTestCase):
 
 
 class TestR007ScriptsVsJustfile(ContractTestCase):
-    def test_scripts_next_to_a_justfile_warns_per_entry(self) -> None:
+    def r007(self, findings) -> list[dict]:
+        return [item for item in findings if item["rule_id"] == "R007"]
+
+    def test_forwarding_to_just_is_reported(self) -> None:
         self.repo.clean()
-        self.repo.write("vx.toml", '[scripts]\nci = "just ci"\ntest = "just test"\n')
+        self.repo.write("vx.toml", '[scripts]\nci = "just ci"\nother = "vx just lint"\n')
         code, findings = run_cli(self.repo.root, "--profile", "strict")
         self.assertEqual(code, 0)
-        r007 = [item for item in findings if item["rule_id"] == "R007"]
-        self.assertEqual(len(r007), 2)
+        found = self.r007(findings)
+        self.assertEqual(len(found), 2)
+        self.assertTrue(all("forwards to" in item["message"] for item in found))
+
+    def test_forwarding_survives_leading_whitespace_and_a_block(self) -> None:
+        self.repo.clean()
+        self.repo.write(
+            "vx.toml",
+            '[scripts]\n'
+            'block = """\n'
+            "    just docs\n"
+            '"""\n'
+            'indented = "   just fmt   "\n',
+        )
+        code, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(code, 0)
+        self.assertEqual(len(self.r007(findings)), 2)
+
+    def test_sharing_a_recipe_name_is_reported(self) -> None:
+        self.repo.clean()
+        self.repo.write("justfile", "lint:\n    @echo lint\n")
+        self.repo.write("vx.toml", '[scripts]\nlint = "uvx ruff check ."\n')
+        code, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(code, 0)
+        found = self.r007(findings)
+        self.assertEqual(len(found), 1)
+        self.assertIn("shares the name", found[0]["message"])
+
+    def test_dash_and_underscore_are_the_same_recipe(self) -> None:
+        self.repo.clean()
+        self.repo.write("justfile", "test-cov:\n    @echo cov\n")
+        self.repo.write("vx.toml", '[scripts]\ntest_cov = "pytest --cov"\n')
+        code, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(code, 0)
+        self.assertEqual(len(self.r007(findings)), 1)
+
+    def test_unrelated_entry_next_to_a_justfile_is_allowed(self) -> None:
+        """The whole point of per-entry judging: a real entry point is kept."""
+        self.repo.clean()
+        self.repo.write(
+            "vx.toml",
+            '[env]\nUE_ROOT = "C:/ue"\n\n'
+            '[scripts]\nbuild-ue = "RunUAT.bat BuildPlugin ${UE_ROOT}"\n',
+        )
+        code, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.r007(findings), [])
 
     def test_scripts_without_a_justfile_are_allowed(self) -> None:
         self.repo.clean()
         (self.repo.root / "justfile").unlink()
         self.repo.write("vx.toml", '[scripts]\ncheck = "prek run --all-files"\n')
-        self.assertEqual(run_cli(self.repo.root, "--profile", "strict")[0], 0)
+        code, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.r007(findings), [])
 
     def test_empty_scripts_table_is_not_reported(self) -> None:
         self.repo.clean()
         self.repo.write("vx.toml", "[scripts]\n")
         self.assertEqual(run_cli(self.repo.root, "--profile", "strict")[0], 0)
+
+    def test_promoted_to_error_it_fails_the_run(self) -> None:
+        self.repo.clean()
+        self.repo.write("vx.toml", '[scripts]\nci = "just ci"\n')
+        self.assertEqual(run_cli(self.repo.root, "--profile", "strict")[0], 0)
+        code, _ = run_cli(self.repo.root, "--profile", "strict", "--error-rule", "R007")
+        self.assertEqual(code, 1)
+
+    def test_reports_the_line_of_each_entry(self) -> None:
+        # With 42 entries in one repository, naming the file 42 times is
+        # unusable; the finding has to point at the entry.
+        self.repo.clean()
+        self.repo.write(
+            "vx.toml",
+            '[tools]\npython = "3.12"\n\n'
+            '[scripts]\nlint = "uvx ruff check ."\nci = "just ci"\ntest = "just test"\n',
+        )
+        self.repo.write("justfile", "lint:\n    @echo lint\n")
+        _code, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(
+            sorted(item["path"] for item in self.r007(findings)),
+            ["vx.toml:5", "vx.toml:6", "vx.toml:7"],
+        )
+
+    def test_a_multi_line_entry_reports_its_first_line(self) -> None:
+        self.repo.clean()
+        self.repo.write(
+            "vx.toml",
+            "[scripts]\nrun = '''\n    just build\n'''\nkeep = \"prek run\"\n",
+        )
+        _code, findings = run_cli(self.repo.root, "--profile", "strict")
+        found = self.r007(findings)
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]["path"], "vx.toml:2")
 
 
 class TestR008AgentsDerived(ContractTestCase):

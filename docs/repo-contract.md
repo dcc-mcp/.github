@@ -25,7 +25,7 @@ in [adapter-contract.md](adapter-contract.md).
 | R004 | `vx-toml-parses` — `vx.toml` parses into known tables | error | error | PIP-3737 |
 | R005 | `tools-version-format` — `[tools]` pins are `stable`, `latest`, `X[.Y[.Z]]`, or a declared delegation sentinel | error | error | PIP-3737 |
 | R006 | `root-allowlist` — every top-level entry is allowlisted | — | warning | PIP-3735 |
-| R007 | `no-scripts-with-justfile` — no `vx.toml [scripts]` when a justfile exists | — | warning | PIP-3734 |
+| R007 | `no-scripts-with-justfile` — no `[scripts]` entry forwards to `just` or shadows a justfile recipe | — | warning | PIP-3734 |
 | R008 | `agents-derived-symlink` — `CLAUDE.md` and friends are symlinks or generated | — | warning | PIP-3736 |
 | R009 | `tools-no-latest` — `[tools]` pins are concrete, not `latest` | — | warning | PIP-3737 |
 | R010 | `llms-txt-fresh` — `llms.txt` exists when a generator exists | — | warning | PIP-3738 |
@@ -68,6 +68,31 @@ The exemption is scoped per tool, via `tools_delegation_sentinels` in
 `python = "rustup-managed"` is still an error. When another proxy-managed runtime
 needs a sentinel, add it there. Do not widen `tools_version_pattern` instead —
 that would let every tool claim every sentinel.
+
+### Per-entry judging (R007)
+
+R007 is judged **per `[scripts]` entry**, not per table. A repository with a
+justfile may keep `[scripts]`; what it may not do is duplicate the justfile. An
+entry is reported when either is true:
+
+- **(a) forwarding** — the value runs `just <recipe>` or `vx just <recipe>`.
+  Leading whitespace and triple-quoted blocks are stripped first, so a
+  multi-line script whose first command is `just docs` counts.
+- **(b) name collision** — the key names a recipe that exists in the justfile.
+  `-` and `_` are treated as equivalent, so `test_cov` collides with `test-cov`.
+
+Everything else is legitimate. A repository whose justfile has no build recipe
+can keep `build-ue = "..."` in `[scripts]` and depend on `[env]`; a repository
+whose `[scripts]` runs `uvx nox` where the justfile has no `nox` recipe is fine.
+
+The difference matters because `vx run lint` and `just lint` are two entry
+points for the same intent, and they drift — that is what R007 exists to stop.
+An `[scripts]` entry the justfile does not provide has nothing to drift from, so
+banning it would cost a real entry point to prevent a problem that cannot occur.
+
+The forwarding commands and the interchangeable separators are configurable via
+`scripts_just_forward_commands` and `scripts_recipe_name_separators` in
+`contract/repo_contract.json`.
 
 ## Adopting the gate
 
