@@ -370,7 +370,7 @@
     ".flake8": "Flake8 is superseded by ruff. Move settings into [tool.ruff] in pyproject.toml.",
     ".pylintrc": "Pylint is superseded by ruff. Move settings into [tool.ruff] in pyproject.toml.",
     ".travis.yaml": "Travis CI is retired. Move the pipeline to .github/workflows/.",
-    "skills": "Skills are installed globally by `vx ai setup`. Only loonghao/vx keeps a skills/ directory."
+    "skills": "Agent skills are not vendored per repository. Runtime truth is the Monica workspace skill registry (`monica skill get <id> --with-content`); `loonghao/vx` `skills/` is the global `vx ai setup` install source. A committed `skills/` tree under an `agents_ide_dir` is never the runtime source and drifts silently."
   },
   "agents_source_file": "AGENTS.md",
   "agents_derived_files": [
@@ -404,6 +404,7 @@
     ".codebuddy",
     ".codegraph",
     ".cursor",
+    ".kimi",
     ".kiro",
     ".opencode",
     ".roo",

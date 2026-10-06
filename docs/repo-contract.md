@@ -125,6 +125,34 @@ Findings are emitted as GitHub annotations
 (`::error file=vx.toml,title=Repo contract R005::...`) so they appear on the file
 in the PR diff.
 
+## Where agent skills live (R008 / `agents_ide_dirs`)
+
+`agents_ide_dirs` is not an allowlist. A directory on that list that is present
+in a repository is reported by R008 as a warning: agent directories are meant to
+be generated at setup time and kept out of version control.
+
+That makes a committed `skills/` tree under one of those directories a contract
+finding rather than a supported pattern, and for good reason. A copy of a skill
+in a repository is never what an agent run actually loads. Monica tasks mount
+skills from the **workspace skill registry**, materialised into the task's
+`agents_ide_dir` at startup:
+
+```bash
+monica skill list --output json                       # canonical source of truth
+monica skill get <skill-id> --with-content            # read the mounted bytes
+monica skill files upsert <skill-id> --path scripts/x.py --content-file x.py
+monica skill update <skill-id> --content-file SKILL.md
+```
+
+A change that lands only in a repository therefore looks done in review while
+leaving every subsequent run on the previous version — the failure this entry
+was written to prevent (PIP-4292). Land the change in the registry, and treat a
+repository copy as drift.
+
+Export the registry copy with `monica skill export <skill-id> --dir <dir>`
+when a byte-identical offline copy is genuinely needed; do not commit it under
+an `agents_ide_dir`.
+
 ## Changing a rule
 
 Edit `contract/repo_contract.json` — not the script. The script only implements
