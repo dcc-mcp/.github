@@ -37,7 +37,8 @@ from check_repo_contract import parse_vx_toml as parse_toml_subset
 # ``parse_vx_toml`` is the lenient TOML-subset parser the repository contract
 # already uses for vx.toml. It never raises and it keeps numbers as written,
 # which is what a lint-setting check wants; pyproject.toml needs nothing more
-# than the tables this family reads out of it.
+# than the tables this family reads out of it. It also returns a line-number map
+# that only the repository contract needs, so callers index the parsed mapping.
 
 # A ruff configuration, resolved from the contract's ordered list of sources.
 # ``settings`` is None when no source declares ruff configuration at all.

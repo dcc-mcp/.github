@@ -67,10 +67,10 @@
       "id": "R007",
       "name": "no-scripts-with-justfile",
       "title": "A repository with a justfile has no vx.toml [scripts]",
-      "severity": "warn",
-      "profiles": ["strict"],
+      "severity": "error",
+      "profiles": ["baseline", "strict"],
       "source": "PIP-3734",
-      "summary": "[scripts] entries that only shell out to `just <recipe>` duplicate the justfile and drift. Keep recipes in justfile; keep [scripts] only when there is no justfile."
+      "summary": "[scripts] entries that only shell out to `just <recipe>` duplicate the justfile and drift. Keep recipes in justfile; keep [scripts] only when there is no justfile. Promoted to error in baseline by PIP-3782: the cleanups in PIP-3734 had no gate, so the entries came back. Repositories that still carry both fail until their entries are moved into the justfile or dropped."
     },
     {
       "id": "R008",

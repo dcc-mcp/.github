@@ -204,7 +204,7 @@ class TestContractFile(ContractTestCase):
 
 class TestVxTomlParser(unittest.TestCase):
     def test_reads_tables_comments_and_scalars(self) -> None:
-        parsed, unparsed = parse_vx_toml(
+        parsed, unparsed, _ = parse_vx_toml(
             "\n".join(
                 [
                     "# leading comment",
@@ -225,20 +225,20 @@ class TestVxTomlParser(unittest.TestCase):
         self.assertIs(parsed["settings"]["auto_install"], True)
 
     def test_keeps_unquoted_versions_as_written(self) -> None:
-        parsed, _ = parse_vx_toml("[tools]\nrust = 1.90.0\n")
+        parsed, _, _ = parse_vx_toml("[tools]\nrust = 1.90.0\n")
         self.assertEqual(parsed["tools"]["rust"], "1.90.0")
 
     def test_dotted_sub_table_is_its_own_key(self) -> None:
-        parsed, _ = parse_vx_toml('[tools.pwsh]\nversion = "7.4.13"\n')
+        parsed, _, _ = parse_vx_toml('[tools.pwsh]\nversion = "7.4.13"\n')
         self.assertEqual(parsed["tools.pwsh"]["version"], "7.4.13")
 
     def test_reports_unparseable_lines(self) -> None:
-        _, unparsed = parse_vx_toml("[tools]\nthis is not toml\n")
+        _, unparsed, _ = parse_vx_toml("[tools]\nthis is not toml\n")
         self.assertEqual(len(unparsed), 1)
         self.assertEqual(unparsed[0][0], 2)
 
     def test_multi_line_string_is_one_value(self) -> None:
-        parsed, unparsed = parse_vx_toml(
+        parsed, unparsed, _ = parse_vx_toml(
             "\n".join(
                 [
                     "[scripts]",
@@ -254,7 +254,7 @@ class TestVxTomlParser(unittest.TestCase):
         self.assertEqual(parsed["scripts"]["other"], "x")
 
     def test_escaped_quotes_inside_a_string(self) -> None:
-        parsed, unparsed = parse_vx_toml(
+        parsed, unparsed, _ = parse_vx_toml(
             '[env]\nUE_5_ROOT = "C:\\\\Program Files\\\\Epic Games\\\\UE_5.7"\n'
         )
         self.assertEqual(unparsed, [])
@@ -266,7 +266,7 @@ class TestVxTomlParser(unittest.TestCase):
         self.assertEqual(run_cli(self.repo.root)[0], 0)
 
     def test_inline_table_reduces_to_its_version(self) -> None:
-        parsed, unparsed = parse_vx_toml(
+        parsed, unparsed, _ = parse_vx_toml(
             '[tools]\nrcedit = { version = "latest", os = ["windows"] }\n'
             'msvc = { version = "14.42", os = ["windows"] }\n'
         )
@@ -275,29 +275,58 @@ class TestVxTomlParser(unittest.TestCase):
         self.assertEqual(parsed["tools"]["msvc"], "14.42")
 
     def test_inline_table_without_a_version_is_left_alone(self) -> None:
-        parsed, _ = parse_vx_toml('[tools]\nfoo = { os = ["windows"] }\n')
+        parsed, _, _ = parse_vx_toml('[tools]\nfoo = { os = ["windows"] }\n')
         self.assertTrue(parsed["tools"]["foo"].startswith("{"))
 
     def test_project_table_is_known(self) -> None:
-        parsed, _ = parse_vx_toml('[project]\nname = "demo"\n\n[tools]\nnode = "22"\n')
+        parsed, _, _ = parse_vx_toml('[project]\nname = "demo"\n\n[tools]\nnode = "22"\n')
         self.assertEqual(parsed["project"]["name"], "demo")
         self.assertEqual(parsed["tools"]["node"], "22")
 
     def test_ignores_array_of_tables_headers(self) -> None:
         # Not supported, but it must not be reported as a value line either.
-        _, unparsed = parse_vx_toml("[[bin]]\nname = \"vx\"\n")
+        _, unparsed, _ = parse_vx_toml("[[bin]]\nname = \"vx\"\n")
         self.assertEqual([line for _, line in unparsed], ["[[bin]]"])
+
+    def test_records_the_line_of_every_table_and_key(self) -> None:
+        _, _, positions = parse_vx_toml(
+            "\n".join(
+                [
+                    "# leading comment",
+                    "[tools]",
+                    'just = "latest"',
+                    "",
+                    "[scripts]",
+                    'ci = "just ci"',
+                ]
+            )
+        )
+        self.assertEqual(positions["tools"], 2)
+        self.assertEqual(positions["tools.just"], 3)
+        self.assertEqual(positions["scripts"], 5)
+        self.assertEqual(positions["scripts.ci"], 6)
+
+    def test_a_multi_line_entry_points_at_its_first_line(self) -> None:
+        _, _, positions = parse_vx_toml(
+            "\n".join(["[scripts]", "build = '''", "python build.py", "'''", 'x = "y"'])
+        )
+        self.assertEqual(positions["scripts.build"], 2)
+        # The continuation lines are part of `build`, so the next entry starts
+        # after the closing delimiter rather than on the line after the key.
+        self.assertEqual(positions["scripts.x"], 5)
 
 
 class TestProfiles(ContractTestCase):
-    def test_baseline_only_runs_the_first_five_rules(self) -> None:
+    def test_baseline_runs_the_mechanical_rules_and_r007(self) -> None:
+        # R001-R005 are mechanical; R007 joined them when PIP-3782 promoted it,
+        # because a gate that only runs in `strict` is a gate nobody hits.
         self.repo.clean()
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):
             self.assertEqual(main(["--root", str(self.repo.root), "--contract", CONTRACT, "--profile", "baseline", "--list-rules"]), 0)
         self.assertEqual(
             set(line.split()[0] for line in stdout.getvalue().strip().splitlines()),
-            {"R001", "R002", "R003", "R004", "R005"},
+            {"R001", "R002", "R003", "R004", "R005", "R007"},
         )
 
     def test_strict_runs_every_rule(self) -> None:
@@ -519,13 +548,35 @@ class TestR006RootAllowlist(ContractTestCase):
 
 
 class TestR007ScriptsVsJustfile(ContractTestCase):
-    def test_scripts_next_to_a_justfile_warns_per_entry(self) -> None:
+    def test_scripts_next_to_a_justfile_fails_per_entry(self) -> None:
         self.repo.clean()
         self.repo.write("vx.toml", '[scripts]\nci = "just ci"\ntest = "just test"\n')
         code, findings = run_cli(self.repo.root, "--profile", "strict")
-        self.assertEqual(code, 0)
+        self.assertEqual(code, 1)
         r007 = [item for item in findings if item["rule_id"] == "R007"]
         self.assertEqual(len(r007), 2)
+        self.assertEqual(self.severities(findings, "R007"), {"error"})
+
+    def test_runs_in_the_baseline_profile(self) -> None:
+        # The rule was strict-only before PIP-3782, so the repositories that run
+        # the default profile never saw it at all.
+        self.repo.clean()
+        self.repo.write("vx.toml", '[scripts]\nci = "just ci"\n')
+        code, findings = run_cli(self.repo.root, "--profile", "baseline")
+        self.assertEqual(code, 1)
+        self.assertEqual(self.severities(findings, "R007"), {"error"})
+
+    def test_reports_the_line_of_each_entry(self) -> None:
+        self.repo.clean()
+        self.repo.write(
+            "vx.toml", '[tools]\npython = "3.12"\n\n[scripts]\nci = "just ci"\ntest = "just test"\n'
+        )
+        _code, findings = run_cli(self.repo.root, "--profile", "baseline")
+        r007 = [item for item in findings if item["rule_id"] == "R007"]
+        self.assertEqual(
+            sorted(item["path"] for item in r007),
+            ["vx.toml:5", "vx.toml:6"],
+        )
 
     def test_scripts_without_a_justfile_are_allowed(self) -> None:
         self.repo.clean()
@@ -537,6 +588,11 @@ class TestR007ScriptsVsJustfile(ContractTestCase):
         self.repo.clean()
         self.repo.write("vx.toml", "[scripts]\n")
         self.assertEqual(run_cli(self.repo.root, "--profile", "strict")[0], 0)
+
+    def test_a_repository_without_a_vx_toml_passes(self) -> None:
+        self.repo.clean()
+        (self.repo.root / "vx.toml").unlink(missing_ok=True)
+        self.assertEqual(run_cli(self.repo.root, "--profile", "baseline")[0], 0)
 
 
 class TestR008AgentsDerived(ContractTestCase):

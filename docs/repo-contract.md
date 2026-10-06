@@ -25,7 +25,7 @@ in [adapter-contract.md](adapter-contract.md).
 | R004 | `vx-toml-parses` — `vx.toml` parses into known tables | error | error | PIP-3737 |
 | R005 | `tools-version-format` — `[tools]` pins are `stable`, `latest`, `X[.Y[.Z]]`, or a declared delegation sentinel | error | error | PIP-3737 |
 | R006 | `root-allowlist` — every top-level entry is allowlisted | — | warning | PIP-3735 |
-| R007 | `no-scripts-with-justfile` — no `vx.toml [scripts]` when a justfile exists | — | warning | PIP-3734 |
+| R007 | `no-scripts-with-justfile` — no `vx.toml [scripts]` when a justfile exists | error | error | PIP-3734 |
 | R008 | `agents-derived-symlink` — `CLAUDE.md` and friends are symlinks or generated | — | warning | PIP-3736 |
 | R009 | `tools-no-latest` — `[tools]` pins are concrete, not `latest` | — | warning | PIP-3737 |
 | R010 | `llms-txt-fresh` — `llms.txt` exists when a generator exists | — | warning | PIP-3738 |
@@ -37,14 +37,18 @@ while an entry that is simply unknown is a **warning** you can silence with
 `--allow-extra` once you have decided it belongs there.
 
 The first five rules are mechanical: they need no product decision, and a
-repository either satisfies them or it does not. The last six are being rolled
-out by their owning issues, so they start out limited to `strict` and get
-promoted when the rollout lands. That is the ratchet — a repository adopts the
-gate before it is clean, and the warnings are the to-do list. R011 is the
-exception to the "starts as a warning" pattern: it is an `error`, because by the
-time it fires there is already a tracked file that has to be removed. It is
-scoped to `strict` only while the handful of repositories with a pre-existing
-committed agent tree are cleaned up.
+repository either satisfies them or it does not. R007 is mechanical too, and it
+joined `baseline` as an `error` once PIP-3782 closed the enforcement gap — the
+cleanup in PIP-3734 removed 255 mirrored `[scripts]` entries by hand, but the
+rule that was supposed to stop them coming back was a `strict`-only `warning`,
+so no repository on the default profile ever failed on it and the entries
+returned. The remaining five are being rolled out by their owning issues, so they
+start out limited to `strict` and get promoted when the rollout lands. That is
+the ratchet — a repository adopts the gate before it is clean, and the warnings
+are the to-do list. R011 is the exception to the "starts as a warning" pattern:
+it is an `error`, because by the time it fires there is already a tracked file
+that has to be removed. It is scoped to `strict` only while the handful of
+repositories with a pre-existing committed agent tree are cleaned up.
 
 ### Delegation sentinels (R005)
 
@@ -97,9 +101,14 @@ jobs:
     uses: dcc-mcp/.github/.github/workflows/repo-contract.yml@main
     with:
       profile: strict
-      error-rules: "R006,R007,R008"
+      error-rules: "R006,R008"
       fail-on: warning
 ```
+
+R007 no longer needs promoting: it is already an `error` in `baseline`. A
+repository that cannot drop its `[scripts]` yet can opt out explicitly with
+`skip-rules: "R007"` and a comment saying why, which keeps the decision visible
+in the repository instead of hidden in a profile nobody reads.
 
 Available inputs: `ref`, `profile` (`baseline` | `strict` | `all`), `rules`,
 `skip-rules`, `error-rules`, `allow-extra`, `fail-on` (`error` | `warning` |
