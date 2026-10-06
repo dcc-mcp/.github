@@ -23,6 +23,7 @@ Rules (repo_contract.json)
     R008 agents-derived-symlink  CLAUDE.md & friends are symlinks or generated
     R009 tools-no-latest         [tools] pins are concrete, not `latest`
     R010 llms-txt-fresh          llms.txt exists when a generator exists
+    R011 no-tracked-agent-dirs   nothing is tracked under an agents_ide_dir
 
 Rules (adapter_contract.json)
 -----------------------------
@@ -62,6 +63,7 @@ import fnmatch
 import json
 import os
 import re
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -74,6 +76,10 @@ ADAPTER_CONTRACT_PATH = ROOT / "contract" / "adapter_contract.json"
 SEVERITY_ORDER = {"notice": 0, "warning": 1, "error": 2}
 SEVERITY_ALIASES = {"warn": "warning", "err": "error"}
 MAX_PROVENANCE_SCAN_LINES = 10
+# R011 reports each tracked file, so cap the output: a whole skill tree should
+# still fail, but not by printing the same finding two hundred times.
+MAX_TRACKED_AGENT_FILES = 20
+GIT_LS_FILES_TIMEOUT_SECONDS = 30
 
 JUSTFILE_NAMES = ("justfile", ".justfile", "JUSTFILE", "Justfile")
 
@@ -961,6 +967,10 @@ def check_agents_derived_symlink(root: Path, contract: Contract, ctx: dict) -> l
     for name in contract.value("agents_ide_dirs", []):
         path = root / name
         if path.is_dir() and not path.is_symlink():
+            if _tracked_files_under(root, name):
+                # R011 reports each tracked file at error severity. Warning about
+                # the directory as well would only duplicate the finding.
+                continue
             findings.append(
                 Finding(
                     rule["id"],
@@ -971,6 +981,75 @@ def check_agents_derived_symlink(root: Path, contract: Contract, ctx: dict) -> l
                         f"agent directory `{name}/` is committed; generate it from `{source}` "
                         "at setup time and keep it out of version control"
                     ),
+                )
+            )
+    return findings
+
+
+def _tracked_files_under(root: Path, rel: str) -> list[str]:
+    """Files version-controlled under ``rel``, relative to ``root``.
+
+    Prefers ``git ls-files`` so that untracked output sitting inside an ignored
+    agent directory is not reported — "present on disk" and "committed" are not
+    the same thing once the directory is ignored. Falls back to a filesystem
+    walk when the target is not a git working tree (a tarball export, or the
+    temp directories the contract tests build), where every file present is the
+    best available approximation of the tracked set.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "ls-files", "--", rel],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=GIT_LS_FILES_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError):
+        proc = None
+    if proc is not None and proc.returncode == 0:
+        return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+
+    path = root / rel
+    if not path.is_dir():
+        return []
+    return sorted(
+        item.relative_to(root).as_posix() for item in path.rglob("*") if item.is_file()
+    )
+
+
+def check_no_tracked_agent_dirs(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
+    rule = contract.rules["R011"]
+    findings = []
+    for name in contract.value("agents_ide_dirs", []):
+        path = root / name
+        if not path.is_dir() or path.is_symlink():
+            continue
+        tracked = _tracked_files_under(root, name)
+        if not tracked:
+            continue
+        for rel_file in tracked[:MAX_TRACKED_AGENT_FILES]:
+            findings.append(
+                Finding(
+                    rule["id"],
+                    rule["name"],
+                    rule["severity"],
+                    rel_file,
+                    (
+                        f"`{rel_file}` is tracked under the agent/IDE directory `{name}/`; "
+                        f"add `/{name}/` to .gitignore and untrack it, or move the asset to "
+                        "a committed path outside the agent directories"
+                    ),
+                )
+            )
+        hidden = len(tracked) - MAX_TRACKED_AGENT_FILES
+        if hidden > 0:
+            findings.append(
+                Finding(
+                    rule["id"],
+                    rule["name"],
+                    rule["severity"],
+                    name + "/",
+                    f"... and {hidden} more tracked file(s) under `{name}/`",
                 )
             )
     return findings
@@ -1531,6 +1610,7 @@ RULES: dict[str, Callable[[Path, Contract, dict], list[Finding]]] = {
     "R008": check_agents_derived_symlink,
     "R009": check_tools_no_latest,
     "R010": check_llms_txt_fresh,
+    "R011": check_no_tracked_agent_dirs,
     "A001": check_no_deprecated_install_sop_alias,
     "A002": check_no_hand_rolled_report_schema_version,
     "A003": check_core_floor_declared,
