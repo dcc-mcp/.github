@@ -25,7 +25,7 @@ in [adapter-contract.md](adapter-contract.md).
 | R004 | `vx-toml-parses` — `vx.toml` parses into known tables | error | error | PIP-3737 |
 | R005 | `tools-version-format` — `[tools]` pins are `stable`, `latest`, `X[.Y[.Z]]`, or a declared delegation sentinel | error | error | PIP-3737 |
 | R006 | `root-allowlist` — every top-level entry is allowlisted | — | warning | PIP-3735 |
-| R007 | `no-scripts-with-justfile` — no `vx.toml [scripts]` when a justfile exists | — | warning | PIP-3734 |
+| R007 | `no-scripts-with-justfile` — no `vx.toml [scripts]` when a justfile exists | error | error | PIP-3734 |
 | R008 | `agents-derived-symlink` — `CLAUDE.md` and friends are symlinks or generated | — | warning | PIP-3736 |
 | R009 | `tools-no-latest` — `[tools]` pins are concrete, not `latest` | — | warning | PIP-3737 |
 | R010 | `llms-txt-fresh` — `llms.txt` exists when a generator exists | — | warning | PIP-3738 |
@@ -68,6 +68,32 @@ The exemption is scoped per tool, via `tools_delegation_sentinels` in
 `python = "rustup-managed"` is still an error. When another proxy-managed runtime
 needs a sentinel, add it there. Do not widen `tools_version_pattern` instead —
 that would let every tool claim every sentinel.
+
+### `[scripts]` versus the justfile (R007)
+
+A repository has one task runner. When a `justfile` exists, `vx.toml` answers
+*which version of a tool* and the justfile answers *how work gets run*; a
+`[scripts]` entry that forwards to `just <recipe>` is a second source of truth
+for the same task, and the copy drifts the moment the recipe changes.
+
+R007 therefore runs on the `baseline` profile and is an **error**: a repository
+with a justfile and a non-empty `[scripts]` table fails the default gate, with
+one annotation per script so the output names each duplicated task.
+
+It is part of the baseline rather than a `strict`-only warning because the rule
+is mechanical. Everything it reports is a task that is defined twice, and there
+is no judgement call to defer — unlike R006 (an unexpected root entry may be
+legitimate) or R009 (`latest` may be deliberate), a `[scripts]` entry next to a
+justfile is duplicate by construction.
+
+A repository without a justfile is unaffected: `[scripts]` is the right place
+for its tasks, and R007 does not fire.
+
+Opt out per repository with `skip-rules: "R007"` when a repository deliberately
+keeps both. That is a decision to record, not a default to inherit — the
+nightly sweep runs the same contract, so the skip has to be declared in
+`contract/repositories.json` (per-repository `skip_rules`) as well as in the
+caller workflow.
 
 ## Adopting the gate
 

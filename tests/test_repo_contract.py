@@ -290,14 +290,16 @@ class TestVxTomlParser(unittest.TestCase):
 
 
 class TestProfiles(ContractTestCase):
-    def test_baseline_only_runs_the_first_five_rules(self) -> None:
+    def test_baseline_runs_the_mechanical_rules(self) -> None:
+        # R007 joined the baseline with PIP-3734: a repository that ships a
+        # justfile must not mirror its recipes into vx.toml [scripts].
         self.repo.clean()
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):
             self.assertEqual(main(["--root", str(self.repo.root), "--contract", CONTRACT, "--profile", "baseline", "--list-rules"]), 0)
         self.assertEqual(
             set(line.split()[0] for line in stdout.getvalue().strip().splitlines()),
-            {"R001", "R002", "R003", "R004", "R005"},
+            {"R001", "R002", "R003", "R004", "R005", "R007"},
         )
 
     def test_strict_runs_every_rule(self) -> None:
@@ -519,13 +521,20 @@ class TestR006RootAllowlist(ContractTestCase):
 
 
 class TestR007ScriptsVsJustfile(ContractTestCase):
-    def test_scripts_next_to_a_justfile_warns_per_entry(self) -> None:
+    def test_scripts_next_to_a_justfile_fails_per_entry(self) -> None:
         self.repo.clean()
         self.repo.write("vx.toml", '[scripts]\nci = "just ci"\ntest = "just test"\n')
         code, findings = run_cli(self.repo.root, "--profile", "strict")
-        self.assertEqual(code, 0)
+        self.assertEqual(code, 1)
         r007 = [item for item in findings if item["rule_id"] == "R007"]
         self.assertEqual(len(r007), 2)
+        self.assertEqual(self.severities(r007, "R007"), {"error"})
+        self.assertEqual({item["path"] for item in r007}, {"vx.toml"})
+
+    def test_scripts_next_to_a_justfile_fails_on_the_baseline_profile(self) -> None:
+        self.repo.clean()
+        self.repo.write("vx.toml", '[scripts]\nci = "just ci"\n')
+        self.assertEqual(run_cli(self.repo.root, "--profile", "baseline")[0], 1)
 
     def test_scripts_without_a_justfile_are_allowed(self) -> None:
         self.repo.clean()
