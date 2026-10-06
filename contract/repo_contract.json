@@ -370,7 +370,7 @@
     ".flake8": "Flake8 is superseded by ruff. Move settings into [tool.ruff] in pyproject.toml.",
     ".pylintrc": "Pylint is superseded by ruff. Move settings into [tool.ruff] in pyproject.toml.",
     ".travis.yaml": "Travis CI is retired. Move the pipeline to .github/workflows/.",
-    "skills": "Agent skills are not vendored per repository. Runtime truth is the Monica workspace skill registry (`monica skill get <id> --with-content`); `loonghao/vx` `skills/` is the global `vx ai setup` install source. A committed `skills/` tree under an `agents_ide_dir` is never the runtime source and drifts silently."
+    "skills": "Agent skills are not vendored per repository. For a Monica-managed run the workspace skill registry is authoritative (`monica skill get <id> --with-content`); `loonghao/vx` `skills/` is the global `vx ai setup` install source. Some IDE/CLI runtimes do load a committed copy from their own directory, which is why committing one is worse than redundant: it forks from the registry and silently drifts."
   },
   "agents_source_file": "AGENTS.md",
   "agents_derived_files": [
@@ -395,7 +395,9 @@
   ],
   "agents_provenance_marker": "generated from AGENTS.md",
   "agents_ide_dirs": [
+    ".agent_context",
     ".agents",
+    ".aider",
     ".augment",
     ".beads",
     ".claude",
@@ -403,9 +405,14 @@
     ".clinerules",
     ".codebuddy",
     ".codegraph",
+    ".codex",
+    ".continue",
     ".cursor",
+    ".gemini",
     ".kimi",
     ".kiro",
+    ".monica",
+    ".multica",
     ".opencode",
     ".roo",
     ".serena",
