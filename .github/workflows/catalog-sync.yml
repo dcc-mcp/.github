@@ -78,7 +78,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORIES: ${{ inputs.repositories }}
-          FAIL_ON: ${{ inputs.fail_on }}
+          FAIL_ON: ${{ inputs['fail-on'] }}
         run: |
           set -- --format json
           if [[ -n "$REPOSITORIES" ]]; then
