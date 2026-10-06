@@ -237,10 +237,10 @@ def fetch_source_catalog(
     Read through the API rather than a checkout so the script stays usable from a
     workflow that never clones ``dcc-mcp-core``.
     """
-    reference = ref or ""
-    args = ["api", f"repos/{repository}/contents/{path}"]
-    if reference:
-        args.append(f"?ref={reference}")
+    # The ref is part of the endpoint, not a separate argument: `gh api` takes
+    # exactly one endpoint and rejects a stray `?ref=...` as a second one.
+    reference = f"?ref={ref}" if ref else ""
+    args = ["api", f"repos/{repository}/contents/{path}{reference}"]
     payload = gh_json(args, timeout, f"read {repository}:{path}")
     if isinstance(payload, dict) and payload.get("encoding") == "base64":
         import base64
@@ -609,6 +609,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     except CheckError as exc:
         print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:
+        # Only exit 1 means "drift that --fail-on cares about". Any other failure
+        # is the check not having run, so it must stay distinguishable from drift
+        # once the workflow starts honouring that exit code.
+        print(f"error: the check could not be performed: {exc!r}", file=sys.stderr)
         return 2
 
 

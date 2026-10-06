@@ -325,6 +325,17 @@ class MainTest(unittest.TestCase):
         with mock.patch.object(ccs, "fetch_source_catalog", boom):
             self.assertEqual(ccs.main(["--format", "json"]), 2)
 
+    def test_an_unexpected_failure_also_exits_two(self):
+        # Exit 1 is reserved for "drift that --fail-on cares about". A crash must
+        # keep its own code, or it turns into drift and -- the moment the workflow
+        # honours exit 1 -- into a false red. A corrupt base64 payload raising
+        # binascii.Error is exactly that case.
+        import base64
+
+        payload = {"encoding": "base64", "content": "not-valid-base64!!"}
+        with mock.patch.object(ccs, "gh_json", lambda *a, **k: payload):
+            self.assertEqual(ccs.main(["--format", "json"]), 2)
+
     def test_repository_override_skips_the_org_listing(self):
         # An explicit --repositories must never trigger an org-wide enumeration,
         # which is the expensive call in a nightly sweep.
@@ -367,6 +378,49 @@ class EnvelopeTest(unittest.TestCase):
         with mock.patch.object(ccs, "gh_json", lambda *a, **k: payload):
             with self.assertRaises(ccs.CheckError):
                 ccs.fetch_published_catalog("o/r", "install-catalog", "install-catalog.json", 1.0)
+
+
+class SourceCatalogRefTest(unittest.TestCase):
+    """`--catalog-ref` must reach `gh api` as one endpoint, not a second argument.
+
+    `gh api` accepts exactly one endpoint, so a `?ref=...` appended as its own
+    argv element is rejected outright and the check dies before it reads anything.
+    This path is unexercised by the nightly sweep, which passes no ref at all.
+    """
+
+    def gh_args_for(self, ref):
+        import base64
+
+        seen = []
+        payload = {
+            "encoding": "base64",
+            "content": base64.b64encode(b'entries:\n  - name: "dcc-mcp-maya"\n').decode(),
+        }
+
+        def fake(args, _timeout, _what):
+            seen.append(args)
+            return payload
+
+        with mock.patch.object(ccs, "gh_json", fake):
+            ccs.fetch_source_catalog("o/r", "dcc-mcp-catalog.yml", 1.0, ref)
+        return seen[0]
+
+    def test_a_ref_is_inlined_into_the_endpoint(self):
+        self.assertEqual(
+            self.gh_args_for("main"),
+            ["api", "repos/o/r/contents/dcc-mcp-catalog.yml?ref=main"],
+        )
+
+    def test_an_empty_ref_leaves_the_endpoint_bare(self):
+        self.assertEqual(
+            self.gh_args_for(""),
+            ["api", "repos/o/r/contents/dcc-mcp-catalog.yml"],
+        )
+
+    def test_every_argument_stays_a_single_element(self):
+        # The regression itself: a stray element is what makes `gh api` fail with
+        # "accepts 1 arg(s), received 2".
+        self.assertEqual(len(self.gh_args_for("some/branch")), 2)
 
 
 if __name__ == "__main__":
