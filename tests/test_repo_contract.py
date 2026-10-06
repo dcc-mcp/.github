@@ -618,6 +618,75 @@ class TestR010LlmsTxt(ContractTestCase):
         self.assertIn("R010", self.ids(findings))
 
 
+class TestR011TrackedAgentDirs(ContractTestCase):
+    def test_tracked_file_under_agent_dir_fails(self) -> None:
+        self.repo.clean()
+        self.repo.write(".claude/settings.json", "{}\n")
+        code, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(code, 1)
+        r011 = [item for item in findings if item["rule_id"] == "R011"]
+        self.assertEqual([item["path"] for item in r011], [".claude/settings.json"])
+
+    def test_whole_skill_tree_is_reported(self) -> None:
+        self.repo.clean()
+        self.repo.write(".kimi/skills/code-review/SKILL.md", "# skill\n")
+        self.repo.write(".kimi/skills/code-review/scripts/collect_pr_context.py", "x\n")
+        _, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(
+            sorted(item["path"] for item in findings if item["rule_id"] == "R011"),
+            [
+                ".kimi/skills/code-review/SKILL.md",
+                ".kimi/skills/code-review/scripts/collect_pr_context.py",
+            ],
+        )
+
+    def test_empty_agent_dir_is_not_reported(self) -> None:
+        self.repo.clean()
+        self.repo.mkdir(".claude")
+        _, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertNotIn("R011", self.ids(findings))
+
+    def test_directory_warning_moves_to_r008_when_the_dir_is_empty(self) -> None:
+        """R008 warns on an empty agent dir; R011 takes over once files exist."""
+        self.repo.clean()
+        self.repo.mkdir(".claude")
+        _, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertIn("R008", self.ids(findings))
+        self.assertNotIn("R011", self.ids(findings))
+
+        self.repo.write(".claude/settings.json", "{}\n")
+        _, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertIn("R011", self.ids(findings))
+        self.assertNotIn("R008", self.ids(findings))
+
+    def test_files_outside_agent_dirs_are_untouched(self) -> None:
+        self.repo.clean()
+        self.repo.write("skills/code-review/SKILL.md", "# skill\n")
+        self.assertEqual(run_cli(self.repo.root, "--profile", "strict")[0], 0)
+
+    def test_findings_are_capped(self) -> None:
+        self.repo.clean()
+        for index in range(25):
+            self.repo.write(f".cursor/skills/s{index}/SKILL.md", "# s\n")
+        _, findings = run_cli(self.repo.root, "--profile", "strict")
+        r011 = [item for item in findings if item["rule_id"] == "R011"]
+        self.assertEqual(len(r011), 21)
+        summaries = [item for item in r011 if "more" in item["message"]]
+        self.assertEqual(len(summaries), 1)
+        self.assertIn("5 more", summaries[0]["message"])
+
+    def test_baseline_profile_stays_green_while_the_rule_rolls_out(self) -> None:
+        self.repo.clean()
+        self.repo.write(".claude/settings.json", "{}\n")
+        self.assertEqual(run_cli(self.repo.root, "--profile", "baseline")[0], 0)
+
+    def test_rule_can_be_promoted_on_the_command_line(self) -> None:
+        self.repo.clean()
+        self.repo.write(".claude/settings.json", "{}\n")
+        code, _ = run_cli(self.repo.root, "--profile", "baseline", "--rule", "R011")
+        self.assertEqual(code, 1)
+
+
 class TestAnnotationOutput(ContractTestCase):
     def test_github_format_marks_the_file_and_rule(self) -> None:
         self.repo.clean()

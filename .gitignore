@@ -1,1 +1,31 @@
 __pycache__/
+
+# Local agent / IDE directories. These are runtime mount points, not source:
+# the skills and context that actually get loaded are mounted per run from an
+# organization-level skill registry, so keeping a copy in the repository only
+# lets the two drift.
+# Patterns are anchored with a leading "/" so only the repository root matches;
+# unanchored patterns would silently ignore a nested directory of the same name.
+/.agents/
+/.agent_context/
+/.aider/
+/.augment/
+/.beads/
+/.claude/
+/.cline/
+/.clinerules/
+/.codebuddy/
+/.codegraph/
+/.codex/
+/.continue/
+/.cursor/
+/.gemini/
+/.kimi/
+/.kiro/
+/.monica/
+/.multica/
+/.opencode/
+/.roo/
+/.serena/
+/.trae/
+/.windsurf/

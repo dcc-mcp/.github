@@ -98,6 +98,15 @@
       "profiles": ["strict"],
       "source": "PIP-3738",
       "summary": "If the repository ships an llms.txt generator, llms.txt must exist at the root and be listed as generated. A missing llms.txt means the docs contract is only half applied."
+    },
+    {
+      "id": "R011",
+      "name": "no-tracked-agent-dirs",
+      "title": "No version-controlled files under an agent or IDE directory",
+      "severity": "error",
+      "profiles": ["strict"],
+      "source": "org-agent-dirs-policy",
+      "summary": "Files tracked under any agents_ide_dir must not be committed. These directories are runtime mount points populated from the workspace skill registry, so a committed copy is never the code that runs and silently forks from the registry. Add the anchored pattern to .gitignore and untrack the files, or move a shared asset to a committed path outside the agent directories. R008 only warns that the directory exists; R011 reports each tracked file, because a directory warning is easy to scroll past when the tree is large."
     }
   ],
   "forbidden_artifact_globs": [
@@ -370,7 +379,7 @@
     ".flake8": "Flake8 is superseded by ruff. Move settings into [tool.ruff] in pyproject.toml.",
     ".pylintrc": "Pylint is superseded by ruff. Move settings into [tool.ruff] in pyproject.toml.",
     ".travis.yaml": "Travis CI is retired. Move the pipeline to .github/workflows/.",
-    "skills": "Agent skills are not vendored per repository. For a Monica-managed run the workspace skill registry is authoritative (`monica skill get <id> --with-content`); `loonghao/vx` `skills/` is the global `vx ai setup` install source. Some IDE/CLI runtimes do load a committed copy from their own directory, which is why committing one is worse than redundant: it forks from the registry and silently drifts."
+    "skills": "Agent skills are not vendored per repository. For a registry-backed run the organization-level skill registry is authoritative (`skill-registry get <id> --with-content`); `loonghao/vx` `skills/` is the global `vx ai setup` install source. Some IDE/CLI runtimes do load a committed copy from their own directory, which is why committing one is worse than redundant: it forks from the registry and silently drifts."
   },
   "agents_source_file": "AGENTS.md",
   "agents_derived_files": [
