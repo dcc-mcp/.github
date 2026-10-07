@@ -25,7 +25,7 @@ in [adapter-contract.md](adapter-contract.md).
 | R004 | `vx-toml-parses` — `vx.toml` parses into known tables | error | error | PIP-3737 |
 | R005 | `tools-version-format` — `[tools]` pins are `stable`, `latest`, `X[.Y[.Z]]`, or a declared delegation sentinel | error | error | PIP-3737 |
 | R006 | `root-allowlist` — every top-level entry is allowlisted | — | warning | PIP-3735 |
-| R007 | `no-scripts-with-justfile` — no `[scripts]` entry forwards to `just` or shadows a justfile recipe | — | warning | PIP-3734 |
+| R007 | `no-scripts-with-justfile` — no `[scripts]` entry forwards to `just` or shadows a justfile recipe | error | error | PIP-3734 |
 | R008 | `agents-derived-symlink` — `CLAUDE.md` and friends are symlinks or generated | — | warning | PIP-3736 |
 | R009 | `tools-no-latest` — `[tools]` pins are concrete, not `latest` | — | warning | PIP-3737 |
 | R010 | `llms-txt-fresh` — `llms.txt` exists when a generator exists | — | warning | PIP-3738 |
@@ -89,6 +89,27 @@ The difference matters because `vx run lint` and `just lint` are two entry
 points for the same intent, and they drift — that is what R007 exists to stop.
 An `[scripts]` entry the justfile does not provide has nothing to drift from, so
 banning it would cost a real entry point to prevent a problem that cannot occur.
+
+Because the rule is per entry, it is safe to make it an **error on the
+`baseline` profile**: every finding is a task defined twice, and there is no
+judgement call to defer. A duplicate task is duplicate by construction, which is
+the same standard R001–R005 already hold. Reporting it as a `strict`-only
+warning meant an adopting repository on the default `fail-on: error` saw nothing
+at all, so the rule prevented recurrence only for repositories that had already
+opted into `strict`.
+
+### Opting out (R007)
+
+Per-entry judging should already spare every legitimate entry, so an exemption
+is rare. `skip-rules: "R007"` remains available for the narrow case where a
+single entry cannot be migrated yet — a task the justfile cannot express and
+that the per-entry test still catches. It is **not** a way to keep a mirrored
+`[scripts]` table: the right fix there is to delete the duplicates, since the
+justfile copy is the one that runs.
+
+A skip is a decision to record, not a default to inherit — the nightly sweep
+reads the same contract, so declare it in `contract/repositories.json`
+(per-repository `skip_rules`) as well as in the caller workflow.
 
 The forwarding commands and the interchangeable separators are configurable via
 `scripts_just_forward_commands` and `scripts_recipe_name_separators` in

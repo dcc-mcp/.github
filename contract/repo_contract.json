@@ -67,8 +67,8 @@
       "id": "R007",
       "name": "no-scripts-with-justfile",
       "title": "No [scripts] entry duplicates the justfile",
-      "severity": "warn",
-      "profiles": ["strict"],
+      "severity": "error",
+      "profiles": ["baseline", "strict"],
       "source": "PIP-3734",
       "summary": "Judged per entry, not per table. An entry is reported when it forwards to the justfile (`just <recipe>` / `vx just <recipe>`, ignoring leading whitespace and triple-quoted blocks) or when its key names a recipe that exists in the justfile, with `-` and `_` treated as equivalent. Every other entry is legitimate: a repository with a justfile may still keep [scripts] for entry points the justfile does not provide."
     },

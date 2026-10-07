@@ -317,14 +317,16 @@ class TestVxTomlParser(unittest.TestCase):
 
 
 class TestProfiles(ContractTestCase):
-    def test_baseline_only_runs_the_first_five_rules(self) -> None:
+    def test_baseline_runs_the_mechanical_rules(self) -> None:
+        # R007 joined the baseline: per-entry judging means every finding is a
+        # task defined twice, so it needs no opt-in to be trustworthy.
         self.repo.clean()
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):
             self.assertEqual(main(["--root", str(self.repo.root), "--contract", CONTRACT, "--profile", "baseline", "--list-rules"]), 0)
         self.assertEqual(
             set(line.split()[0] for line in stdout.getvalue().strip().splitlines()),
-            {"R001", "R002", "R003", "R004", "R005"},
+            {"R001", "R002", "R003", "R004", "R005", "R007"},
         )
 
     def test_strict_runs_every_rule(self) -> None:
@@ -553,7 +555,7 @@ class TestR007ScriptsVsJustfile(ContractTestCase):
         self.repo.clean()
         self.repo.write("vx.toml", '[scripts]\nci = "just ci"\nother = "vx just lint"\n')
         code, findings = run_cli(self.repo.root, "--profile", "strict")
-        self.assertEqual(code, 0)
+        self.assertEqual(code, 1)
         found = self.r007(findings)
         self.assertEqual(len(found), 2)
         self.assertTrue(all("forwards to" in item["message"] for item in found))
@@ -569,7 +571,7 @@ class TestR007ScriptsVsJustfile(ContractTestCase):
             'indented = "   just fmt   "\n',
         )
         code, findings = run_cli(self.repo.root, "--profile", "strict")
-        self.assertEqual(code, 0)
+        self.assertEqual(code, 1)
         self.assertEqual(len(self.r007(findings)), 2)
 
     def test_sharing_a_recipe_name_is_reported(self) -> None:
@@ -577,7 +579,7 @@ class TestR007ScriptsVsJustfile(ContractTestCase):
         self.repo.write("justfile", "lint:\n    @echo lint\n")
         self.repo.write("vx.toml", '[scripts]\nlint = "uvx ruff check ."\n')
         code, findings = run_cli(self.repo.root, "--profile", "strict")
-        self.assertEqual(code, 0)
+        self.assertEqual(code, 1)
         found = self.r007(findings)
         self.assertEqual(len(found), 1)
         self.assertIn("shares the name", found[0]["message"])
@@ -587,7 +589,7 @@ class TestR007ScriptsVsJustfile(ContractTestCase):
         self.repo.write("justfile", "test-cov:\n    @echo cov\n")
         self.repo.write("vx.toml", '[scripts]\ntest_cov = "pytest --cov"\n')
         code, findings = run_cli(self.repo.root, "--profile", "strict")
-        self.assertEqual(code, 0)
+        self.assertEqual(code, 1)
         self.assertEqual(len(self.r007(findings)), 1)
 
     def test_unrelated_entry_next_to_a_justfile_is_allowed(self) -> None:
@@ -616,11 +618,20 @@ class TestR007ScriptsVsJustfile(ContractTestCase):
         self.assertEqual(run_cli(self.repo.root, "--profile", "strict")[0], 0)
 
     def test_promoted_to_error_it_fails_the_run(self) -> None:
+        # R007 is an error on both profiles, so it fails without an override.
         self.repo.clean()
         self.repo.write("vx.toml", '[scripts]\nci = "just ci"\n')
-        self.assertEqual(run_cli(self.repo.root, "--profile", "strict")[0], 0)
-        code, _ = run_cli(self.repo.root, "--profile", "strict", "--error-rule", "R007")
-        self.assertEqual(code, 1)
+        self.assertEqual(run_cli(self.repo.root, "--profile", "strict")[0], 1)
+        self.assertEqual(run_cli(self.repo.root, "--profile", "baseline")[0], 1)
+
+    def test_demoted_to_warning_it_passes_the_run(self) -> None:
+        self.repo.clean()
+        self.repo.write("vx.toml", '[scripts]\nci = "just ci"\n')
+        code, findings = run_cli(
+            self.repo.root, "--profile", "baseline", "--warn-rule", "R007"
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(self.severities(self.r007(findings), "R007"), {"warning"})
 
     def test_reports_the_line_of_each_entry(self) -> None:
         # With 42 entries in one repository, naming the file 42 times is
