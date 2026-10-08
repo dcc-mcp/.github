@@ -101,9 +101,11 @@ opted into `strict`.
 ### Opting out (R007)
 
 Per-entry judging should already spare every legitimate entry, so an exemption
-is rare. Before reaching for one, delete the duplicate: the justfile recipe is
-the copy that actually runs, so removing the mirrored `[scripts]` entry loses
-nothing and is the only fix that keeps the rule working.
+is rare. Before reaching for one, delete the duplicate — but check callers first:
+removing a `[scripts]` entry also removes its `vx run <name>` command. If
+anything invokes `vx run <name>`, migrate those callers to `just <name>`
+first. For a name-collision entry that is not a copy of the recipe, prefer
+renaming the entry over deleting it.
 
 If a repository genuinely cannot migrate yet, understand what `skip-rules:
 "R007"` does before using it: it takes the **whole rule** off the execution
