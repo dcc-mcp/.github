@@ -25,7 +25,7 @@ in [adapter-contract.md](adapter-contract.md).
 | R004 | `vx-toml-parses` — `vx.toml` parses into known tables | error | error | PIP-3737 |
 | R005 | `tools-version-format` — `[tools]` pins are `stable`, `latest`, `X[.Y[.Z]]`, or a declared delegation sentinel | error | error | PIP-3737 |
 | R006 | `root-allowlist` — every top-level entry is allowlisted | — | warning | PIP-3735 |
-| R007 | `no-scripts-with-justfile` — no `[scripts]` entry forwards to `just` or shadows a justfile recipe | — | warning | PIP-3734 |
+| R007 | `no-scripts-with-justfile` — no `[scripts]` entry forwards to `just` or shadows a justfile recipe | error | error | PIP-3734 |
 | R008 | `agents-derived-symlink` — `CLAUDE.md` and friends are symlinks or generated | — | warning | PIP-3736 |
 | R009 | `tools-no-latest` — `[tools]` pins are concrete, not `latest` | — | warning | PIP-3737 |
 | R010 | `llms-txt-fresh` — `llms.txt` exists when a generator exists | — | warning | PIP-3738 |
@@ -36,13 +36,13 @@ report or a loose `*.py` at the root is an **error** (they are never legitimate)
 while an entry that is simply unknown is a **warning** you can silence with
 `--allow-extra` once you have decided it belongs there.
 
-The first five rules are mechanical: they need no product decision, and a
-repository either satisfies them or it does not. The last six are being rolled
-out by their owning issues, so they start out limited to `strict` and get
-promoted when the rollout lands. That is the ratchet — a repository adopts the
-gate before it is clean, and the warnings are the to-do list. R011 is the
-exception to the "starts as a warning" pattern: it is an `error`, because by the
-time it fires there is already a tracked file that has to be removed. It is
+The first six rules — R001–R005 plus R007 — are mechanical: they need no product
+decision, and a repository either satisfies them or it does not. The rest are
+being rolled out by their owning issues, so they start out limited to `strict`
+and get promoted when the rollout lands. That is the ratchet — a repository
+adopts the gate before it is clean, and the warnings are the to-do list. R011 is
+the exception to the "starts as a warning" pattern: it is an `error`, because by
+the time it fires there is already a tracked file that has to be removed. It is
 scoped to `strict` only while the handful of repositories with a pre-existing
 committed agent tree are cleaned up.
 
@@ -90,6 +90,36 @@ points for the same intent, and they drift — that is what R007 exists to stop.
 An `[scripts]` entry the justfile does not provide has nothing to drift from, so
 banning it would cost a real entry point to prevent a problem that cannot occur.
 
+Because the rule is per entry, it is safe to make it an **error on the
+`baseline` profile**: every finding is a task defined twice, and there is no
+judgement call to defer. A duplicate task is duplicate by construction, which is
+the same standard R001–R005 already hold. Reporting it as a `strict`-only
+warning meant an adopting repository on the default `fail-on: error` saw nothing
+at all, so the rule prevented recurrence only for repositories that had already
+opted into `strict`.
+
+### Opting out (R007)
+
+Per-entry judging should already spare every legitimate entry, so an exemption
+is rare. Before reaching for one, delete the duplicate — but check callers first:
+removing a `[scripts]` entry also removes its `vx run <name>` command. If
+anything invokes `vx run <name>`, migrate those callers to `just <name>`
+first. For a name-collision entry that is not a copy of the recipe, prefer
+renaming the entry over deleting it.
+
+If a repository genuinely cannot migrate yet, understand what `skip-rules:
+"R007"` does before using it: it takes the **whole rule** off the execution
+plan. There is no per-entry exemption for R007 — skipping it for one unmigrated
+entry also stops R007 from reporting every other duplicate in that repository,
+including any added later. Treat it as disabling the rule for that repository,
+not as exempting one line.
+
+Because it is a whole-rule suspension, record it as a decision with an exit
+condition rather than a setting to inherit: note what still has to be migrated
+and when the skip can be removed. The nightly sweep reads the same contract, so
+declare it in `contract/repositories.json` (per-repository `skip_rules`) as well
+as in the caller workflow.
+
 The forwarding commands and the interchangeable separators are configurable via
 `scripts_just_forward_commands` and `scripts_recipe_name_separators` in
 `contract/repo_contract.json`.
@@ -122,7 +152,7 @@ jobs:
     uses: dcc-mcp/.github/.github/workflows/repo-contract.yml@main
     with:
       profile: strict
-      error-rules: "R006,R007,R008"
+      error-rules: "R006,R008"
       fail-on: warning
 ```
 
