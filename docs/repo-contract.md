@@ -36,13 +36,13 @@ report or a loose `*.py` at the root is an **error** (they are never legitimate)
 while an entry that is simply unknown is a **warning** you can silence with
 `--allow-extra` once you have decided it belongs there.
 
-The first five rules are mechanical: they need no product decision, and a
-repository either satisfies them or it does not. The last six are being rolled
-out by their owning issues, so they start out limited to `strict` and get
-promoted when the rollout lands. That is the ratchet — a repository adopts the
-gate before it is clean, and the warnings are the to-do list. R011 is the
-exception to the "starts as a warning" pattern: it is an `error`, because by the
-time it fires there is already a tracked file that has to be removed. It is
+The first six rules — R001–R005 plus R007 — are mechanical: they need no product
+decision, and a repository either satisfies them or it does not. The rest are
+being rolled out by their owning issues, so they start out limited to `strict`
+and get promoted when the rollout lands. That is the ratchet — a repository
+adopts the gate before it is clean, and the warnings are the to-do list. R011 is
+the exception to the "starts as a warning" pattern: it is an `error`, because by
+the time it fires there is already a tracked file that has to be removed. It is
 scoped to `strict` only while the handful of repositories with a pre-existing
 committed agent tree are cleaned up.
 
@@ -101,15 +101,22 @@ opted into `strict`.
 ### Opting out (R007)
 
 Per-entry judging should already spare every legitimate entry, so an exemption
-is rare. `skip-rules: "R007"` remains available for the narrow case where a
-single entry cannot be migrated yet — a task the justfile cannot express and
-that the per-entry test still catches. It is **not** a way to keep a mirrored
-`[scripts]` table: the right fix there is to delete the duplicates, since the
-justfile copy is the one that runs.
+is rare. Before reaching for one, delete the duplicate: the justfile recipe is
+the copy that actually runs, so removing the mirrored `[scripts]` entry loses
+nothing and is the only fix that keeps the rule working.
 
-A skip is a decision to record, not a default to inherit — the nightly sweep
-reads the same contract, so declare it in `contract/repositories.json`
-(per-repository `skip_rules`) as well as in the caller workflow.
+If a repository genuinely cannot migrate yet, understand what `skip-rules:
+"R007"` does before using it: it takes the **whole rule** off the execution
+plan. There is no per-entry exemption for R007 — skipping it for one unmigrated
+entry also stops R007 from reporting every other duplicate in that repository,
+including any added later. Treat it as disabling the rule for that repository,
+not as exempting one line.
+
+Because it is a whole-rule suspension, record it as a decision with an exit
+condition rather than a setting to inherit: note what still has to be migrated
+and when the skip can be removed. The nightly sweep reads the same contract, so
+declare it in `contract/repositories.json` (per-repository `skip_rules`) as well
+as in the caller workflow.
 
 The forwarding commands and the interchangeable separators are configurable via
 `scripts_just_forward_commands` and `scripts_recipe_name_separators` in
@@ -143,7 +150,7 @@ jobs:
     uses: dcc-mcp/.github/.github/workflows/repo-contract.yml@main
     with:
       profile: strict
-      error-rules: "R006,R007,R008"
+      error-rules: "R006,R008"
       fail-on: warning
 ```
 
