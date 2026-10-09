@@ -636,6 +636,33 @@ def _table(data: dict[str, Any], name: str) -> dict[str, Any]:
     return table if isinstance(table, dict) else {}
 
 
+def _ruff_table(data: dict[str, Any], name: str) -> dict[str, Any]:
+    """Resolve the ruff table the way A021 does, sub-tables included.
+
+    ``_table`` only matches the literal key, so a repository that writes nothing
+    but ``[tool.ruff.lint]`` resolves to ``{}`` here -- as if the table were
+    absent -- while A021's resolver sees the sub-table and calls it present. Two
+    rules reading the same file through two resolvers is how the messages drifted
+    apart, so A004 reads the table through A021's resolver instead.
+    """
+    from adapter_contract_rules import _resolve_dotted
+
+    table = _resolve_dotted(data, name)
+    return table if isinstance(table, dict) else {}
+
+
+def _table_settings(table: dict[str, Any]) -> dict[str, Any]:
+    """The entries of a resolved ruff table that are settings, not sub-tables.
+
+    A nested-only ``[tool.ruff.lint]`` resolves to a non-empty mapping that still
+    declares nothing at the top level, so a plain truth test would read "declared
+    nothing" as "declared something". A004 stays silent on that shape and on an
+    empty table -- A021 reports both -- and this keeps the two rules agreeing on
+    where the boundary sits.
+    """
+    return {key: value for key, value in table.items() if not isinstance(value, dict)}
+
+
 def _string_list(value: Any) -> list[str]:
     if isinstance(value, list):
         return [item for item in value if isinstance(item, str)]
@@ -1492,9 +1519,13 @@ def check_ruff_line_length(root: Path, contract: Contract, ctx: dict) -> list[Fi
         path = root / standalone
         if not path.is_file():
             continue
-        settings = parse_vx_toml(_read_text(path) or "")[0]
+        parsed = parse_vx_toml(_read_text(path) or "")[0]
+        settings = _table_settings(parsed)
+        if not settings:
+            # An empty or nested-only standalone file declares nothing, and A021
+            # reports it: there is no line-length here to be wrong about.
+            return []
         declared = settings.get("line-length")
-        declared = None if isinstance(declared, dict) else declared
         return _line_length_finding(rule, standalone, target, declared)
 
     data = _pyproject(contract, ctx)
@@ -1502,9 +1533,12 @@ def check_ruff_line_length(root: Path, contract: Contract, ctx: dict) -> list[Fi
         # A005 already reports the missing pyproject.toml; piling a second
         # finding on it would say the same thing twice.
         return []
-    table = _table(data, table_name)
-    if not table:
+    table = _ruff_table(data, table_name)
+    if not _table_settings(table):
         # No [tool.ruff] table and no standalone file: A021 owns that gap.
+        # An empty or nested-only table lands in the same branch, and it has to
+        # stay silent here for the same reason -- there is no line-length to be
+        # wrong about, and A021 now names the empty table itself.
         return []
     return _line_length_finding(rule, name, target, table.get("line-length"))
 

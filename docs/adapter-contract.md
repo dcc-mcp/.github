@@ -221,11 +221,21 @@ one separately so the annotation points at the file to add. release-please is
 how the organisation versions and publishes, so a repository without it
 releases by hand.
 
-**A021** reports a repository that has a `pyproject.toml` but no ruff
-configuration anywhere: no standalone `ruff.toml` or `.ruff.toml`, and no
-`[tool.ruff]` table. Without one, ruff runs on its own defaults and the lint
-settings differ between a developer machine and CI. A repository with no
-`pyproject.toml` at all is left to A005 — one gap, one finding.
+**A021** reports a repository that has a `pyproject.toml` but no usable ruff
+configuration. Three shapes reach it and they are reported separately, because
+each one is a different edit:
+
+| Shape | Reported as | The fix |
+|---|---|---|
+| no standalone config and no `[tool.ruff]` table | "has no `[tool.ruff]` section" | write the configuration |
+| `[tool.ruff]` present but empty | "`[tool.ruff]` is empty" | fill it in |
+| only sub-tables, e.g. `[tool.ruff.lint]` | "holds only the sub-table `[tool.ruff.lint]` and no settings of its own" | move the top-level settings up |
+
+The second and third used to be reported as the first: the table resolution
+collapsed "the table is absent" and "the table is empty" into the same result,
+so both were silent, and a nested-only table was called missing while the
+sub-table sat right there in the parse. A repository with no `pyproject.toml`
+at all is still left to A005 — one gap, one finding.
 
 ### Where A004 and A006 absorbed the rest
 
@@ -238,7 +248,11 @@ line-length" when the setting is simply in the other file. A004 reports a
 `[tool.ruff]` table that omits `line-length`, because ruff would then fall back
 to its own default of 88 and that silence is the drift; it stays quiet when
 there is no ruff configuration at all, which is A021's gap, and when there is
-no `pyproject.toml`, which is A005's.
+no `pyproject.toml`, which is A005's. It also stays quiet on an empty or
+nested-only table: those declare no `line-length` to be wrong about, and A021
+names them. Both rules resolve the table through the same code path, so they
+cannot disagree about whether it exists. A sub-table is never read as a value —
+`[tool.ruff.line-length]` is a table, not a line length.
 
 **A006** accepts `.pre-commit-config.yaml` and `.pre-commit-config.yml`,
 matching both spellings pre-commit itself looks for. It is a contract-only
@@ -281,6 +295,15 @@ failed to clone in that run (`dcc-mcp-cache-inspector`,
 `dcc-mcp-marvelous-designer`, `dcc-mcp-maya-procedural-architecture`,
 `dcc-mcp-substance3d-designer`, `dcc-mcp-substance3d-painter`), so those two
 counts are a lower bound over 45 packages.
+
+The A021 and A004 rows were re-measured 2026-10-09 over every repository in
+`contract/adapter_repositories.json` — 51 after `dcc-mcp-reaper` joined — and
+both are unchanged by the empty-table and nested-table fixes: the 3 A021
+repositories have no ruff configuration of any shape, and the line-length
+distribution is still 30 on `100`, 18 on `120` and 3 with no table at all. Those
+counts are held in place by `tests/test_adapter_contract_rules.py`, which
+replays the distribution as a synthetic fleet so a rule change cannot move the
+nightly numbers without failing a test.
 
 `dcc-mcp-core` reports nothing under A001–A006: it owns the deprecated alias, so
 `provider_package_dirs` exempts its package tree. It does report A013, because
