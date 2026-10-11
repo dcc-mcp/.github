@@ -30,6 +30,7 @@ in [adapter-contract.md](adapter-contract.md).
 | R009 | `tools-no-latest` — `[tools]` pins are concrete, not `latest` | — | warning | PIP-3737 |
 | R010 | `llms-txt-fresh` — `llms.txt` exists when a generator exists | — | warning | PIP-3738 |
 | R011 | `no-tracked-agent-dirs` — nothing is tracked under an `agents_ide_dir` | — | error | org-agent-dirs-policy |
+| R012 | `release-identity-anchored-on-tag` — release identity resolves the tag, never `github.sha` | — | warning | PIP-4497 |
 
 R006 reports two classes of finding at different severities: a stray generated
 report or a loose `*.py` at the root is an **error** (they are never legitimate),
@@ -239,6 +240,51 @@ committed tree produces one set of findings rather than two.
 The check asks `git ls-files` which files are version-controlled, so output
 sitting inside an already-ignored agent directory is not reported. Outside a git
 working tree it falls back to listing the directory.
+
+### R012: anchoring release identity on the tag
+
+A release or publish workflow must not assert that the commit being published is
+the commit that started the run. release-please can merge the release PR while
+the run that is going to publish it is still in flight, and it then tags that
+later merge commit — so a release-identity variable legitimately differs from
+`github.sha`. A workflow that compares the two fails the run, and because the
+next push gets `created != true` the publish job is skipped: the release ships
+with no artefacts and can never self-heal. That is exactly what
+dcc-mcp-reaper hit.
+
+Two shapes are reported, both at the line that binds the run head into the
+release identity:
+
+- **a shell comparison** — `test`, `[ ]` or `[[ ]]` joining a run-head token
+  (`$GITHUB_SHA`, `${{ github.sha }}`) with a release-identity variable
+  (`RELEASE_SHA`, `EXPECTED_SHA`, `TAG_SHA`, `targetCommitish`, ...);
+- **a YAML binding** — `EXPECTED_SHA: ${{ github.sha }}` that a later
+  comparison in the same step consumes.
+
+Everything else is legitimate, and the rule is written to say so:
+
+- **Comments are stripped first.** Every repository that fixed this defect kept a
+  comment explaining why, so a plain text search reports all of them.
+- **A bare `=` is not a comparison.** `echo "source_sha=$GITHUB_SHA"` records
+  provenance; only `test`, `[ ]`, `[[ ]]` and `${{ }}` expressions carrying
+  `==`/`!=` are compared.
+- **A run head that is only recorded is not reported.** A checkout `ref:`,
+  `--head-sha "$GITHUB_SHA"` and `git show "${GITHUB_SHA}:path"` name no release
+  identity and assert nothing.
+- **The variable has to be a release identity.** `[ "$latest_main" != "$GITHUB_SHA" ]`
+  is deliberate supersede protection, and `[ "$RELEASE_TAG" != "v$RELEASE_VERSION" ]`
+  compares a tag name to a version. Neither is an identity assertion.
+- **A binding is scoped to its own step.** `env:` is per step, so a step that
+  binds `EXPECTED_SHA` to the tag and compares it is not paired with an unrelated
+  `EXPECTED_SHA: ${{ github.sha }}` three hundred lines later. Before this
+  scoping existed, the gold-standard repository scored seven false positives.
+
+The rule was validated against 100 real release/publish workflow files from 63
+repositories in the org before it landed.
+
+The files it reads and the identity names it matches are configurable via
+`release_workflow_globs` and `release_identity_names` in
+`contract/repo_contract.json`.
 
 ## Changing a rule
 

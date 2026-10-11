@@ -809,6 +809,248 @@ class TestR011TrackedAgentDirs(ContractTestCase):
         self.assertEqual(code, 1)
 
 
+# The tag-anchored shape every repository converged on. The comment is kept
+# verbatim on purpose: every fix left it behind, so a rule that cannot tell a
+# comment from a live assertion reports all four of them.
+TAG_ANCHORED_RELEASE = """name: Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify exact release identity
+        env:
+          RELEASE_SHA: ${{ needs.version.outputs.sha }}
+          RELEASE_TAG: ${{ needs.version.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          # Anchor on the commit the release TAG resolves to, never on
+          # github.sha. Asserting RELEASE_SHA == GITHUB_SHA made the publish job
+          # fail, and the next push skipped it (created != true).
+          tag_commit="$(git rev-list -n 1 \"$RELEASE_TAG\")"
+          test \"$tag_commit\" = \"$RELEASE_SHA\"
+          test \"$(git rev-parse HEAD)\" = \"$RELEASE_SHA\"
+"""
+
+
+class TestR012ReleaseIdentity(ContractTestCase):
+    """R012 — release identity resolves the tag, never github.sha."""
+
+    def write_release(self, body: str, name: str = "release.yml") -> None:
+        self.repo.clean()
+        self.repo.write(f".github/workflows/{name}", body)
+
+    def r012(self, *args: str) -> list[dict]:
+        _, findings = run_cli(self.repo.root, "--profile", "strict", *args)
+        return [item for item in findings if item["rule_id"] == "R012"]
+
+    def test_tag_anchored_workflow_is_clean(self) -> None:
+        self.write_release(TAG_ANCHORED_RELEASE)
+        self.assertEqual(self.r012(), [])
+
+    def test_shell_comparison_against_github_sha_is_reported(self) -> None:
+        self.write_release(
+            TAG_ANCHORED_RELEASE.replace(
+                '          test \"$(git rev-parse HEAD)\" = \"$RELEASE_SHA\"\n',
+                '          test \"$RELEASE_SHA\" = \"$GITHUB_SHA\"\n',
+            )
+        )
+        findings = self.r012()
+        self.assertEqual(len(findings), 1)
+        self.assertTrue(findings[0]["path"].startswith(".github/workflows/release.yml:"))
+        self.assertIn("$RELEASE_SHA", findings[0]["message"])
+
+    def test_double_bracket_comparison_is_reported(self) -> None:
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          if [[ \"$RELEASE_SHA\" != \"$GITHUB_SHA\" ]]; then\n'
+            '            exit 1\n'
+            "          fi\n"
+        )
+        self.assertEqual(len(self.r012()), 1)
+
+    def test_a_comment_explaining_the_old_assertion_is_not_reported(self) -> None:
+        # The comment in TAG_ANCHORED_RELEASE names both variables; stripped, it
+        # must produce nothing.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            "          # Asserting RELEASE_SHA == GITHUB_SHA made the publish job fail.\n"
+            "          # github.sha is never a safe anchor.\n"
+            '          test \"$tag_commit\" = \"$RELEASE_SHA\"\n'
+        )
+        self.assertEqual(self.r012(), [])
+
+    def test_inline_comment_is_stripped_before_matching(self) -> None:
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          test \"$tag_commit\" = \"$RELEASE_SHA\"  # was RELEASE_SHA == GITHUB_SHA\n'
+        )
+        self.assertEqual(self.r012(), [])
+
+    def test_binding_consumed_by_a_comparison_is_reported(self) -> None:
+        # The shape dcc-mcp-aftereffects shipped before PIP-4497.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  attach:\n"
+            "    steps:\n"
+            "      - name: Attach release artifacts\n"
+            "        env:\n"
+            "          EXPECTED_SHA: ${{ github.sha }}\n"
+            "        run: |\n"
+            '          test \"$(git rev-parse HEAD)\" = \"$EXPECTED_SHA\"\n'
+        )
+        findings = self.r012()
+        self.assertEqual(len(findings), 1)
+        self.assertIn("EXPECTED_SHA", findings[0]["message"])
+
+    def test_provenance_binding_is_not_reported(self) -> None:
+        # dcc-mcp-tiled binds EXPECTED_SHA to the run head only to record
+        # artefact provenance; nothing compares it.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  recapture:\n"
+            "    steps:\n"
+            "      - name: Recapture artifact identity\n"
+            "        env:\n"
+            "          EXPECTED_SHA: ${{ github.sha }}\n"
+            "        run: >-\n"
+            '          python tools/verify_workflow_artifact.py --head-sha \"${EXPECTED_SHA}\"\n'
+        )
+        self.assertEqual(self.r012(), [])
+
+    def test_a_binding_is_scoped_to_its_own_step(self) -> None:
+        # The regression that produced seven false positives on dcc-mcp-tiled: a
+        # step that binds EXPECTED_SHA to the *tag* and compares it, followed by
+        # an unrelated step that binds the same name to github.sha.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - name: Verify release identity\n"
+            "        env:\n"
+            "          EXPECTED_SHA: ${{ steps.target.outputs.tag_sha }}\n"
+            "        run: |\n"
+            '          if [[ \"$(git rev-parse HEAD)\" != \"$EXPECTED_SHA\" ]]; then\n'
+            "            exit 1\n"
+            "          fi\n"
+            "      - name: Recapture artifact identity\n"
+            "        env:\n"
+            "          EXPECTED_SHA: ${{ github.sha }}\n"
+            "        run: >-\n"
+            '          python tools/verify_workflow_artifact.py --head-sha \"${EXPECTED_SHA}\"\n'
+        )
+        self.assertEqual(self.r012(), [])
+
+    def test_a_non_identity_comparison_is_not_reported(self) -> None:
+        # dcc-mcp-core compares latest_main to the run head on purpose.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          if [ \"$latest_main\" != \"$GITHUB_SHA\" ]; then\n'
+            "            exit 1\n"
+            "          fi\n"
+        )
+        self.assertEqual(self.r012(), [])
+
+    def test_release_tag_version_comparison_is_not_reported(self) -> None:
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          if [ \"$RELEASE_TAG\" != \"v$RELEASE_VERSION\" ]; then\n'
+            "            exit 1\n"
+            "          fi\n"
+        )
+        self.assertEqual(self.r012(), [])
+
+    def test_git_show_and_checkout_refs_are_not_reported(self) -> None:
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - uses: actions/checkout@v6\n"
+            "        with:\n"
+            "          ref: ${{ github.sha }}\n"
+            "      - run: |\n"
+            '          git show \"${GITHUB_SHA}:tools/check_release_assets.py\"\n'
+        )
+        self.assertEqual(self.r012(), [])
+
+    def test_every_offending_line_is_reported(self) -> None:
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          if [ \"$remote_tag_sha\" != \"$GITHUB_SHA\" ]; then\n'
+            "            exit 1\n"
+            "          fi\n"
+            '          if [ \"$release_target\" != \"$GITHUB_SHA\" ]; then\n'
+            "            exit 1\n"
+            "          fi\n"
+        )
+        self.assertEqual(len(self.r012()), 2)
+
+    def test_workflows_outside_the_release_globs_are_untouched(self) -> None:
+        self.repo.clean()
+        self.repo.write(
+            ".github/workflows/ci.yml",
+            "name: CI\njobs:\n  build:\n    steps:\n"
+            "      - run: |\n"
+            '          test \"$RELEASE_SHA\" = \"$GITHUB_SHA\"\n',
+        )
+        self.assertEqual(self.r012(), [])
+
+    def test_severity_is_a_warning(self) -> None:
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          test \"$RELEASE_SHA\" = \"$GITHUB_SHA\"\n'
+        )
+        self.assertEqual({item["severity"] for item in self.r012()}, {"warning"})
+        self.assertEqual(run_cli(self.repo.root, "--profile", "strict")[0], 0)
+
+    def test_baseline_profile_stays_green_while_the_rule_rolls_out(self) -> None:
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          test \"$RELEASE_SHA\" = \"$GITHUB_SHA\"\n'
+        )
+        self.assertEqual(run_cli(self.repo.root, "--profile", "baseline")[0], 0)
+
+
 class TestAnnotationOutput(ContractTestCase):
     def test_github_format_marks_the_file_and_rule(self) -> None:
         self.repo.clean()

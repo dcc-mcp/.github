@@ -24,6 +24,8 @@ Rules (repo_contract.json)
     R009 tools-no-latest         [tools] pins are concrete, not `latest`
     R010 llms-txt-fresh          llms.txt exists when a generator exists
     R011 no-tracked-agent-dirs   nothing is tracked under an agents_ide_dir
+    R012 release-identity-anchored-on-tag
+                                release identity resolves the tag, never github.sha
 
 Rules (adapter_contract.json)
 -----------------------------
@@ -80,6 +82,17 @@ MAX_PROVENANCE_SCAN_LINES = 10
 # still fail, but not by printing the same finding two hundred times.
 MAX_TRACKED_AGENT_FILES = 20
 GIT_LS_FILES_TIMEOUT_SECONDS = 30
+
+# R012 distinguishes the two ways a release workflow can bind the commit it is
+# publishing to the commit that started the run.
+RUN_HEAD_SHA_RE = re.compile(
+    r"\$\{\{[^}]*?\bgithub\.sha\b[^}]*?\}\}"  # ${{ github.sha }} / ${{ github.sha || x }}
+    r"|\$\{GITHUB_SHA\}|\$GITHUB_SHA\b",
+    re.IGNORECASE,
+)
+SHELL_VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
+YAML_BINDING_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(\S.*)$")
+COMPARISON_OPERATOR_RE = re.compile(r"==|!=|(?<![<>!=])=(?!=)")
 
 JUSTFILE_NAMES = ("justfile", ".justfile", "JUSTFILE", "Justfile")
 
@@ -1209,6 +1222,192 @@ def check_llms_txt_fresh(root: Path, contract: Contract, ctx: dict) -> list[Find
     ]
 
 
+def _workflow_files(root: Path, contract: Contract) -> list[Path]:
+    """Release and publish workflow files, de-duplicated and sorted.
+
+    Several globs can name the same file (`*release*.yml` and
+    `*release*.yaml` never do, but a future glob may), so the matches are keyed
+    by relative path.
+    """
+    found: dict[str, Path] = {}
+    for pattern in contract.value("release_workflow_globs", []):
+        for path in root.glob(pattern):
+            if path.is_file():
+                found.setdefault(_rel(root, path), path)
+    return [found[key] for key in sorted(found)]
+
+
+def _comparison_spans(line: str) -> list[str]:
+    """The parts of a workflow line that compare two values.
+
+    Only real comparison constructs are returned -- `[ ... ]`, `[[ ... ]]`,
+    `test ...`, and a `${{ ... }}` expression carrying `==`/`!=`. A bare `=` is
+    not enough on its own: `echo "source_sha=$GITHUB_SHA"` assigns rather than
+    compares, and treating it as a comparison would report every provenance
+    recording as an identity assertion.
+    """
+    spans: list[str] = []
+    for match in re.finditer(r"\[\[(.*?)\]\]|(?<!\[)\[(?!\[)(.*?)\]", line):
+        spans.append(match.group(1) if match.group(1) is not None else match.group(2))
+    test = re.search(r"\btest\b(.*)$", line)
+    if test:
+        spans.append(test.group(1))
+    for match in re.finditer(r"\$\{\{(.*?)\}\}", line):
+        if "==" in match.group(1) or "!=" in match.group(1):
+            spans.append(match.group(1))
+    return [span for span in spans if COMPARISON_OPERATOR_RE.search(span)]
+
+
+def _identity_variable(span: str, identity_names: Sequence[str]) -> str | None:
+    """The release-identity variable a comparison span refers to, if any.
+
+    Matched on the variable's *name*, so `--head-sha "$GITHUB_SHA"` and
+    `[ "$latest_main" != "$GITHUB_SHA" ]` are both left alone: the first names
+    no identity, and the second compares the run head against a variable that
+    is not a release identity.
+    """
+    for match in SHELL_VAR_RE.finditer(span):
+        name = (match.group(1) or match.group(2)).upper()
+        if any(token in name for token in identity_names):
+            return match.group(0)
+    return None
+
+
+def _binding_scope_end(live: Sequence[str], start: int) -> int:
+    """Index just past the step that owns the binding at ``start``.
+
+    An ``env:``/``with:`` entry is visible to its own step and no further, so a
+    name that a later step rebinds is a different variable. Matching on the
+    name alone pairs a correct `EXPECTED_SHA: ${{ steps.target.outputs.tag_sha }}`
+    in one step with an unrelated `EXPECTED_SHA: ${{ github.sha }}` declared
+    hundreds of lines later for artefact provenance, which is how the
+    gold-standard repository scored seven false positives.
+
+    A step ends at the next sequence item sitting at the binding's own
+    indentation or less. Block-scalar content is indented deeper, so a shell
+    line that happens to start with `- ` cannot end the scope early.
+    """
+    indent = len(live[start]) - len(live[start].lstrip())
+    for index in range(start + 1, len(live)):
+        line = live[index]
+        if not line.strip():
+            continue
+        if len(line) - len(line.lstrip()) <= indent and line.lstrip().startswith("- "):
+            return index
+    return len(live)
+
+
+def check_release_identity_anchored_on_tag(
+    root: Path, contract: Contract, ctx: dict
+) -> list[Finding]:
+    """R012 — the commit being published resolves from the tag, not the run head.
+
+    release-please can merge the release PR while the run that is going to
+    publish it is still in flight, and it then tags that later merge commit.
+    A workflow that asserts the release identity equals ``github.sha`` fails in
+    exactly that case, and because the next push gets ``created != true`` the
+    publish job is skipped -- so the release ships with no artefacts and can
+    never self-heal.
+
+    Two shapes are reported, both at the line that binds the run head into the
+    release identity:
+
+    * a shell comparison that joins a run-head token with a release-identity
+      variable, and
+    * a YAML binding of a release-identity variable to ``${{ github.sha }}``
+      that a later comparison consumes.
+
+    Comments are stripped first, because every repository that fixed this
+    defect kept a comment explaining why. A run-head sha that is only recorded
+    as provenance (a checkout ``ref:``, ``--head-sha``, ``git show``) is not a
+    comparison and is not reported.
+    """
+    rule = contract.rules["R012"]
+    identity_names = [
+        str(name).upper() for name in contract.value("release_identity_names", []) if name
+    ]
+    if not identity_names:
+        return []
+    findings: list[Finding] = []
+    for path in _workflow_files(root, contract):
+        text = _read_text(path)
+        if not text:
+            continue
+        relative = _rel(root, path)
+        live = [_strip_comment(line) for line in text.splitlines()]
+        reported: set[int] = set()
+
+        for lineno, line in enumerate(live, start=1):
+            for span in _comparison_spans(line):
+                if not RUN_HEAD_SHA_RE.search(span):
+                    continue
+                identity = _identity_variable(span, identity_names)
+                if identity is None:
+                    continue
+                reported.add(lineno)
+                findings.append(
+                    Finding(
+                        rule["id"],
+                        rule["name"],
+                        rule["severity"],
+                        f"{relative}:{lineno}",
+                        (
+                            "release identity is anchored on the run head: "
+                            f"`{line.strip()}` compares {identity} against github.sha, but "
+                            "release-please can merge the release PR inside this run's "
+                            "window and tag that later commit; resolve the commit the "
+                            "release tag points at and compare against that instead "
+                            "(PIP-4497)"
+                        ),
+                    )
+                )
+                break
+
+        for index, line in enumerate(live):
+            match = YAML_BINDING_RE.match(line)
+            if match is None:
+                continue
+            name, value = match.group(1), match.group(2)
+            if not any(token in name.upper() for token in identity_names):
+                continue
+            if not RUN_HEAD_SHA_RE.search(value):
+                continue
+            # Only comparisons inside the binding's own step can consume it, and
+            # only a step that comes after the binding.
+            for offset in range(index + 1, _binding_scope_end(live, index)):
+                if offset + 1 in reported:
+                    continue
+                for span in _comparison_spans(live[offset]):
+                    consumed = next(
+                        (
+                            reference.group(1) or reference.group(2)
+                            for reference in SHELL_VAR_RE.finditer(span)
+                            if (reference.group(1) or reference.group(2)) == name
+                        ),
+                        None,
+                    )
+                    if consumed is None:
+                        continue
+                    findings.append(
+                        Finding(
+                            rule["id"],
+                            rule["name"],
+                            rule["severity"],
+                            f"{relative}:{index + 1}",
+                            (
+                                f"`{name}` is bound to the run head on line {index + 1} and "
+                                f"then compared on line {offset + 1}; bind it to the commit "
+                                "the release tag resolves to, otherwise the run fails "
+                                "whenever release-please tags a commit merged after this run "
+                                "started (PIP-4497)"
+                            ),
+                        )
+                    )
+                    reported.add(offset + 1)
+                    break
+    return findings
+
+
 def check_no_deprecated_install_sop_alias(
     root: Path, contract: Contract, ctx: dict
 ) -> list[Finding]:
@@ -1717,6 +1916,7 @@ RULES: dict[str, Callable[[Path, Contract, dict], list[Finding]]] = {
     "R009": check_tools_no_latest,
     "R010": check_llms_txt_fresh,
     "R011": check_no_tracked_agent_dirs,
+    "R012": check_release_identity_anchored_on_tag,
     "A001": check_no_deprecated_install_sop_alias,
     "A002": check_no_hand_rolled_report_schema_version,
     "A003": check_core_floor_declared,
