@@ -293,6 +293,30 @@ class TestAutomationContract(unittest.TestCase):
             existing = json.loads((ROOT / "contract" / path).read_text())
             self.assertFalse(ids & {rule["id"] for rule in existing["rules"]})
 
+    def test_malformed_schema_pattern_remains_an_unavailable_warning(self):
+        schema = copy.deepcopy(self.schema)
+        schema["properties"]["mode"]["pattern"] = "[DO-NOT-PRINT"
+        path = self.root / "schema.json"
+        path.write_text(json.dumps(schema))
+        for selection in [("--validate-only",), ("--repository", "dcc-mcp/example")]:
+            for output_format in ("json", "github", "text"):
+                with self.subTest(selection=selection, output_format=output_format):
+                    stderr = io.StringIO()
+                    with contextlib.redirect_stderr(stderr):
+                        code, output = self.run_cli(*selection, "--schema", str(path), "--format", output_format)
+                    self.assertEqual(code, 0)
+                    self.assertEqual(stderr.getvalue(), "")
+                    self.assertIn("unavailable", output)
+                    self.assertNotIn("DO-NOT-PRINT", output)
+                    self.assertNotIn("Traceback", output)
+                    self.assertNotIn("::error", output)
+                    if output_format == "json":
+                        result = json.loads(output)
+                        self.assertEqual(result["checked_files"], 0)
+                        self.assertEqual(result["findings"][0]["severity"], "warning")
+                    elif output_format == "github":
+                        self.assertIn("::warning", output)
+
 
 if __name__ == "__main__":
     unittest.main()
