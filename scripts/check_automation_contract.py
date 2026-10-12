@@ -245,7 +245,7 @@ def main(argv: list[str] | None = None) -> int:
             json.loads(args.schema.read_text(encoding="utf-8")),
             policy,
         )
-    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, re.error):
         # Do not echo malformed input, filenames, or credential-like values.
         result = {
             "repository": args.repository,
