@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Read-only organization automation audit inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0"
+    },
+    "mode": {
+      "const": "read_only_snapshot"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "organizations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "discovered_public_repositories": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "representative_repositories": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "limits": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "organizations",
+        "discovered_public_repositories",
+        "representative_repositories",
+        "limits"
+      ]
+    },
+    "repositories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "repository": {
+            "type": "string",
+            "pattern": "^[^/]+/[^/]+$"
+          },
+          "classification": {
+            "type": "string"
+          },
+          "finding": {
+            "type": "string"
+          },
+          "credential_availability": {
+            "const": "not_verified"
+          },
+          "source_files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "blob_sha": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}$"
+                },
+                "url": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "secret_name_references": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  }
+                }
+              },
+              "required": [
+                "path",
+                "blob_sha",
+                "url",
+                "secret_name_references"
+              ]
+            }
+          }
+        },
+        "required": [
+          "repository",
+          "classification",
+          "finding",
+          "credential_availability",
+          "source_files"
+        ]
+      }
+    },
+    "pr_evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "pr": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "head_sha": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "pr_author": {
+            "type": "string"
+          },
+          "pr_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "name": {
+                  "type": "string"
+                },
+                "event": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "conclusion": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "url": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "job_count": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "event",
+                "status",
+                "conclusion",
+                "url",
+                "job_count"
+              ]
+            }
+          }
+        },
+        "required": [
+          "repository",
+          "pr",
+          "head_sha",
+          "pr_author",
+          "pr_url",
+          "runs"
+        ]
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "summary",
+          "evidence"
+        ]
+      }
+    },
+    "official_sources": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "mode",
+    "observed_at",
+    "scope",
+    "repositories",
+    "pr_evidence",
+    "findings",
+    "official_sources"
+  ]
+}

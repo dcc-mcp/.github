@@ -185,6 +185,69 @@ Findings are emitted as GitHub annotations
 (`::error file=vx.toml,title=Repo contract R005::...`) so they appear on the file
 in the PR diff.
 
+## Organization automation inventory (advisory)
+
+The existing reusable `repo-contract.yml` also compares the repository under
+test with [`automation_inventory.json`](../contract/automation_inventory.json).
+This is a dated, representative public-source audit of `dcc-mcp`,
+`try-auroraview`, and `vx-org`, **not an exhaustive list or a live org scan**.
+It records source blob IDs, public PR/run evidence, and secret **names** only.
+Credential availability remains `not_verified`; a secret reference is never
+proof that a credential exists, has permission, or was used successfully.
+
+The inventory schema is
+[`automation_inventory.schema.json`](../contract/automation_inventory.schema.json).
+Rule IDs, severities, organizations, and source-path allowlists live in
+[`automation_policy.json`](../contract/automation_policy.json), in their own
+`O0xx` namespace. The checker uses only the Python standard library and supports
+the schema vocabulary shipped here; unsupported schema features require an
+explicit implementation and tests.
+
+| Id | Warning | Meaning |
+|---|---|---|
+| O001 | `automation-inventory-valid` | Schema or inventory consistency needs review, including unknown fields, bad SHAs, negative job counts, duplicate entries, and out-of-scope paths. |
+| O002 | `automation-source-readable` | An audited workflow is missing, unreadable, non-regular, or symlinked. |
+| O003 | `automation-source-drift` | The current checkout's Git blob ID differs from the recorded audit. Re-audit the change before refreshing the baseline. |
+
+These warnings cannot be promoted by the existing gate's `fail-on` or
+`error-rules` inputs. Invalid/unreadable inventory is explicitly reported as
+`invalid`/`unavailable`, never as a clean check. The CI step is advisory even
+if it cannot run; the existing repository gate retains its current behavior.
+
+The checker reads only the registered source paths for the explicit
+`owner/repository` input. It does not make API calls, read credentials, execute
+workflow code, change files, or create PRs. An unregistered repository reports
+`not_in_inventory`; an entry with no source files reports zero files checked.
+Neither claims the repository has no workflows. New, unlisted files are not
+discovered by this phase. Any byte change, including comments, causes a drift
+warning; **drift is a request for review, not a semantic security finding**.
+PR run evidence is historical: `action_required`, zero jobs, or a successful
+manual dispatch does not establish that expected jobs ran for a PR's exact head.
+
+```bash
+# Validate the bundled audit, without reading a target checkout.
+python scripts/check_automation_contract.py --validate-only --format json
+
+# Compare one of the registered repositories with its audited workflow blobs.
+python /path/to/.github/scripts/check_automation_contract.py \
+  --root /path/to/checkout --repository vx-org/vx --format github
+```
+
+To refresh a baseline, review the changed public source and its exact blob ID,
+update the dated inventory evidence, and run `python -m unittest discover -s
+tests -v`. Never add secret values or infer credential availability. The initial
+2026-10-12 audit is preserved as observed, so the new advisory step itself
+intentionally causes O003 for this repository until a subsequent reviewed audit.
+
+This phase adds no schedule or organization entrypoints and does not change
+release graphs, PR writers, credentials, permissions, or the existing nightly
+matrix. Existing Core PRs #2752/#2753 remain the candidates for pointer-PR reuse
+and REST refresh; this checker does not duplicate their logic. Trusted-ref
+adoption is a later pilot: **only after central code lands on the canonical
+default branch**, pin the reusable workflow and its `ref` tooling input to the
+same reviewed, full 40-hex SHA. Do not pin a PR-local commit or update all three
+organizations' callers as part of this inventory change.
+
 ## Where agent skills live (R008 / `agents_ide_dirs`)
 
 `agents_ide_dirs` is not an allowlist. A directory on that list that is present

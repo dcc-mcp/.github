@@ -1,0 +1,576 @@
+{
+  "schema_version": "0.1.0",
+  "mode": "read_only_snapshot",
+  "observed_at": "2026-10-12T11:10:00Z",
+  "scope": {
+    "organizations": [
+      "dcc-mcp",
+      "try-auroraview",
+      "vx-org"
+    ],
+    "discovered_public_repositories": {
+      "dcc-mcp": 103,
+      "try-auroraview": 12,
+      "vx-org": 8
+    },
+    "representative_repositories": 15,
+    "limits": "Representative current workflows plus recent public PRs and exact-head runs. No secret values, secret APIs, settings mutations, releases, merges or full clones."
+  },
+  "repositories": [
+    {
+      "repository": "dcc-mcp/.github",
+      "classification": "central_read_only_gates",
+      "finding": "Existing reusable repo-contract, release-ci-gate, release-integrity and catalog-sync; no central PR-writer reusable.",
+      "source_files": [
+        {
+          "path": ".github/workflows/repo-contract.yml",
+          "blob_sha": "43ed4b76dc651678aa8966aaf4db7b0ba208f4f1",
+          "url": "https://github.com/dcc-mcp/.github/blob/main/.github/workflows/repo-contract.yml",
+          "secret_name_references": []
+        },
+        {
+          "path": ".github/workflows/release-ci-gate.yml",
+          "blob_sha": "dda59d8976e2b44d378b454e296184139a63b714",
+          "url": "https://github.com/dcc-mcp/.github/blob/main/.github/workflows/release-ci-gate.yml",
+          "secret_name_references": []
+        },
+        {
+          "path": ".github/workflows/release-integrity.yml",
+          "blob_sha": "0a5e1c3b6ba6e92e2eccfde77b1a078d53f9c975",
+          "url": "https://github.com/dcc-mcp/.github/blob/main/.github/workflows/release-integrity.yml",
+          "secret_name_references": []
+        },
+        {
+          "path": ".github/workflows/catalog-sync.yml",
+          "blob_sha": "2eef71f08da1de0aa2a89320e9b88e3a3cf1aee1",
+          "url": "https://github.com/dcc-mcp/.github/blob/main/.github/workflows/catalog-sync.yml",
+          "secret_name_references": []
+        }
+      ],
+      "credential_availability": "not_verified"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-core",
+      "classification": "mixed_automation",
+      "finding": "Release Please explicitly uses PERSONAL_ACCESS_TOKEN. Adapter pointer writer fans out across catalog, with credential and git transport explicitly bound. Existing #2752/#2753 must be reused.",
+      "source_files": [
+        {
+          "path": ".github/workflows/release.yml",
+          "blob_sha": "7118f644950d3fc79ab879de63cbcc1aeaa59982",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-core/blob/main/.github/workflows/release.yml",
+          "secret_name_references": [
+            "PERSONAL_ACCESS_TOKEN",
+            "WINGET_TOKEN",
+            "GITHUB_TOKEN",
+            "MULTICA_CORE_RELEASE_READY_WEBHOOK_URL"
+          ]
+        },
+        {
+          "path": ".github/workflows/adapter-coverage.yml",
+          "blob_sha": "d9e66b1ed8283ef08176ec923b203c99bcd12c5b",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-core/blob/main/.github/workflows/adapter-coverage.yml",
+          "secret_name_references": [
+            "PERSONAL_ACCESS_TOKEN"
+          ]
+        },
+        {
+          "path": ".github/workflows/generated-lock-repair.yml",
+          "blob_sha": "68e37952178450f850366a216a5d73918ecf130b",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-core/blob/main/.github/workflows/generated-lock-repair.yml",
+          "secret_name_references": [
+            "PERSONAL_ACCESS_TOKEN"
+          ]
+        },
+        {
+          "path": ".github/workflows/repo-contract.yml",
+          "blob_sha": "63f91f1dc7245ddb087ac0c73b7b0e18791dcef6",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-core/blob/main/.github/workflows/repo-contract.yml",
+          "secret_name_references": []
+        }
+      ],
+      "credential_availability": "not_verified"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-obs",
+      "classification": "approval_blocked",
+      "finding": "Release Please uses GITHUB_TOKEN.",
+      "source_files": [
+        {
+          "path": ".github/workflows/release-please.yml",
+          "blob_sha": "82fb7400be7cf3825ae58084f7625b351d498b15",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-obs/blob/main/.github/workflows/release-please.yml",
+          "secret_name_references": [
+            "GITHUB_TOKEN"
+          ]
+        }
+      ],
+      "credential_availability": "not_verified"
+    },
+    {
+      "repository": "dcc-mcp/dcc-cua",
+      "classification": "approval_blocked",
+      "finding": "Release Please uses PERSONAL_ACCESS_TOKEN but current release-PR refresh uses GITHUB_TOKEN and checkout default credentials; #319 exists.",
+      "source_files": [
+        {
+          "path": ".github/workflows/release-please.yml",
+          "blob_sha": "24598bf9db3dc07e4e4b3ce42a78b3a2add63610",
+          "url": "https://github.com/dcc-mcp/dcc-cua/blob/main/.github/workflows/release-please.yml",
+          "secret_name_references": [
+            "GITHUB_TOKEN",
+            "PERSONAL_ACCESS_TOKEN",
+            "EDGE_ADDONS_API_KEY",
+            "FIREFOX_AMO_API_KEY",
+            "FIREFOX_AMO_API_SECRET"
+          ]
+        }
+      ],
+      "credential_availability": "not_verified"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-illustrator",
+      "classification": "approval_blocked",
+      "finding": "Release Please uses github.token.",
+      "source_files": [
+        {
+          "path": ".github/workflows/release.yml",
+          "blob_sha": "c283b302942fa9b14105bb67d581429363592df8",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-illustrator/blob/main/.github/workflows/release.yml",
+          "secret_name_references": []
+        }
+      ],
+      "credential_availability": "not_verified"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-liquigen",
+      "classification": "approval_blocked",
+      "finding": "Release Please uses github.token.",
+      "source_files": [
+        {
+          "path": ".github/workflows/release.yml",
+          "blob_sha": "9388444a9132957a74d23401225816ec256e37a6",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-liquigen/blob/main/.github/workflows/release.yml",
+          "secret_name_references": []
+        }
+      ],
+      "credential_availability": "not_verified"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-nuke",
+      "classification": "explicit_existing_credential",
+      "finding": "Merged #75 requires PERSONAL_ACCESS_TOKEN and fails closed if empty; actual credential availability not verified.",
+      "source_files": [
+        {
+          "path": ".github/workflows/release.yaml",
+          "blob_sha": "d01c24185ee97634b5e95dbd63c9aa06de10f074",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-nuke/blob/main/.github/workflows/release.yaml",
+          "secret_name_references": [
+            "PERSONAL_ACCESS_TOKEN"
+          ]
+        }
+      ],
+      "credential_availability": "not_verified"
+    },
+    {
+      "repository": "try-auroraview/.github",
+      "classification": "profile_only",
+      "finding": "Only .github/workflows/check.yml, for profile content; no central automation workflows.",
+      "source_files": [],
+      "credential_availability": "not_verified"
+    },
+    {
+      "repository": "try-auroraview/auroraview",
+      "classification": "approval_blocked",
+      "finding": "Release Please uses GITHUB_TOKEN; independent release graph retained.",
+      "source_files": [
+        {
+          "path": ".github/workflows/release.yml",
+          "blob_sha": "481557d47fbe95caa376082727bce2956f2a98ec",
+          "url": "https://github.com/try-auroraview/auroraview/blob/main/.github/workflows/release.yml",
+          "secret_name_references": [
+            "GITHUB_TOKEN"
+          ]
+        }
+      ],
+      "credential_availability": "not_verified"
+    },
+    {
+      "repository": "try-auroraview/auroraview-web-sdk",
+      "classification": "approval_blocked",
+      "finding": "Release Please uses GITHUB_TOKEN; npm/OIDC and GitHub assets are separate paths.",
+      "source_files": [
+        {
+          "path": ".github/workflows/release.yml",
+          "blob_sha": "794fd6d3911993250e979079c2759aee3363020d",
+          "url": "https://github.com/try-auroraview/auroraview-web-sdk/blob/main/.github/workflows/release.yml",
+          "secret_name_references": [
+            "GITHUB_TOKEN"
+          ]
+        }
+      ],
+      "credential_availability": "not_verified"
+    },
+    {
+      "repository": "vx-org/.github",
+      "classification": "profile_only",
+      "finding": "Full recursive tree contains profile assets, no .github/workflows.",
+      "source_files": [],
+      "credential_availability": "not_verified"
+    },
+    {
+      "repository": "vx-org/vx",
+      "classification": "fallback_and_compensation",
+      "finding": "Release Please uses PERSONAL_ACCESS_TOKEN || GITHUB_TOKEN; explicit release dispatch, stale-main guard and same-head metadata status path already exist. Do not replace these with a generic publisher.",
+      "source_files": [
+        {
+          "path": ".github/workflows/release-please.yml",
+          "blob_sha": "4e2abd222123d2e6a0d0399f1fc2e5b487fd4b27",
+          "url": "https://github.com/vx-org/vx/blob/main/.github/workflows/release-please.yml",
+          "secret_name_references": [
+            "GITHUB_TOKEN",
+            "PERSONAL_ACCESS_TOKEN"
+          ]
+        },
+        {
+          "path": ".github/workflows/repo-contract.yml",
+          "blob_sha": "63f91f1dc7245ddb087ac0c73b7b0e18791dcef6",
+          "url": "https://github.com/vx-org/vx/blob/main/.github/workflows/repo-contract.yml",
+          "secret_name_references": []
+        }
+      ],
+      "credential_availability": "not_verified"
+    },
+    {
+      "repository": "vx-org/rez-next",
+      "classification": "working_existing_credential",
+      "finding": "Release Please uses RELEASE_PLZ_TOKEN || GITHUB_TOKEN; #379 created by loonghao, CI/SDK/benchmark succeeded.",
+      "source_files": [
+        {
+          "path": ".github/workflows/release-please.yml",
+          "blob_sha": "92f90abf3a9c66aec78fdbf17f47899fdba3e6e7",
+          "url": "https://github.com/vx-org/rez-next/blob/main/.github/workflows/release-please.yml",
+          "secret_name_references": [
+            "RELEASE_PLZ_TOKEN",
+            "GITHUB_TOKEN"
+          ]
+        }
+      ],
+      "credential_availability": "not_verified"
+    },
+    {
+      "repository": "vx-org/vx-rez-adapter",
+      "classification": "builtin_token_template",
+      "finding": "Current Release Please uses GITHUB_TOKEN. Historical #10 authored by loonghao passed, which does not validate the current bot-created path.",
+      "source_files": [
+        {
+          "path": ".github/workflows/release-please.yml",
+          "blob_sha": "b2c1d3c5c324c895ae07c23103529394490fabd0",
+          "url": "https://github.com/vx-org/vx-rez-adapter/blob/main/.github/workflows/release-please.yml",
+          "secret_name_references": [
+            "GITHUB_TOKEN"
+          ]
+        }
+      ],
+      "credential_availability": "not_verified"
+    },
+    {
+      "repository": "vx-org/mirrors",
+      "classification": "pagination_failure",
+      "finding": "Target release cache walks releases to page 101; first-10000 HTTP422. Independent from token/PR approval.",
+      "source_files": [
+        {
+          "path": ".github/workflows/sync.yml",
+          "blob_sha": "694eea04124505c160be36c5d0013c6b8473e147",
+          "url": "https://github.com/vx-org/mirrors/blob/main/.github/workflows/sync.yml",
+          "secret_name_references": [
+            "GITHUB_TOKEN"
+          ]
+        }
+      ],
+      "credential_availability": "not_verified"
+    }
+  ],
+  "pr_evidence": [
+    {
+      "repository": "dcc-mcp/dcc-mcp-obs",
+      "pr": 77,
+      "head_sha": "16351698511517de63bfd18dd80d946804e4aa3b",
+      "pr_author": "github-actions[bot]",
+      "pr_url": "https://github.com/dcc-mcp/dcc-mcp-obs/pull/77",
+      "runs": [
+        {
+          "id": 38187330303,
+          "name": "Disposable real OBS acceptance",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "action_required",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-obs/actions/runs/38187330303",
+          "job_count": null
+        },
+        {
+          "id": 38187330319,
+          "name": "CI",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "action_required",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-obs/actions/runs/38187330319",
+          "job_count": 0
+        }
+      ]
+    },
+    {
+      "repository": "dcc-mcp/dcc-cua",
+      "pr": 314,
+      "head_sha": "6a79c9dcb2a160de97c1852f1be4751873fa2101",
+      "pr_author": "github-actions[bot]",
+      "pr_url": "https://github.com/dcc-mcp/dcc-cua/pull/314",
+      "runs": [
+        {
+          "id": 37856867496,
+          "name": "CI",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "action_required",
+          "url": "https://github.com/dcc-mcp/dcc-cua/actions/runs/37856867496",
+          "job_count": 0
+        },
+        {
+          "id": 37856861979,
+          "name": "CI",
+          "event": "workflow_dispatch",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/dcc-mcp/dcc-cua/actions/runs/37856861979",
+          "job_count": null
+        }
+      ]
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-illustrator",
+      "pr": 14,
+      "head_sha": "5d1fbde426a40923b218b2b544349d8ff52ce927",
+      "pr_author": "github-actions[bot]",
+      "pr_url": "https://github.com/dcc-mcp/dcc-mcp-illustrator/pull/14",
+      "runs": [
+        {
+          "id": 37898025670,
+          "name": "CI",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "action_required",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-illustrator/actions/runs/37898025670",
+          "job_count": 0
+        }
+      ]
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-liquigen",
+      "pr": 5,
+      "head_sha": "d40de4ce85cd06e2b3f420a754e843945bcb7365",
+      "pr_author": "github-actions[bot]",
+      "pr_url": "https://github.com/dcc-mcp/dcc-mcp-liquigen/pull/5",
+      "runs": [
+        {
+          "id": 37952665241,
+          "name": "CI",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "action_required",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-liquigen/actions/runs/37952665241",
+          "job_count": 0
+        }
+      ]
+    },
+    {
+      "repository": "try-auroraview/auroraview",
+      "pr": 514,
+      "head_sha": "828d6745fc5ac17a8ccd86d0c8f9ed83afaaa1e1",
+      "pr_author": "github-actions[bot]",
+      "pr_url": "https://github.com/try-auroraview/auroraview/pull/514",
+      "runs": [
+        {
+          "id": 38036009922,
+          "name": "Security Audit",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "action_required",
+          "url": "https://github.com/try-auroraview/auroraview/actions/runs/38036009922",
+          "job_count": null
+        },
+        {
+          "id": 38036009966,
+          "name": "Offscreen Contracts",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "action_required",
+          "url": "https://github.com/try-auroraview/auroraview/actions/runs/38036009966",
+          "job_count": null
+        },
+        {
+          "id": 38036009977,
+          "name": "Bridge Lifecycle",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "action_required",
+          "url": "https://github.com/try-auroraview/auroraview/actions/runs/38036009977",
+          "job_count": null
+        },
+        {
+          "id": 38036010017,
+          "name": "CodeQL",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "action_required",
+          "url": "https://github.com/try-auroraview/auroraview/actions/runs/38036010017",
+          "job_count": null
+        },
+        {
+          "id": 38036010074,
+          "name": "Auto Merge",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "action_required",
+          "url": "https://github.com/try-auroraview/auroraview/actions/runs/38036010074",
+          "job_count": null
+        },
+        {
+          "id": 38036010264,
+          "name": "PR Checks",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "action_required",
+          "url": "https://github.com/try-auroraview/auroraview/actions/runs/38036010264",
+          "job_count": 0
+        }
+      ]
+    },
+    {
+      "repository": "try-auroraview/auroraview-web-sdk",
+      "pr": 3,
+      "head_sha": "4979a5b566da95a0f2dedac9463b3a3b897ff4f6",
+      "pr_author": "github-actions[bot]",
+      "pr_url": "https://github.com/try-auroraview/auroraview-web-sdk/pull/3",
+      "runs": [
+        {
+          "id": 38175854281,
+          "name": "CI",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "action_required",
+          "url": "https://github.com/try-auroraview/auroraview-web-sdk/actions/runs/38175854281",
+          "job_count": 0
+        }
+      ]
+    },
+    {
+      "repository": "vx-org/rez-next",
+      "pr": 379,
+      "head_sha": "c7d58b9500ff2e7b2bb1d43ed8c5e4b5ffc744f4",
+      "pr_author": "loonghao",
+      "pr_url": "https://github.com/vx-org/rez-next/pull/379",
+      "runs": [
+        {
+          "id": 38233641978,
+          "name": "Performance Benchmarks",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/vx-org/rez-next/actions/runs/38233641978",
+          "job_count": null
+        },
+        {
+          "id": 38233641552,
+          "name": "CI",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/vx-org/rez-next/actions/runs/38233641552",
+          "job_count": null
+        },
+        {
+          "id": 38233641574,
+          "name": "Auto Merge",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/vx-org/rez-next/actions/runs/38233641574",
+          "job_count": null
+        },
+        {
+          "id": 38233641549,
+          "name": "Runtime SDK",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/vx-org/rez-next/actions/runs/38233641549",
+          "job_count": null
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "fanout",
+      "summary": "Core #2748 merged 2026-10-10T16:52:58Z and enables catalog-driven PR creation over 47 adapters.",
+      "evidence": [
+        "https://github.com/dcc-mcp/dcc-mcp-core/pull/2748",
+        "https://github.com/dcc-mcp/dcc-mcp-core/commit/efcc4fd748b46cebc6cc87e998e750772b48658e"
+      ]
+    },
+    {
+      "id": "refresh_without_scope_expansion",
+      "summary": "Existing open #2753 replaces GraphQL-backed gh pr edit with REST PATCH; its documented real update-path trial restored 24/24 existing PR refreshes without adding read:org. Trial was reported in the PR; this audit did not rerun a mutating workflow.",
+      "evidence": [
+        "https://github.com/dcc-mcp/dcc-mcp-core/pull/2753",
+        "https://github.com/dcc-mcp/dcc-mcp-core/actions/runs/38074339019"
+      ]
+    },
+    {
+      "id": "content_duplicate",
+      "summary": "Shogun #49/#50 both open; each changes only README.md to blob cbb4d34386f5bea47b423dc0b10e4bc747901933. #49 is fork-headed, #50 same-repo. Existing open Core #2752 addresses equivalence-by-content.",
+      "evidence": [
+        "https://github.com/dcc-mcp/dcc-mcp-shogun/pull/49",
+        "https://github.com/dcc-mcp/dcc-mcp-shogun/pull/50",
+        "https://github.com/dcc-mcp/dcc-mcp-core/pull/2752"
+      ]
+    },
+    {
+      "id": "token_change_batch",
+      "summary": "13 PRs explicitly requiring organization release token created 2026-10-12 00:37-01:02 UTC, all author loonghao; 7 merged, 6 open at audit.",
+      "evidence": [
+        "https://github.com/dcc-mcp/mcpcall/pull/14",
+        "https://github.com/dcc-mcp/dcc-mcp-openusd/pull/67",
+        "https://github.com/dcc-mcp/dcc-mcp-maya-mgear/pull/70",
+        "https://github.com/dcc-mcp/dcc-mcp-nuke/pull/75",
+        "https://github.com/dcc-mcp/dcc-mcp-pdfcraft/pull/2",
+        "https://github.com/dcc-mcp/dcc-mcp-renderdoc/pull/43",
+        "https://github.com/dcc-mcp/dcc-mcp-substance3d-designer/pull/57",
+        "https://github.com/dcc-mcp/dcc-mcp-photocraft/pull/4",
+        "https://github.com/dcc-mcp/dcc-mcp-tracy/pull/18",
+        "https://github.com/dcc-mcp/dcc-mcp-gimp/pull/21",
+        "https://github.com/dcc-mcp/dcc-mcp-krita/pull/13",
+        "https://github.com/dcc-mcp/dcc-mcp-godot/pull/80",
+        "https://github.com/dcc-mcp/dcc-mcp-capcut/pull/45"
+      ]
+    },
+    {
+      "id": "main_reachable_anchor",
+      "summary": "Core #2768 merged main-reachable validator anchor 0b281b4d; related #2766 remains open and should be reconciled before duplicate work.",
+      "evidence": [
+        "https://github.com/dcc-mcp/dcc-mcp-core/pull/2768",
+        "https://github.com/dcc-mcp/dcc-mcp-core/pull/2766"
+      ]
+    },
+    {
+      "id": "mirror_10000_limit",
+      "summary": "Mirrors run 38225594619 job 114732233768 fails target-repo release cache at page=101 with HTTP422 first10000results. Current sync-tool.py lines151-177 paginate until exhaustion; no pagination bound.",
+      "evidence": [
+        "https://github.com/vx-org/mirrors/actions/runs/38225594619/job/114732233768",
+        "https://github.com/vx-org/mirrors/blob/5afd80bc84844f7fe6db12ced4b9222ad864d283/scripts/sync-tool.py#L151-L177"
+      ]
+    }
+  ],
+  "official_sources": [
+    "https://github.blog/changelog/2026-06-11-bot-created-pull-requests-can-run-workflows-if-approved/",
+    "https://docs.github.com/en/actions/concepts/security/github_token"
+  ]
+}
