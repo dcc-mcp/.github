@@ -517,7 +517,7 @@ class TestFleetRatchet(unittest.TestCase):
         """Run the contract over the synthetic fleet, counting per rule.
 
         Every repository in a bucket is checked, not just the bucket's shape:
-        a rule that started firing on one of the 18 clean repositories would move
+        a rule that started firing on one of the 19 clean repositories would move
         the count even though the shape did not change.
         """
         a021 = a004 = 0
