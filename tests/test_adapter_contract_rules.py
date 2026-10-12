@@ -473,11 +473,12 @@ class TestFleetRatchet(unittest.TestCase):
     A021 and A004 are warning-severity convergence rules: nothing fails when they
     drift, so a semantic regression shows up only as the nightly count moving.
     These replay the distribution the sweep measured -- one synthetic repository
-    per bucket -- instead of re-cloning 51 repositories in CI.
+    per bucket -- instead of re-cloning 52 repositories in CI.
 
     The three shapes below are the whole fleet as measured 2026-10-09 over every
-    repository in contract/adapter_repositories.json: 48 declare line-length, 3
-    declare no ruff configuration at all.
+    repository in contract/adapter_repositories.json, plus dcc-mcp-rizomuv which
+    joined declaring line-length = 120: 49 declare line-length, 3 declare no
+    ruff configuration at all.
     """
 
     # (pyproject body, expected A021 count, expected A004 count)
@@ -485,14 +486,14 @@ class TestFleetRatchet(unittest.TestCase):
     LINE_LENGTH_120 = ('[project]\nname = "d"\n\n[tool.ruff]\nline-length = 120\n', 0, 0)
     NO_RUFF_CONFIG = ('[project]\nname = "d"\n', 1, 0)
 
-    # The fleet, as counts per shape. 30 + 18 + 3 == 51, the manifest size.
+    # The fleet, as counts per shape. 30 + 19 + 3 == 52, the manifest size.
     FLEET = {
         "line-length = 100": (LINE_LENGTH_100, 30),
-        "line-length = 120": (LINE_LENGTH_120, 18),
+        "line-length = 120": (LINE_LENGTH_120, 19),
         "no ruff configuration": (NO_RUFF_CONFIG, 3),
     }
 
-    # Shapes that occur in none of the 51 repositories today, listed so the
+    # Shapes that occur in none of the 52 repositories today, listed so the
     # ratchet also covers the boundaries the fleet does not exercise. A rule that
     # started firing on one of these would not move the counts above, so without
     # these the ratchet is blind to exactly the change this issue fixes.
