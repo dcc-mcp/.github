@@ -120,6 +120,9 @@
       "repository": "dcc-mcp/dcc-mcp-renderdoc"
     },
     {
+      "repository": "dcc-mcp/dcc-mcp-rizomuv"
+    },
+    {
       "repository": "dcc-mcp/dcc-mcp-runtime"
     },
     {
