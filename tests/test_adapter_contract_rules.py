@@ -476,9 +476,9 @@ class TestFleetRatchet(unittest.TestCase):
     per bucket -- instead of re-cloning 52 repositories in CI.
 
     The three shapes below are the whole fleet as measured 2026-10-09 over every
-    repository in contract/adapter_repositories.json, plus dcc-mcp-rizomuv which
-    joined declaring line-length = 120: 49 declare line-length, 3 declare no
-    ruff configuration at all.
+    repository in contract/adapter_repositories.json, including dcc-mcp-rizomuv
+    which joined declaring line-length = 120: 49 declare line-length, 3 declare
+    no ruff configuration at all.
     """
 
     # (pyproject body, expected A021 count, expected A004 count)
