@@ -1616,5 +1616,37 @@ class TestMatrix(unittest.TestCase):
         self.assertEqual(code, 2)
 
 
+class TestAutomationWorkflowWiring(unittest.TestCase):
+    def setUp(self) -> None:
+        self.workflow = (ROOT / ".github/workflows/repo-contract.yml").read_text(encoding="utf-8")
+
+    def test_call_and_dispatch_inputs_remain_identical(self) -> None:
+        call = self.workflow.split("  workflow_call:\n", 1)[1].split("  workflow_dispatch:\n", 1)[0]
+        dispatch = self.workflow.split("  workflow_dispatch:\n", 1)[1].split("\npermissions:\n", 1)[0]
+        self.assertEqual(call.strip(), dispatch.strip())
+
+    def test_inventory_step_remains_advisory_and_uses_sibling_checkout(self) -> None:
+        step = self.workflow.split("      - name: Report automation inventory drift (advisory)\n", 1)[1]
+        step = step.split("      - name:", 1)[0]
+        self.assertIn("continue-on-error: true", step)
+        self.assertIn("python contract-tooling/scripts/check_automation_contract.py", step)
+        self.assertIn("--root repository", step)
+        self.assertIn('REPOSITORY: ${{ github.repository }}', step)
+        self.assertIn('--repository "$REPOSITORY"', step)
+        self.assertNotIn("secrets.", step)
+        self.assertNotIn("token", step.lower())
+
+    def test_inventory_does_not_add_schedule_or_write_permissions(self) -> None:
+        permissions = self.workflow.split("\npermissions:\n", 1)[1].split("\njobs:\n", 1)[0]
+        self.assertEqual(permissions.strip(), "contents: read")
+        self.assertNotIn("schedule:", self.workflow)
+        self.assertNotIn("pull_request_target:", self.workflow)
+
+    def test_inventory_changes_trigger_existing_test_workflow(self) -> None:
+        workflow = (ROOT / ".github/workflows/profile-contract.yml").read_text(encoding="utf-8")
+        for path in ("contract/automation*", "scripts/check_automation_contract.py", ".github/workflows/repo-contract.yml"):
+            self.assertEqual(workflow.count(f'      - "{path}"'), 2, path)
+
+
 if __name__ == "__main__":
     unittest.main()
