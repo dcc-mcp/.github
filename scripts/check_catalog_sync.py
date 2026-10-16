@@ -45,6 +45,7 @@ when the backlog has been cleared.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import re
 import subprocess
@@ -146,10 +147,35 @@ class CatalogSnapshot:
         return {entry["name"] for entry in self.entries if entry.get("name") and entry.get("install")}
 
     def entry(self, name: str) -> dict[str, Any] | None:
+        return self._index.get(_catalog_key(name))
+
+    @functools.cached_property
+    def _index(self) -> dict[str, dict[str, Any]]:
+        index: dict[str, dict[str, Any]] = {}
         for entry in self.entries:
-            if entry.get("name") == name:
-                return entry
-        return None
+            name = entry.get("name")
+            # First spelling wins so a re-registered entry keeps its current name.
+            if name and _catalog_key(name) not in index:
+                index[_catalog_key(name)] = entry
+        return index
+
+    def keys(self) -> set[str]:
+        """Return every registered name as a folded comparison key."""
+        return set(self._index)
+
+    def has(self, name: str) -> bool:
+        """Return True when the catalog registers ``name``, ignoring letter case.
+
+        Catalog names and repository/PyPI names can differ only by case
+        (`dcc-mcp-PowerPoint` vs `dcc-mcp-powerpoint`), and PyPI itself
+        normalises project names, so every lookup is case-insensitive.
+        """
+        return _catalog_key(name) in self._index
+
+    def canonical(self, name: str) -> str:
+        """Return the catalog's own spelling of ``name``."""
+        entry = self.entry(name)
+        return entry["name"] if entry and entry.get("name") else name
 
 
 def parse_version(value: str) -> tuple[int, ...]:
@@ -169,6 +195,17 @@ def parse_version(value: str) -> tuple[int, ...]:
             break
         parts.append(int(match.group()))
     return tuple(parts)
+
+
+def _catalog_key(name: str) -> str:
+    """Return the comparison key for a catalog or repository name.
+
+    PyPI normalises project names and the catalog is not uniformly cased, so the
+    same adapter can be spelled `dcc-mcp-PowerPoint` in the catalog and
+    `dcc-mcp-powerpoint` on PyPI and GitHub. Comparing folded names keeps a
+    differently cased registration from reading as a missing entry.
+    """
+    return re.sub(r"[-_.]+", "-", name.strip()).lower()
 
 
 def package_for(name: str) -> str | None:
@@ -363,11 +400,12 @@ def compare_source_published(
     source: CatalogSnapshot, published: CatalogSnapshot
 ) -> list[Finding]:
     """Report entries whose installability differs between source and publication."""
-    source_available = source.install_available()
-    published_available = published.install_available()
+    source_available = {_catalog_key(name) for name in source.install_available()}
+    published_available = {_catalog_key(name) for name in published.install_available()}
     findings: list[Finding] = []
-    for name in sorted((source_available ^ published_available) & source.names() & published.names()):
-        in_source = name in source_available
+    for key in sorted((source_available ^ published_available) & source.keys() & published.keys()):
+        in_source = key in source_available
+        name = published.canonical(key) if published.has(key) else source.canonical(key)
         findings.append(
             Finding(
                 name=name,
@@ -461,7 +499,7 @@ def evaluate_missing(
 ) -> Finding | None:
     """Report a repository that ships to PyPI but has no catalog entry."""
     name = repository
-    if name in source.names() or name in published.names():
+    if source.has(name) or published.has(name):
         return None
     if name in INFRASTRUCTURE:
         return None
