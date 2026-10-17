@@ -125,6 +125,16 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Report automation inventory drift (advisory)
+        continue-on-error: true
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python contract-tooling/scripts/check_automation_contract.py \
+            --root repository \
+            --repository "$REPOSITORY" \
+            --format github
+
       - name: Check the repository contract
         env:
           PROFILE: ${{ inputs.profile }}

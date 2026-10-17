@@ -1,5 +1,5 @@
 {
-  "$comment": "The 51 dcc-mcp repositories that ship a Python package (pyproject.toml or setup.py at the root), swept nightly by .github/workflows/adapter-contract-nightly.yml against contract/adapter_contract.json. Measured 2026-10-02 over all 94 non-archived repositories in the organisation. A repository belongs here once it ships a Python package; it does not have to be clean first, because the strict profile reports convergence gaps as warnings and only the two baseline rules fail the run.",
+  "$comment": "The 52 dcc-mcp repositories that ship a Python package (pyproject.toml or setup.py at the root), swept nightly by .github/workflows/adapter-contract-nightly.yml against contract/adapter_contract.json. Measured 2026-10-02 over all 94 non-archived repositories in the organisation. A repository belongs here once it ships a Python package; it does not have to be clean first, because the strict profile reports convergence gaps as warnings and only the two baseline rules fail the run.",
   "defaults": {
     "profile": "strict",
     "fail_on": "error"
@@ -43,6 +43,9 @@
     },
     {
       "repository": "dcc-mcp/dcc-mcp-gaea"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-gamemaker"
     },
     {
       "repository": "dcc-mcp/dcc-mcp-gimp"
@@ -118,6 +121,9 @@
     },
     {
       "repository": "dcc-mcp/dcc-mcp-renderdoc"
+    },
+    {
+      "repository": "dcc-mcp/dcc-mcp-rizomuv"
     },
     {
       "repository": "dcc-mcp/dcc-mcp-runtime"

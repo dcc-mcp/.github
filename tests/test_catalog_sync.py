@@ -203,6 +203,13 @@ class EvaluateMissingTest(unittest.TestCase):
         published = snapshot(published_entry("dcc-mcp-maya", version="0.9.22", install={}))
         self.assertIsNone(self.evaluate("dcc-mcp-maya", "0.9.34", published=published))
 
+    def test_differently_cased_catalog_entry_is_not_missing(self):
+        # The catalog registers `dcc-mcp-PowerPoint` while the repository and
+        # PyPI project are `dcc-mcp-powerpoint`. Comparing names verbatim made
+        # a registered, installable adapter read as a missing entry.
+        published = snapshot(published_entry("dcc-mcp-PowerPoint", version="0.2.3", install={"type": "pip"}))
+        self.assertIsNone(self.evaluate("dcc-mcp-powerpoint", "0.2.4", published=published))
+
     def test_infrastructure_repository_is_not_reported_as_an_adapter(self):
         self.assertIsNone(self.evaluate("dcc-mcp-runtime", "0.2.0"))
 
