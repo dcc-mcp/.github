@@ -1287,10 +1287,18 @@ def _mask_shell_quotes(line: str) -> str:
 
 
 def _expression_operands(span: str) -> list[str]:
-    """The dotted context operands referenced inside a span's `${{ ... }}` bodies."""
+    """The dotted context operands referenced inside a span's `${{ ... }}` bodies.
+
+    A GitHub expression writes a string literal in quotes
+    (`github.sha != 'env.RELEASE_SHA'`), and a dotted path *inside* a literal
+    names a value, not a context operand. Quoted regions are masked out before
+    collecting operands, so that expression contributes only `github.sha` and
+    never mistakes the quoted `'env.RELEASE_SHA'` for an `env.` reference.
+    """
     operands: list[str] = []
     for expression in GITHUB_EXPRESSION_RE.finditer(span):
-        operands.extend(EXPRESSION_OPERAND_RE.findall(expression.group(1)))
+        body = _mask_shell_quotes(expression.group(1))
+        operands.extend(EXPRESSION_OPERAND_RE.findall(body))
     return operands
 
 
@@ -1303,18 +1311,36 @@ def _comparison_spans(line: str) -> list[str]:
     than compares, and treating it as a comparison would report every provenance
     recording as an identity assertion.
 
-    A `${{ ... }}` comparison is returned with its outer expression wrapper
-    intact, so the run-head matcher still sees `${{ github.sha }}` and the
-    identity matcher can read the expression operands inside it. Only the shell
-    `test` search runs on the quote-masked line, so an echoed or argument word
-    `test` never opens a comparison span.
+    Every shell-side construct is located on the quote-masked line so that quoted
+    text never steers where a comparison begins or ends, while the span itself is
+    sliced back out of the original line so its real operands stay matchable:
+
+    * Brackets are found on the masked line, so `echo "[ $A != $B ]"` -- a quoted
+      bracket used as provenance text -- opens no comparison, while a real
+      `[ ... ]` / `[[ ... ]]` at command position still does (and a `]` inside a
+      quoted operand no longer closes the bracket early).
+    * A `test` command span runs only to the next command boundary (`;`, `&`,
+      `|`, the first char of `&&`/`||`), so `test -f artifact; echo "A=$A B=$B"`
+      compares nothing in its `test` and its span does not absorb the following
+      echo. A genuine `test "$A" = "$B"` has no such separator and keeps its
+      whole comparison.
+    * A `${{ ... }}` comparison is returned with its outer expression wrapper
+      intact, so the run-head matcher still sees `${{ github.sha }}` and the
+      identity matcher can read the expression operands inside it.
     """
-    spans: list[str] = []
-    for match in re.finditer(r"\[\[(.*?)\]\]|(?<!\[)\[(?!\[)(.*?)\]", line):
-        spans.append(match.group(1) if match.group(1) is not None else match.group(2))
     masked = _mask_shell_quotes(line)
+    spans: list[str] = []
+    for match in re.finditer(r"\[\[(.*?)\]\]|(?<!\[)\[(?!\[)(.*?)\]", masked):
+        group = 1 if match.group(1) is not None else 2
+        spans.append(line[match.start(group):match.end(group)])
     for match in TEST_COMMAND_RE.finditer(masked):
-        spans.append(line[match.end():])
+        start = match.end()
+        end = len(masked)
+        for separator in range(start, len(masked)):
+            if masked[separator] in ";&|":
+                end = separator
+                break
+        spans.append(line[start:end])
     for match in GITHUB_EXPRESSION_RE.finditer(line):
         if "==" in match.group(1) or "!=" in match.group(1):
             spans.append(match.group(0))

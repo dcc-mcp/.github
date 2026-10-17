@@ -1253,6 +1253,137 @@ class TestR012ReleaseIdentity(ContractTestCase):
         )
         self.assertEqual(self.r012(), [])
 
+    # --- Quote/boundary false positives fixed after the d334 source rollout ---
+
+    def test_quoted_bracket_provenance_echo_is_not_reported(self) -> None:
+        # A bracket inside a quoted echo string records provenance, it is not a
+        # shell comparison, so it must not open an identity span.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          echo "[ $RELEASE_SHA != $GITHUB_SHA ]"\n'
+        )
+        self.assertEqual(self.r012(), [])
+
+    def test_test_file_check_then_echo_is_not_reported(self) -> None:
+        # `test -f artifact` asserts no identity; its span must stop at the `;`
+        # command boundary instead of absorbing the following `echo`.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          test -f artifact; echo "RELEASE_SHA=$RELEASE_SHA GITHUB_SHA=$GITHUB_SHA"\n'
+        )
+        self.assertEqual(self.r012(), [])
+
+    def test_test_file_check_and_echo_is_not_reported(self) -> None:
+        # The same boundary rule across an `&&` list.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          test -f artifact && echo "RELEASE_SHA=$RELEASE_SHA GITHUB_SHA=$GITHUB_SHA"\n'
+        )
+        self.assertEqual(self.r012(), [])
+
+    def test_test_file_check_or_echo_is_not_reported(self) -> None:
+        # The same boundary rule across an `||` list.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          test -f artifact || echo "RELEASE_SHA=$RELEASE_SHA GITHUB_SHA=$GITHUB_SHA"\n'
+        )
+        self.assertEqual(self.r012(), [])
+
+    def test_dotted_string_literal_is_not_a_context_operand(self) -> None:
+        # `'env.RELEASE_SHA'` is a quoted string literal inside the expression,
+        # not a context operand, so it is never matched as a release identity.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - if: ${{ github.sha != 'env.RELEASE_SHA' }}\n"
+            "        run: exit 1\n"
+        )
+        self.assertEqual(self.r012(), [])
+
+    def test_reversed_dotted_string_literal_is_not_a_context_operand(self) -> None:
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - if: ${{ 'env.RELEASE_SHA' != github.sha }}\n"
+            "        run: exit 1\n"
+        )
+        self.assertEqual(self.r012(), [])
+
+    # --- guards: the boundary/literal fixes must not weaken real detections ---
+
+    def test_unquoted_bracket_comparison_is_still_reported(self) -> None:
+        # A real `[ ]` comparison at command position stays reported even though
+        # quoted brackets are now ignored.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          if [ $RELEASE_SHA != $GITHUB_SHA ]; then\n'
+            "            exit 1\n"
+            "          fi\n"
+        )
+        self.assertEqual(len(self.r012()), 1)
+
+    def test_reversed_standalone_expression_is_still_reported(self) -> None:
+        # The dotted operand still matches when it is the right-hand operand.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - if: ${{ github.sha != env.RELEASE_SHA }}\n"
+            "        run: exit 1\n"
+        )
+        self.assertEqual(len(self.r012()), 1)
+
+    def test_real_test_comparison_before_separator_is_still_reported(self) -> None:
+        # Truncating a `test` span at a command boundary keeps a genuine
+        # comparison that precedes the separator.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          test "$RELEASE_SHA" = "$GITHUB_SHA" && echo matched\n'
+        )
+        self.assertEqual(len(self.r012()), 1)
+
+    def test_real_operand_survives_beside_string_literal(self) -> None:
+        # Masking quoted literals must not hide a real dotted operand that sits
+        # beside a string literal in the same `${{ ... }}` expression.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - if: ${{ env.RELEASE_SHA != github.sha && github.ref != 'refs/heads/env.RELEASE_SHA' }}\n"
+            "        run: exit 1\n"
+        )
+        self.assertEqual(len(self.r012()), 1)
+
 
 class TestAnnotationOutput(ContractTestCase):
     def test_github_format_marks_the_file_and_rule(self) -> None:
