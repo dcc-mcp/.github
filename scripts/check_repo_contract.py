@@ -1740,8 +1740,9 @@ def all_rules() -> dict[str, Callable[..., list[Finding]]]:
     this one and a module-level import would be a cycle.
     """
     from adapter_contract_rules import ADAPTER_RULES
+    from adapter_runtime_rules import RUNTIME_RULES
 
-    return {**RULES, **ADAPTER_RULES}
+    return {**RULES, **ADAPTER_RULES, **RUNTIME_RULES}
 
 
 # ----------------------------------------------------------------------- driver
