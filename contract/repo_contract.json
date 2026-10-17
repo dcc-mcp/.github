@@ -107,7 +107,35 @@
       "profiles": ["strict"],
       "source": "org-agent-dirs-policy",
       "summary": "Files tracked under any agents_ide_dir must not be committed. These directories are runtime mount points populated from the workspace skill registry, so a committed copy is never the code that runs and silently forks from the registry. Add the anchored pattern to .gitignore and untrack the files, or move a shared asset to a committed path outside the agent directories. R008 only warns that the directory exists; R011 reports each tracked file, because a directory warning is easy to scroll past when the tree is large."
+    },
+    {
+      "id": "R012",
+      "name": "release-identity-anchored-on-tag",
+      "title": "Release identity is anchored on the release tag, not on github.sha",
+      "severity": "warn",
+      "profiles": ["strict"],
+      "source": "PIP-4497",
+      "summary": "A release/publish workflow must not assert that the commit being published is the commit that started the run. release-please can merge the release PR inside the run's own window, so the tag legitimately lands on a later commit than github.sha; comparing a release-identity variable (RELEASE_SHA, EXPECTED_SHA, TAG_SHA, targetCommitish, ...) against github.sha then fails the run, and because the next push gets created=false the publish job is skipped and can never self-heal. Anchor the identity on the commit the tag resolves to instead. Two shapes are reported: a shell comparison (test/[ ]/[[ ]]) that joins a run-head token with a release-identity token, and a YAML binding of a release-identity variable to `${{ github.sha }}` that is later consumed by such a comparison. Comments are stripped before matching, and a run-head sha that is only recorded as provenance (--head-sha, checkout ref, git show) or compared against a non-identity name is not reported."
     }
+  ],
+  "release_workflow_globs": [
+    ".github/workflows/*release*.yml",
+    ".github/workflows/*release*.yaml",
+    ".github/workflows/*publish*.yml",
+    ".github/workflows/*publish*.yaml"
+  ],
+  "release_identity_names": [
+    "RELEASE_SHA",
+    "EXPECTED_SHA",
+    "SOURCE_SHA",
+    "TAG_SHA",
+    "TAG_COMMIT",
+    "TARGET_COMMITISH",
+    "TARGETCOMMITISH",
+    "RELEASE_TARGET",
+    "RELEASE_COMMIT",
+    "PUBLISH_SHA",
+    "VERSION_SHA"
   ],
   "forbidden_artifact_globs": [
     "*.a",
