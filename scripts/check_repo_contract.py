@@ -93,6 +93,25 @@ RUN_HEAD_SHA_RE = re.compile(
 SHELL_VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
 YAML_BINDING_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(\S.*)$")
 COMPARISON_OPERATOR_RE = re.compile(r"==|!=|(?<![<>!=])=(?!=)")
+# A GitHub context operand inside an expression is a dotted identifier path
+# (`env.RELEASE_SHA`, `steps.build.outputs.release_sha`, `github.sha`,
+# `needs.release.outputs.tag_sha`). Requiring at least one dot keeps ordinary
+# prose and bare words out of the match, and a release identity is matched on
+# the operand's trailing segment, so an `env.` / `steps.*.outputs.` prefix can
+# no longer hide it the way it does from the shell-variable matcher.
+EXPRESSION_OPERAND_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+")
+# The body of a single-line GitHub `${{ ... }}` expression.
+GITHUB_EXPRESSION_RE = re.compile(r"\$\{\{(.*?)\}\}")
+# The `test` builtin starts a comparison only at a command position: start of
+# line, right after a shell separator (`;`, `&`, `|`), a grouping token (`(`,
+# `)`), a shell control keyword, or an inline `run:` scalar. Anchoring it there
+# keeps `make test ...` and an echoed or argument word `test` from being read as
+# the start of a comparison, while still matching `test "$A" = "$B"`,
+# `; test ...`, `&& test ...`, `if test ...` and `run: test ...`.
+TEST_COMMAND_RE = re.compile(
+    r"(?:^|[;&|()]|\b(?:if|elif|then|else|while|until|do)\b|\brun\s*:)"
+    r"[ \t]*test(?![A-Za-z0-9_])"
+)
 
 JUSTFILE_NAMES = ("justfile", ".justfile", "JUSTFILE", "Justfile")
 
@@ -1237,24 +1256,68 @@ def _workflow_files(root: Path, contract: Contract) -> list[Path]:
     return [found[key] for key in sorted(found)]
 
 
+def _mask_shell_quotes(line: str) -> str:
+    """Blank out quoted regions so command-position matching ignores them.
+
+    Quoted characters become spaces, so length and offsets are preserved and a
+    boundary test that runs on the masked line maps back onto the original by
+    index. A quoted `test` is an argument (`echo "smoke test passed"`) or a
+    literal, never the `test` builtin; masking single- and double-quoted text
+    keeps those from steering where a shell command is considered to start.
+    """
+    masked = list(line)
+    quote = ""
+    index = 0
+    length = len(line)
+    while index < length:
+        char = line[index]
+        if quote:
+            masked[index] = " "
+            if char == "\\" and quote == '"' and index + 1 < length:
+                masked[index + 1] = " "
+                index += 2
+                continue
+            if char == quote:
+                quote = ""
+        elif char in "\"'":
+            quote = char
+            masked[index] = " "
+        index += 1
+    return "".join(masked)
+
+
+def _expression_operands(span: str) -> list[str]:
+    """The dotted context operands referenced inside a span's `${{ ... }}` bodies."""
+    operands: list[str] = []
+    for expression in GITHUB_EXPRESSION_RE.finditer(span):
+        operands.extend(EXPRESSION_OPERAND_RE.findall(expression.group(1)))
+    return operands
+
+
 def _comparison_spans(line: str) -> list[str]:
     """The parts of a workflow line that compare two values.
 
-    Only real comparison constructs are returned -- `[ ... ]`, `[[ ... ]]`,
-    `test ...`, and a `${{ ... }}` expression carrying `==`/`!=`. A bare `=` is
-    not enough on its own: `echo "source_sha=$GITHUB_SHA"` assigns rather than
-    compares, and treating it as a comparison would report every provenance
+    Only real comparison constructs are returned -- `[ ... ]`, `[[ ... ]]`, a
+    `test ...` command, and a `${{ ... }}` expression carrying `==`/`!=`. A bare
+    `=` is not enough on its own: `echo "source_sha=$GITHUB_SHA"` assigns rather
+    than compares, and treating it as a comparison would report every provenance
     recording as an identity assertion.
+
+    A `${{ ... }}` comparison is returned with its outer expression wrapper
+    intact, so the run-head matcher still sees `${{ github.sha }}` and the
+    identity matcher can read the expression operands inside it. Only the shell
+    `test` search runs on the quote-masked line, so an echoed or argument word
+    `test` never opens a comparison span.
     """
     spans: list[str] = []
     for match in re.finditer(r"\[\[(.*?)\]\]|(?<!\[)\[(?!\[)(.*?)\]", line):
         spans.append(match.group(1) if match.group(1) is not None else match.group(2))
-    test = re.search(r"\btest\b(.*)$", line)
-    if test:
-        spans.append(test.group(1))
-    for match in re.finditer(r"\$\{\{(.*?)\}\}", line):
+    masked = _mask_shell_quotes(line)
+    for match in TEST_COMMAND_RE.finditer(masked):
+        spans.append(line[match.end():])
+    for match in GITHUB_EXPRESSION_RE.finditer(line):
         if "==" in match.group(1) or "!=" in match.group(1):
-            spans.append(match.group(1))
+            spans.append(match.group(0))
     return [span for span in spans if COMPARISON_OPERATOR_RE.search(span)]
 
 
@@ -1265,12 +1328,40 @@ def _identity_variable(span: str, identity_names: Sequence[str]) -> str | None:
     `[ "$latest_main" != "$GITHUB_SHA" ]` are both left alone: the first names
     no identity, and the second compares the run head against a variable that
     is not a release identity.
+
+    A `${{ ... }}` comparison carries its operands as dotted context paths
+    (`env.RELEASE_SHA`, `steps.x.outputs.release_sha`), which the shell-variable
+    matcher cannot see. Those are matched on the operand's trailing segment, so
+    the context prefix never hides a release identity; a dotted path is required,
+    so ordinary prose is never mistaken for an identifier.
     """
     for match in SHELL_VAR_RE.finditer(span):
         name = (match.group(1) or match.group(2)).upper()
         if any(token in name for token in identity_names):
             return match.group(0)
+    for operand in _expression_operands(span):
+        name = operand.rsplit(".", 1)[-1].upper()
+        if any(token in name for token in identity_names):
+            return operand
     return None
+
+
+def _references_name(span: str, name: str) -> bool:
+    """Whether a comparison span consumes the bound variable ``name``.
+
+    A bound release-identity name is consumed by a `$name` / `${name}` shell
+    reference, or by a `${{ env.name }}` / `${{ needs.x.outputs.name }}`
+    expression operand whose trailing segment is the name. Prose is never a
+    reference: both forms require a concrete variable or a dotted expression
+    operand.
+    """
+    for match in SHELL_VAR_RE.finditer(span):
+        if (match.group(1) or match.group(2)) == name:
+            return True
+    for operand in _expression_operands(span):
+        if operand.rsplit(".", 1)[-1] == name:
+            return True
+    return False
 
 
 def _binding_scope_end(live: Sequence[str], start: int) -> int:
@@ -1378,15 +1469,7 @@ def check_release_identity_anchored_on_tag(
                 if offset + 1 in reported:
                     continue
                 for span in _comparison_spans(live[offset]):
-                    consumed = next(
-                        (
-                            reference.group(1) or reference.group(2)
-                            for reference in SHELL_VAR_RE.finditer(span)
-                            if (reference.group(1) or reference.group(2)) == name
-                        ),
-                        None,
-                    )
-                    if consumed is None:
+                    if not _references_name(span, name):
                         continue
                     findings.append(
                         Finding(

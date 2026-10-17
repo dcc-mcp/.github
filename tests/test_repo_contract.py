@@ -1050,6 +1050,209 @@ class TestR012ReleaseIdentity(ContractTestCase):
         )
         self.assertEqual(run_cli(self.repo.root, "--profile", "baseline")[0], 0)
 
+    # --- Defect regressions fixed alongside the original R012 rollout ---
+
+    def test_camelcase_identity_shell_comparison_is_reported(self) -> None:
+        # F1 — release-please's `targetCommitish` is a release identity even
+        # without underscores; matching must not depend on snake_case spelling.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          test \"$targetCommitish\" = \"$GITHUB_SHA\"\n'
+        )
+        findings = self.r012()
+        self.assertEqual(len(findings), 1)
+        self.assertIn("targetCommitish", findings[0]["message"])
+
+    def test_underscore_identity_still_works_beside_camelcase(self) -> None:
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          test \"$TARGET_COMMITISH\" = \"$GITHUB_SHA\"\n'
+        )
+        self.assertEqual(len(self.r012()), 1)
+
+    def test_camelcase_identity_binding_to_run_head_is_reported(self) -> None:
+        # F1 also applies to YAML identity bindings, not only shell comparisons.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  attach:\n"
+            "    steps:\n"
+            "      - name: Attach release artifacts\n"
+            "        env:\n"
+            "          targetCommitish: ${{ github.sha }}\n"
+            "        run: |\n"
+            '          test \"$targetCommitish\" = \"$tag_commit\"\n'
+        )
+        findings = self.r012()
+        self.assertEqual(len(findings), 1)
+        self.assertIn("targetCommitish", findings[0]["message"])
+
+    def test_standalone_env_expression_comparison_is_reported(self) -> None:
+        # F2 — a `${{ ... }}` comparison in `if:` must clear both the run-head
+        # and identity gates; previously the wrapper was stripped from the span.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - if: ${{ env.RELEASE_SHA != github.sha }}\n"
+            "        run: exit 1\n"
+        )
+        findings = self.r012()
+        self.assertEqual(len(findings), 1)
+        self.assertIn("RELEASE_SHA", findings[0]["message"])
+
+    def test_standalone_steps_output_expression_is_reported(self) -> None:
+        # F2 — a `steps.<id>.outputs.<name>` operand is matched on its tail.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - id: resolve\n"
+            "        run: echo sha=abc\n"
+            "      - if: ${{ steps.resolve.outputs.release_sha != github.sha }}\n"
+            "        run: exit 1\n"
+        )
+        findings = self.r012()
+        self.assertEqual(len(findings), 1)
+        self.assertIn("release_sha", findings[0]["message"])
+
+    def test_standalone_needs_output_expression_is_reported(self) -> None:
+        # F2 — the same for a `needs.<job>.outputs.<name>` operand.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  version:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    outputs:\n"
+            "      release_sha: ${{ steps.v.outputs.sha }}\n"
+            "    steps:\n"
+            "      - id: v\n"
+            "        run: echo sha=abc\n"
+            "  publish:\n"
+            "    needs: version\n"
+            "    steps:\n"
+            "      - if: ${{ needs.version.outputs.release_sha != github.sha }}\n"
+            "        run: exit 1\n"
+        )
+        findings = self.r012()
+        self.assertEqual(len(findings), 1)
+        self.assertIn("release_sha", findings[0]["message"])
+
+    def test_embedded_expression_shell_comparison_is_reported(self) -> None:
+        # X2 — both operands interpolated with `${{ ... }}` inside `[ ]`.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          if [ \"${{ env.RELEASE_SHA }}\" != \"${{ github.sha }}\" ]; then\n'
+            "            exit 1\n"
+            "          fi\n"
+        )
+        findings = self.r012()
+        self.assertEqual(len(findings), 1)
+        self.assertIn("RELEASE_SHA", findings[0]["message"])
+
+    def test_embedded_expression_double_bracket_comparison_is_reported(self) -> None:
+        # X2 — the same shape inside `[[ ]]`, matched on the outputs tail.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          if [[ \"${{ needs.release.outputs.tag_sha }}\" != \"${{ github.sha }}\" ]]; then\n'
+            "            exit 1\n"
+            "          fi\n"
+        )
+        findings = self.r012()
+        self.assertEqual(len(findings), 1)
+        self.assertIn("tag_sha", findings[0]["message"])
+
+    def test_expression_binding_consumed_by_a_comparison_is_reported(self) -> None:
+        # The binding is consumed through `${{ env.NAME }}`; the comparison
+        # itself carries no run head, so only the binding loop can report it.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  attach:\n"
+            "    steps:\n"
+            "      - name: Attach\n"
+            "        env:\n"
+            "          EXPECTED_SHA: ${{ github.sha }}\n"
+            "        run: |\n"
+            '          if [ \"${{ env.EXPECTED_SHA }}\" != \"$tag_commit\" ]; then\n'
+            "            exit 1\n"
+            "          fi\n"
+        )
+        findings = self.r012()
+        self.assertEqual(len(findings), 1)
+        self.assertIn("EXPECTED_SHA", findings[0]["message"])
+
+    def test_if_guarded_test_command_is_still_a_comparison(self) -> None:
+        # Real `test` command behind `if` remains reported after tightening the
+        # command-position boundary.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          if test \"$RELEASE_SHA\" = \"$GITHUB_SHA\"; then\n'
+            "            exit 1\n"
+            "          fi\n"
+        )
+        self.assertEqual(len(self.r012()), 1)
+
+    def test_quoted_echo_smoke_test_is_not_reported(self) -> None:
+        # X1 — `test` inside an echoed string is an argument, not a command.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          echo \"smoke test: RELEASE_SHA=$RELEASE_SHA GITHUB_SHA=$GITHUB_SHA passed\"\n'
+        )
+        self.assertEqual(self.r012(), [])
+
+    def test_make_test_assignment_arguments_are_not_reported(self) -> None:
+        # X1 — `make test NAME=...` arguments are not a shell `test` command,
+        # even though the line names both a release identity and the run head.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            "          make test RELEASE_SHA=$RELEASE_SHA GITHUB_SHA=$GITHUB_SHA\n"
+        )
+        self.assertEqual(self.r012(), [])
+
+    def test_provenance_expression_echo_is_not_reported(self) -> None:
+        # A run-head sha recorded in an echo, with no comparison, stays clean.
+        self.write_release(
+            "name: Release\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    steps:\n"
+            "      - run: |\n"
+            '          echo \"built from ${{ github.sha }}\"\n'
+            '          echo \"release sha ${{ env.RELEASE_SHA }}\"\n'
+        )
+        self.assertEqual(self.r012(), [])
+
 
 class TestAnnotationOutput(ContractTestCase):
     def test_github_format_marks_the_file_and_rule(self) -> None:

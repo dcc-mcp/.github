@@ -320,7 +320,11 @@ release identity:
 
 - **a shell comparison** — `test`, `[ ]` or `[[ ]]` joining a run-head token
   (`$GITHUB_SHA`, `${{ github.sha }}`) with a release-identity variable
-  (`RELEASE_SHA`, `EXPECTED_SHA`, `TAG_SHA`, `targetCommitish`, ...);
+  (`RELEASE_SHA`, `EXPECTED_SHA`, `TAG_SHA`, `targetCommitish`, ...); a
+  standalone `${{ ... }}` comparison such as
+  `if: ${{ env.RELEASE_SHA != github.sha }}` counts too, and either operand may
+  be a GitHub context expression (`env.X`, `steps.x.outputs.X`,
+  `needs.x.outputs.X`) matched on its trailing name;
 - **a YAML binding** — `EXPECTED_SHA: ${{ github.sha }}` that a later
   comparison in the same step consumes.
 
@@ -331,6 +335,10 @@ Everything else is legitimate, and the rule is written to say so:
 - **A bare `=` is not a comparison.** `echo "source_sha=$GITHUB_SHA"` records
   provenance; only `test`, `[ ]`, `[[ ]]` and `${{ }}` expressions carrying
   `==`/`!=` are compared.
+- **Only a real `test` command compares.** `test` counts at a shell command
+  position (`test "$A" = "$B"`, `if test ...`, `; test ...`); the word in
+  `make test NAME=...` or `echo "smoke test passed"` is an argument or prose,
+  not a comparison.
 - **A run head that is only recorded is not reported.** A checkout `ref:`,
   `--head-sha "$GITHUB_SHA"` and `git show "${GITHUB_SHA}:path"` name no release
   identity and assert nothing.
