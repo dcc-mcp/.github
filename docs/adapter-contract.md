@@ -45,6 +45,12 @@ without a `pyproject.toml` and belongs here.
 | A014 | `report-validates-against-schema` — a real report runs through `validate_install_sop_report()` | — | warning | interface |
 | A021 | `ruff-config-present` — the repository configures ruff at all | — | warning | convention |
 | A024 | `release-please-present` — release-please config and manifest exist | — | warning | convention |
+| A030 | `runtime-mode-declared` — actual host/external Python boundary is explicit | — | warning | runtime |
+| A031 | `host-runtime-dependencies` — host mandatory dependencies are first-party | — | warning | runtime |
+| A032 | `external-shared-runtime` — official provider and justified bridge dependencies | — | warning | runtime |
+
+The runtime declaration and artifact boundaries, limitations and adoption steps
+are documented in [Adapter runtime policy](adapter-runtime-policy.md).
 
 Ids A007–A012 are unassigned on purpose. The Install SOP interface family was
 numbered A010–A014 by PIP-4106 before A001–A006 existed; three of those five

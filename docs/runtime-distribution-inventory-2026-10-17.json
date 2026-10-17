@@ -1,0 +1,3879 @@
+{
+  "schema_version": 1,
+  "observed_at_utc": "2026-10-17T11:35:00Z",
+  "scope": {
+    "catalog_sha": "8f52b1844fc4eaa06036a42d8c4848faa67a6212",
+    "catalog_path": "dcc-mcp-catalog.yml",
+    "catalog_entries": 50,
+    "adapter_count": 47,
+    "excluded_entries": [
+      "dcc-mcp-core",
+      "dcc-mcp-office",
+      "autodesk-product-help"
+    ]
+  },
+  "verification_limits": [
+    "Read-only snapshot of 47 adapter default branches plus latest release metadata. No software installed, no code from audited adapters executed, no host application started, no repository edits or publications.",
+    "Latest release version and source head can differ. Source-pinned claims describe inspected HEAD; release assets describe separate published tag.",
+    "Only OBS Windows runtime bundle and Photoshop Windows standalone archive were downloaded and recursively inventoried; other release asset sizes come from GitHub release API metadata.",
+    "No released native dcc-mcp-runtime interpreter is established by a tiny runtime wheel or manifest alone. Migration cannot be claimed complete from ABI metadata."
+  ],
+  "summary": {
+    "modes": {
+      "external_python_cli_or_bridge": 1,
+      "external_python_office_bridge": 3,
+      "host_python_plus_native_sidecar": 2,
+      "host_python_embedded": 7,
+      "external_python_adobe_bridge": 4,
+      "host_python_embedded_or_external_native_sidecar": 1,
+      "external_python_native_bridge": 7,
+      "external_python_with_host_python_plugin": 5,
+      "external_python_with_host_python_worker": 3,
+      "host_python_embedded_and_external_offline": 1,
+      "external_python_cli": 6,
+      "external_python_http": 2,
+      "external_python_vendor_sdk": 2,
+      "external_python_sdk": 1,
+      "external_python_com_or_cli": 1,
+      "external_python_mcp_sdk": 1
+    },
+    "distribution_classes": {
+      "no_independent_interpreter_bundle_verified": 37,
+      "independent_pyoxidizer_interpreter_release": 4,
+      "host_python_with_bundled_core_native_dependencies": 4,
+      "shared_runtime_wheels_only_current_release_legacy_pyoxidizer_source": 1,
+      "shared_runtime_consumer_handshake_no_interpreter_release": 1
+    },
+    "declared_non_core_mandatory_adapter_count": 14
+  },
+  "adapters": [
+    {
+      "name": "dcc-mcp-kdenlive",
+      "targets": [
+        "kdenlive"
+      ],
+      "catalog_version": "0.1.2",
+      "source_version": "0.1.4",
+      "source_sha": "5a83cbad7c987e32b86a5314996951ac91311c3b",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-kdenlive",
+      "requires_python": ">=3.7",
+      "execution": {
+        "mode": "external_python_cli_or_bridge",
+        "details": "Standalone external service works with MLT project XML/media/CLI and optional native editor bridge; Python interpreter is not Kdenlive-owned.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_kdenlive/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-kdenlive/blob/5a83cbad7c987e32b86a5314996951ac91311c3b/src/dcc_mcp_kdenlive/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-kdenlive/blob/5a83cbad7c987e32b86a5314996951ac91311c3b/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.28,<1.0.0"
+        ],
+        "non_core_mandatory": [
+          "defusedxml>=0.7.1",
+          "psutil>=5.9"
+        ],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "test": [
+            "pytest>=7",
+            "pyyaml>=6",
+            "jsonschema>=4"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.17"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-kdenlive/blob/5a83cbad7c987e32b86a5314996951ac91311c3b/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-kdenlive/releases/tag/v0.1.4",
+        "tag": "v0.1.4",
+        "published_at": "2026-10-09T23:28:10Z",
+        "assets": [
+          {
+            "name": "dcc-mcp-kdenlive-0.1.4-native-source.zip",
+            "size_bytes": 22759,
+            "digest": "sha256:113602b7c7b18d5cab40bf43ca58e0a08bb1f260135d2d888ea7110a97d8d63b",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-kdenlive/releases/download/v0.1.4/dcc-mcp-kdenlive-0.1.4-native-source.zip"
+          },
+          {
+            "name": "dcc-mcp-kdenlive-0.1.4-skills.zip",
+            "size_bytes": 25668,
+            "digest": "sha256:e30492bb8552e80f0c9a56994cd4871892bded86542934b91ad325beb21aa3c5",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-kdenlive/releases/download/v0.1.4/dcc-mcp-kdenlive-0.1.4-skills.zip"
+          },
+          {
+            "name": "dcc_mcp_kdenlive-0.1.4-py3-none-any.whl",
+            "size_bytes": 58432,
+            "digest": "sha256:4cb25b88217ea3d04a0cac00f68c12f7f34801243cf6ef83c8b4ab1d6d4da7b3",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-kdenlive/releases/download/v0.1.4/dcc_mcp_kdenlive-0.1.4-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_kdenlive-0.1.4.tar.gz",
+            "size_bytes": 3220647,
+            "digest": "sha256:c745a35045431033fe8207e93f0dc0c67368f985d944890b4ea917afe37777f1",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-kdenlive/releases/download/v0.1.4/dcc_mcp_kdenlive-0.1.4.tar.gz"
+          },
+          {
+            "name": "install-manifest.json",
+            "size_bytes": 925,
+            "digest": "sha256:283141a54e018d92b77c49669a989a0ee1ef19adf169c43ea7201719f9b1cd78",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-kdenlive/releases/download/v0.1.4/install-manifest.json"
+          },
+          {
+            "name": "SHA256SUMS",
+            "size_bytes": 497,
+            "digest": "sha256:848bfec7e57aed12cf22c7c094658e603aaa148744310136574a4ffbceb3a9a0",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-kdenlive/releases/download/v0.1.4/SHA256SUMS"
+          }
+        ]
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-PowerPoint",
+      "targets": [
+        "powerpoint"
+      ],
+      "catalog_version": "0.2.3",
+      "source_version": "0.2.4",
+      "source_sha": "451bab3e9df0edad350448a1fcc614415381380e",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-PowerPoint",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_office_bridge",
+        "details": "External Python CLI/skills use dcc-office-host C# Open XML/COM host and native Core sidecar. PyOxidizer release packages its own CPython.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_powerpoint/_standalone_entry.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-PowerPoint/blob/451bab3e9df0edad350448a1fcc614415381380e/src/dcc_mcp_powerpoint/_standalone_entry.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-PowerPoint/blob/451bab3e9df0edad350448a1fcc614415381380e/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.18.2,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {
+          "sidecar": [
+            "dcc-mcp-server>=0.17.43"
+          ]
+        },
+        "dev_test_docs_extras": {
+          "dev": [
+            "pytest>=7.0",
+            "pytest-cov>=4.0",
+            "ruff>=0.8.0",
+            "hatchling",
+            "build",
+            "python-pptx>=1.0",
+            "pillow>=10.0",
+            "pywin32>=306; sys_platform == 'win32'"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-PowerPoint/blob/451bab3e9df0edad350448a1fcc614415381380e/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-powerpoint/releases/tag/v0.2.4",
+        "tag": "v0.2.4",
+        "published_at": "2026-10-11T04:43:08Z",
+        "assets": [
+          {
+            "name": "dcc-mcp-powerpoint-windows-x64.zip",
+            "size_bytes": 112931286,
+            "digest": "sha256:93733b1b26dd431aa91437d10405b038c5839d1aeb0658989be2e9ece069b540",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-powerpoint/releases/download/v0.2.4/dcc-mcp-powerpoint-windows-x64.zip"
+          },
+          {
+            "name": "dcc-mcp-powerpoint-windows-x64.zip.sha256",
+            "size_bytes": 101,
+            "digest": "sha256:d13b73a346327fd4adaf91b3b069bddcd745055cd61c28e57b6901bd2adf8986",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-powerpoint/releases/download/v0.2.4/dcc-mcp-powerpoint-windows-x64.zip.sha256"
+          }
+        ]
+      },
+      "distribution_runtime_class": "independent_pyoxidizer_interpreter_release",
+      "packaging_runtime_evidence": [
+        {
+          "source": {
+            "path": "pyoxidizer.bzl",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-PowerPoint/blob/451bab3e9df0edad350448a1fcc614415381380e/pyoxidizer.bzl"
+          },
+          "hits": [
+            {
+              "line": 11,
+              "text": "dist = default_python_distribution()"
+            }
+          ]
+        },
+        {
+          "source": {
+            "path": "tools/build_binary.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-PowerPoint/blob/451bab3e9df0edad350448a1fcc614415381380e/tools/build_binary.py"
+          },
+          "hits": [
+            {
+              "line": 6,
+              "text": "- Rust toolchain (PyOxidizer build)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcc-mcp-maya",
+      "targets": [
+        "maya"
+      ],
+      "catalog_version": "0.9.22",
+      "source_version": "0.9.36",
+      "source_sha": "75c1cff038a8192fd5b8cb082f3cac94c7468b92",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-maya",
+      "requires_python": ">=3.7",
+      "execution": {
+        "mode": "host_python_plus_native_sidecar",
+        "details": "Maya/mayapy owns Python adapter and Maya API dispatch. Default GUI plugin starts Rust dcc-mcp-server; legacy embedded gateway remains selectable.",
+        "evidence": [
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-maya/blob/75c1cff038a8192fd5b8cb082f3cac94c7468b92/README.md"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-maya/blob/75c1cff038a8192fd5b8cb082f3cac94c7468b92/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.0,<0.21.0",
+          "dcc-mcp-server>=0.18.21,<0.21.0"
+        ],
+        "non_core_mandatory": [
+          "packaging>=21.3"
+        ],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "pytest>=7.0",
+            "pytest-cov>=4.0",
+            "pytest-mock>=3.0",
+            "pytest-timeout>=2.1.0",
+            "pytest-xdist>=3.0",
+            "requests>=2.28.0",
+            "dcc-mcp-server>=0.18.21,<1.0.0",
+            "ruff>=0.8.0",
+            "hatchling",
+            "build",
+            "tomli; python_version < '3.11'",
+            "pyyaml>=5.0",
+            "jsonschema>=4.17,<5"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-maya/blob/75c1cff038a8192fd5b8cb082f3cac94c7468b92/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-maya/releases/tag/v0.9.36",
+        "tag": "v0.9.36",
+        "published_at": "2026-10-17T11:01:05Z",
+        "assets": [
+          {
+            "name": "dcc-mcp-maya-0.9.36-linux-pipeline.zip",
+            "size_bytes": 105996724,
+            "digest": "sha256:e726ec885bfeda3355d6d7ec26e69e7fe3b5ff5514dfb311c98d0a9c145e0735",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-maya/releases/download/v0.9.36/dcc-mcp-maya-0.9.36-linux-pipeline.zip"
+          },
+          {
+            "name": "dcc-mcp-maya-0.9.36-linux.zip",
+            "size_bytes": 105998457,
+            "digest": "sha256:8b11d4043c671bda88faa06b9eb0c8ca63bb2a9042cdac641867d5cdda3bd720",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-maya/releases/download/v0.9.36/dcc-mcp-maya-0.9.36-linux.zip"
+          },
+          {
+            "name": "dcc-mcp-maya-0.9.36-macos-pipeline.zip",
+            "size_bytes": 79522170,
+            "digest": "sha256:a3470e2100ada0e34c78d4b259d656963ce0f8629c293679aaf92818e4c3f4ab",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-maya/releases/download/v0.9.36/dcc-mcp-maya-0.9.36-macos-pipeline.zip"
+          },
+          {
+            "name": "dcc-mcp-maya-0.9.36-macos.zip",
+            "size_bytes": 79523903,
+            "digest": "sha256:18d0c30a2207302f15f4eee2a6f960e83eefcb8181b4048b938800493b7011e2",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-maya/releases/download/v0.9.36/dcc-mcp-maya-0.9.36-macos.zip"
+          },
+          {
+            "name": "dcc-mcp-maya-0.9.36-win64-pipeline.zip",
+            "size_bytes": 80667742,
+            "digest": "sha256:4e70b63232c51ef23ec8783b5ed36b95135622c975e5603d38cfd94098add6f2",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-maya/releases/download/v0.9.36/dcc-mcp-maya-0.9.36-win64-pipeline.zip"
+          },
+          {
+            "name": "dcc-mcp-maya-0.9.36-win64.zip",
+            "size_bytes": 80669451,
+            "digest": "sha256:d08a486fab86f6a34ffdd606e545f7d7e3f10426edd787a7cf53a0267dbb24cf",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-maya/releases/download/v0.9.36/dcc-mcp-maya-0.9.36-win64.zip"
+          },
+          {
+            "name": "dcc_mcp_maya-0.9.36-py3-none-any.whl",
+            "size_bytes": 799826,
+            "digest": "sha256:afe100cf6621d9c1ea6fe5f0a7c8c04412b0583945b32f256881ffe86c63404d",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-maya/releases/download/v0.9.36/dcc_mcp_maya-0.9.36-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_maya-0.9.36.tar.gz",
+            "size_bytes": 5180133,
+            "digest": "sha256:2e15da81bb50312d9cfcbd6813c34901fdc17b8a5b9cc998a8166b41536c0128",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-maya/releases/download/v0.9.36/dcc_mcp_maya-0.9.36.tar.gz"
+          }
+        ]
+      },
+      "distribution_runtime_class": "host_python_with_bundled_core_native_dependencies",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-blender",
+      "targets": [
+        "blender"
+      ],
+      "catalog_version": "0.1.43",
+      "source_version": "0.2.21",
+      "source_sha": "f8adfbe1236bcb3085913f9df4877f918f1cca9d",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-blender",
+      "requires_python": ">=3.7",
+      "execution": {
+        "mode": "host_python_embedded",
+        "details": "Blender add-on embeds Core MCP server inside Blender Python; bpy API calls use host-thread dispatch. Headless Blender is also supported.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_blender/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-blender/blob/f8adfbe1236bcb3085913f9df4877f918f1cca9d/src/dcc_mcp_blender/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-blender/blob/f8adfbe1236bcb3085913f9df4877f918f1cca9d/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.0,<0.21.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "jsonschema>=4.23",
+            "pytest>=7.0",
+            "pytest-cov>=4.0",
+            "pytest-mock>=3.0",
+            "ruff>=0.8.0,<0.17.0",
+            "pyyaml>=5.0"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-blender/blob/f8adfbe1236bcb3085913f9df4877f918f1cca9d/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-blender/releases/tag/v0.2.21",
+        "tag": "v0.2.21",
+        "published_at": "2026-10-16T08:45:40Z",
+        "assets": [
+          {
+            "name": "dcc_mcp_blender-0.2.21-py3-none-any.whl",
+            "size_bytes": 646621,
+            "digest": "sha256:55bf5a20d49555c715dc07d56756401c164ea23152b03d3f5edddec8bf0b78d0",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-blender/releases/download/v0.2.21/dcc_mcp_blender-0.2.21-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_blender-0.2.21.tar.gz",
+            "size_bytes": 24441830,
+            "digest": "sha256:8733f5a86f683b436862078c1447a73f3837e27c2780a0a43c6dccccc1188f75",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-blender/releases/download/v0.2.21/dcc_mcp_blender-0.2.21.tar.gz"
+          },
+          {
+            "name": "dcc_mcp_blender_addon_linux_v0.2.21.zip",
+            "size_bytes": 22856006,
+            "digest": "sha256:f93667210095e6e95dae5f43cecc5620645972821c5762269a25f68bff3cca2f",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-blender/releases/download/v0.2.21/dcc_mcp_blender_addon_linux_v0.2.21.zip"
+          },
+          {
+            "name": "dcc_mcp_blender_addon_macos_v0.2.21.zip",
+            "size_bytes": 41628588,
+            "digest": "sha256:d8c82a8a2c0764277b751cecd4145f7b019b9094576344d369d8c8135936cd2f",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-blender/releases/download/v0.2.21/dcc_mcp_blender_addon_macos_v0.2.21.zip"
+          },
+          {
+            "name": "dcc_mcp_blender_addon_win64_v0.2.21.zip",
+            "size_bytes": 22307980,
+            "digest": "sha256:3721ef64b6bf2c87b97e3f7f89418df98b944ed33790e4a2fc755b297ef66f20",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-blender/releases/download/v0.2.21/dcc_mcp_blender_addon_win64_v0.2.21.zip"
+          }
+        ]
+      },
+      "distribution_runtime_class": "host_python_with_bundled_core_native_dependencies",
+      "packaging_runtime_evidence": [
+        {
+          "source": {
+            "path": ".github/workflows/e2e.yml",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-blender/blob/f8adfbe1236bcb3085913f9df4877f918f1cca9d/.github/workflows/e2e.yml"
+          },
+          "hits": [
+            {
+              "line": 130,
+              "text": "# python3.dll must match the bundled CPython minor version, including"
+            },
+            {
+              "line": 235,
+              "text": "# locate python3.dll (needed by the stable-abi wheel) at import time."
+            },
+            {
+              "line": 251,
+              "text": "# Also copy python3.dll so the stable-abi _core.pyd can find it"
+            },
+            {
+              "line": 256,
+              "text": "\"python3.dll\""
+            },
+            {
+              "line": 275,
+              "text": "# Add Blender's python/bin/ to PATH so _core.pyd can locate python3.dll"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcc-mcp-houdini",
+      "targets": [
+        "houdini"
+      ],
+      "catalog_version": "0.31.5",
+      "source_version": "0.44.2",
+      "source_sha": "24bc004fb2ee2fb3d3f338cb6b058093cef586ed",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-houdini",
+      "requires_python": ">=3.7",
+      "execution": {
+        "mode": "host_python_embedded",
+        "details": "Core MCP server runs in Houdini/hython Python, with hou API on appropriate host dispatcher. Quick-install bundles Core wheels, not CPython.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_houdini/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-houdini/blob/24bc004fb2ee2fb3d3f338cb6b058093cef586ed/src/dcc_mcp_houdini/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-houdini/blob/24bc004fb2ee2fb3d3f338cb6b058093cef586ed/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.14,<0.21.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "pytest>=7.0",
+            "pytest-cov>=4.0",
+            "pytest-asyncio>=0.21,<0.23; python_version < '3.8'",
+            "pytest-asyncio>=0.23; python_version >= '3.8'",
+            "pytest-mock>=3.0",
+            "pyfakefs>=5.3",
+            "requests>=2.28.0",
+            "ruff>=0.8.0",
+            "hatchling",
+            "build",
+            "twine",
+            "packaging>=23.0",
+            "pyyaml>=6.0",
+            "jsonschema==4.17.3; python_version < '3.8'",
+            "jsonschema>=4.23; python_version >= '3.8'"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-houdini/blob/24bc004fb2ee2fb3d3f338cb6b058093cef586ed/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-houdini/releases/tag/v0.44.2",
+        "tag": "v0.44.2",
+        "published_at": "2026-10-11T11:46:52Z",
+        "assets": [
+          {
+            "name": "dcc_mcp_houdini-0.44.2-py3-none-any.whl",
+            "size_bytes": 757321,
+            "digest": "sha256:61d7c8e945d6a06f7aaef0bfea98999038fef76d17525b0aac6ce2a9ab78b9cc",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-houdini/releases/download/v0.44.2/dcc_mcp_houdini-0.44.2-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_houdini-0.44.2.tar.gz",
+            "size_bytes": 33677449,
+            "digest": "sha256:6922da66c90853766eecfea15121bf70927e6afef2ce2908fb8fe60ab5f76eed",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-houdini/releases/download/v0.44.2/dcc_mcp_houdini-0.44.2.tar.gz"
+          },
+          {
+            "name": "dcc_mcp_houdini_quickinstall_linux_v0.44.2.zip",
+            "size_bytes": 45081984,
+            "digest": "sha256:9c95bbb9a1e4d39d7b9d992cc929669ccd67ba83615cff6f153f51a1cfa77d2b",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-houdini/releases/download/v0.44.2/dcc_mcp_houdini_quickinstall_linux_v0.44.2.zip"
+          },
+          {
+            "name": "dcc_mcp_houdini_quickinstall_macos_v0.44.2.zip",
+            "size_bytes": 41661208,
+            "digest": "sha256:250a2d497d785fae9bb49d7de4e8459f96661e8bd030d8cbb6dedc7076dbdfe8",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-houdini/releases/download/v0.44.2/dcc_mcp_houdini_quickinstall_macos_v0.44.2.zip"
+          },
+          {
+            "name": "dcc_mcp_houdini_quickinstall_win64_v0.44.2.zip",
+            "size_bytes": 43972831,
+            "digest": "sha256:e8e58c3052ac8e43440a4c9b7758c3beb147a671cbfeec545f1d386676081e50",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-houdini/releases/download/v0.44.2/dcc_mcp_houdini_quickinstall_win64_v0.44.2.zip"
+          }
+        ]
+      },
+      "distribution_runtime_class": "host_python_with_bundled_core_native_dependencies",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-3dsmax",
+      "targets": [
+        "3dsmax",
+        "3ds max",
+        "3ds-max",
+        "max"
+      ],
+      "catalog_version": "0.1.40",
+      "source_version": "0.2.17",
+      "source_sha": "bbf64cca1257314f3b94418189a36a1e76a408bc",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-3dsmax",
+      "requires_python": ">=3.7",
+      "execution": {
+        "mode": "host_python_plus_native_sidecar",
+        "details": "3ds Max Python owns MaxMcpServer, discovery and pymxs work; default bootstrap also starts Rust dcc-mcp-server. Embedded-only mode is selectable.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_3dsmax/max_bootstrap.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-3dsmax/blob/bbf64cca1257314f3b94418189a36a1e76a408bc/src/dcc_mcp_3dsmax/max_bootstrap.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-3dsmax/blob/bbf64cca1257314f3b94418189a36a1e76a408bc/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.24,<0.21.0",
+          "dcc-mcp-server>=0.20.22,<0.21.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "pytest>=7.0",
+            "pytest-cov>=4.0",
+            "pytest-mock>=3.0",
+            "pytest-timeout>=2.1.0",
+            "pytest-xdist>=3.0",
+            "requests>=2.28.0",
+            "ruff>=0.8.0",
+            "hatchling",
+            "build",
+            "tomli; python_version < '3.11'",
+            "pyyaml>=5.0"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-3dsmax/blob/bbf64cca1257314f3b94418189a36a1e76a408bc/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-3dsmax/releases/tag/v0.2.16",
+        "tag": "v0.2.16",
+        "published_at": "2026-10-11T04:28:26Z",
+        "assets": [
+          {
+            "name": "dcc-mcp-3dsmax-0.2.16-win64.mzp",
+            "size_bytes": 80457873,
+            "digest": "sha256:e95266a43ed30ee498f3bf82f8b50cd7a607990b0ae4c0ceaad776e80ff52922",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-3dsmax/releases/download/v0.2.16/dcc-mcp-3dsmax-0.2.16-win64.mzp"
+          },
+          {
+            "name": "dcc_mcp_3dsmax-0.2.16-py3-none-any.whl",
+            "size_bytes": 620488,
+            "digest": "sha256:14e116e024ec2202703b95aa8d389d1fc858eb6fcb6bbd2a51bbac5743d954e7",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-3dsmax/releases/download/v0.2.16/dcc_mcp_3dsmax-0.2.16-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_3dsmax-0.2.16.tar.gz",
+            "size_bytes": 3320120,
+            "digest": "sha256:25bc5d4448d878b42b7b7f708d114ed0aac5737c4d929090949ff8e102ea5073",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-3dsmax/releases/download/v0.2.16/dcc_mcp_3dsmax-0.2.16.tar.gz"
+          }
+        ]
+      },
+      "distribution_runtime_class": "host_python_with_bundled_core_native_dependencies",
+      "packaging_runtime_evidence": [
+        {
+          "source": {
+            "path": "packaging/assemble_mzp.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-3dsmax/blob/bbf64cca1257314f3b94418189a36a1e76a408bc/packaging/assemble_mzp.py"
+          },
+          "hits": [
+            {
+              "line": 51,
+              "text": "RUNTIME_MANIFEST_NAME = \"dcc-mcp-runtime-manifest.json\""
+            }
+          ]
+        },
+        {
+          "source": {
+            "path": "packaging/check_release_payload.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-3dsmax/blob/bbf64cca1257314f3b94418189a36a1e76a408bc/packaging/check_release_payload.py"
+          },
+          "hits": [
+            {
+              "line": 27,
+              "text": "RUNTIME_MANIFEST_NAME = \"dcc-mcp-runtime-manifest.json\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcc-mcp-photoshop",
+      "targets": [
+        "photoshop"
+      ],
+      "catalog_version": "0.1.37",
+      "source_version": "0.1.43",
+      "source_sha": "11ad175b94f478e0d303583821980010e873e636",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-photoshop",
+      "requires_python": ">=3.8",
+      "execution": {
+        "mode": "external_python_adobe_bridge",
+        "details": "External Python/Core service calls adobepy Rust broker and Photoshop UXP bridge. PyOxidizer release has independent CPython.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_photoshop/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-photoshop/blob/11ad175b94f478e0d303583821980010e873e636/src/dcc_mcp_photoshop/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-photoshop/blob/11ad175b94f478e0d303583821980010e873e636/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.14,<0.21.0"
+        ],
+        "non_core_mandatory": [
+          "adobepy==0.6.2",
+          "websockets>=12.0"
+        ],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "pytest>=7.0",
+            "pytest-asyncio>=0.23",
+            "pytest-mock>=3.0",
+            "pyfakefs>=5.3",
+            "ruff>=0.8.0",
+            "hatchling",
+            "build",
+            "pyyaml>=6.0",
+            "jsonschema>=4.18",
+            "pyoxidizer>=0.24.0"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-photoshop/blob/11ad175b94f478e0d303583821980010e873e636/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-photoshop/releases/tag/v0.1.43",
+        "tag": "v0.1.43",
+        "published_at": "2026-10-17T07:27:46Z",
+        "assets": [
+          {
+            "name": "dcc-mcp-photoshop-linux.tar.gz",
+            "size_bytes": 62473641,
+            "digest": "sha256:cb315e7d1443dc06d07089c8d41f82ebd919e6411ba9f889a627dadc4d82bf72",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-photoshop/releases/download/v0.1.43/dcc-mcp-photoshop-linux.tar.gz"
+          },
+          {
+            "name": "dcc-mcp-photoshop-macos.tar.gz",
+            "size_bytes": 58292466,
+            "digest": "sha256:0c3dcadacfb6a77af711d3e850122f2d95ce6717fe6b5933e9ad510ed245b94a",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-photoshop/releases/download/v0.1.43/dcc-mcp-photoshop-macos.tar.gz"
+          },
+          {
+            "name": "dcc-mcp-photoshop-windows.tar.gz",
+            "size_bytes": 36341684,
+            "digest": "sha256:0fe5bc2cd1d3f273741f5b6abecc82174f6a60a49a28db1e6611abcec1a96975",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-photoshop/releases/download/v0.1.43/dcc-mcp-photoshop-windows.tar.gz"
+          },
+          {
+            "name": "dcc_mcp_photoshop-0.1.43-py3-none-any.whl",
+            "size_bytes": 172536,
+            "digest": "sha256:d980a0a28d8e6813f501c5aba8ffc38b715600148aa6cb65d0401b4d4ae0dccd",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-photoshop/releases/download/v0.1.43/dcc_mcp_photoshop-0.1.43-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_photoshop-0.1.43.tar.gz",
+            "size_bytes": 1676778,
+            "digest": "sha256:362f6424331e016406b4b37db20314ee1f63ca2a34d9f6a46f5e7de9f00f85e6",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-photoshop/releases/download/v0.1.43/dcc_mcp_photoshop-0.1.43.tar.gz"
+          }
+        ]
+      },
+      "distribution_runtime_class": "independent_pyoxidizer_interpreter_release",
+      "packaging_runtime_evidence": [
+        {
+          "source": {
+            "path": "pyoxidizer.bzl",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-photoshop/blob/11ad175b94f478e0d303583821980010e873e636/pyoxidizer.bzl"
+          },
+          "hits": [
+            {
+              "line": 11,
+              "text": "dist = default_python_distribution()"
+            }
+          ]
+        },
+        {
+          "source": {
+            "path": "tools/build_binary.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-photoshop/blob/11ad175b94f478e0d303583821980010e873e636/tools/build_binary.py"
+          },
+          "hits": [
+            {
+              "line": 76,
+              "text": "PyOxidizer shared builds on Windows place python3.dll, python*.dll, and"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcc-mcp-nuke",
+      "targets": [
+        "nuke"
+      ],
+      "catalog_version": "0.13.1",
+      "source_version": "0.16.2",
+      "source_sha": "7354b9c3526b8594d0b0cbdf8d50e0d14f75e775",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-nuke",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "host_python_embedded",
+        "details": "Nuke/Hiero host Python owns MCP server and native host API calls with Qt dispatch.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_nuke/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-nuke/blob/7354b9c3526b8594d0b0cbdf8d50e0d14f75e775/src/dcc_mcp_nuke/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-nuke/blob/7354b9c3526b8594d0b0cbdf8d50e0d14f75e775/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.14,<0.21.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build",
+            "jsonschema>=4",
+            "pytest>=7",
+            "ruff>=0.8",
+            "twine",
+            "pyyaml>=6"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-nuke/blob/7354b9c3526b8594d0b0cbdf8d50e0d14f75e775/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-nuke/releases/tag/v0.16.2",
+        "tag": "v0.16.2",
+        "published_at": "2026-10-10T00:38:52Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": [
+        {
+          "source": {
+            "path": "tools/verify_distribution.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-nuke/blob/7354b9c3526b8594d0b0cbdf8d50e0d14f75e775/tools/verify_distribution.py"
+          },
+          "hits": [
+            {
+              "line": 148,
+              "text": "venv.EnvBuilder(with_pip=True).create(environment)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcc-mcp-unreal",
+      "targets": [
+        "unreal"
+      ],
+      "catalog_version": "0.3.0",
+      "source_version": "0.3.9",
+      "source_sha": "afd3408767c72d63db85615e89f60caad8175069",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-unreal",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "host_python_embedded_or_external_native_sidecar",
+        "details": "Supports embedded Unreal Python/Core server and native plugin plus Rust sidecar. Standalone PyOxidizer wrapper also has external Python discovery; host Python may be absent in native mode.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_unreal/_standalone_entry.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unreal/blob/afd3408767c72d63db85615e89f60caad8175069/src/dcc_mcp_unreal/_standalone_entry.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unreal/blob/afd3408767c72d63db85615e89f60caad8175069/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.13,<0.21.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "pytest>=7.0",
+            "pytest-cov>=4.0",
+            "pytest-mock>=3.0",
+            "ruff>=0.8.0",
+            "hatchling",
+            "editables",
+            "build",
+            "tomli; python_version < '3.11'",
+            "pyyaml>=5.0",
+            "jsonschema>=4.18"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling",
+            "editables"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-unreal/blob/afd3408767c72d63db85615e89f60caad8175069/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-unreal/releases/tag/v0.3.9",
+        "tag": "v0.3.9",
+        "published_at": "2026-10-09T08:50:00Z",
+        "assets": [
+          {
+            "name": "dcc-mcp-unreal-v0.3.9-linux-X64.tar.gz",
+            "size_bytes": 88189664,
+            "digest": "sha256:3c81d17116434468c19129e197eb3bc16c5148715972c5e24d5105e42c96b012",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unreal/releases/download/v0.3.9/dcc-mcp-unreal-v0.3.9-linux-X64.tar.gz"
+          },
+          {
+            "name": "dcc-mcp-unreal-v0.3.9-macOS-Universal2.tar.gz",
+            "size_bytes": 102710801,
+            "digest": "sha256:5314d0e1c18486cf3161c1a5aa4606a3d86ad519ed10b36397f3cf392564d753",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unreal/releases/download/v0.3.9/dcc-mcp-unreal-v0.3.9-macOS-Universal2.tar.gz"
+          },
+          {
+            "name": "dcc-mcp-unreal-v0.3.9-windows-X64.zip",
+            "size_bytes": 62662758,
+            "digest": "sha256:5116abe7f1fde1f2d025236f513d4849cac91193146b521dbe4a428028b6fdb1",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unreal/releases/download/v0.3.9/dcc-mcp-unreal-v0.3.9-windows-X64.zip"
+          },
+          {
+            "name": "DccMcpUnreal-0.3.9-ue4.18-win64.zip",
+            "size_bytes": 6317993,
+            "digest": "sha256:f4a8e889617307ca4dd2bb097839ec1e58d5958a39053183616a642d7d2df88b",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unreal/releases/download/v0.3.9/DccMcpUnreal-0.3.9-ue4.18-win64.zip"
+          },
+          {
+            "name": "DccMcpUnreal-0.3.9-ue4.26-win64.zip",
+            "size_bytes": 8653557,
+            "digest": "sha256:e3480c65efb8b6ac085b724c1f6f656d571a5bbc3962be00b350067b7fff9341",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unreal/releases/download/v0.3.9/DccMcpUnreal-0.3.9-ue4.26-win64.zip"
+          },
+          {
+            "name": "DccMcpUnreal-0.3.9-ue5.5-win64.zip",
+            "size_bytes": 37390065,
+            "digest": "sha256:c4017452ea3ceb0dd2db720cae6817fd6e1ea8ede09bb129316cabbf4b1061ea",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unreal/releases/download/v0.3.9/DccMcpUnreal-0.3.9-ue5.5-win64.zip"
+          },
+          {
+            "name": "DccMcpUnreal-0.3.9-ue5.7-win64.zip",
+            "size_bytes": 37682869,
+            "digest": "sha256:1dcdfb8294ce087f0555a07d15c9c3180a6e72de2db8881ec49adfd1bffba389",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unreal/releases/download/v0.3.9/DccMcpUnreal-0.3.9-ue5.7-win64.zip"
+          },
+          {
+            "name": "DccMcpUnreal-0.3.9-ue5.8-win64.zip",
+            "size_bytes": 40517455,
+            "digest": "sha256:db0eb7ac44d5a437059f656c0d42a5f3923b942cc7008fe025cc3bfc924e2f97",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unreal/releases/download/v0.3.9/DccMcpUnreal-0.3.9-ue5.8-win64.zip"
+          },
+          {
+            "name": "dcc_mcp_unreal-0.3.9-py3-none-any.whl",
+            "size_bytes": 424857,
+            "digest": "sha256:3e715b8c5f1f5ec347fa6488201bda4fff6b2a91fa463dae075a7557991636e5",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unreal/releases/download/v0.3.9/dcc_mcp_unreal-0.3.9-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_unreal-0.3.9.tar.gz",
+            "size_bytes": 2537410,
+            "digest": "sha256:54b87efccddd4717683f055a2741e18ae7906fd0d984568e873c7d11a9e7fd7c",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unreal/releases/download/v0.3.9/dcc_mcp_unreal-0.3.9.tar.gz"
+          },
+          {
+            "name": "install-standalone.ps1",
+            "size_bytes": 4391,
+            "digest": "sha256:01a68a3040bf719ed2fde5a383b960928a3f47550f09d426b270be7bf9605296",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unreal/releases/download/v0.3.9/install-standalone.ps1"
+          }
+        ]
+      },
+      "distribution_runtime_class": "independent_pyoxidizer_interpreter_release",
+      "packaging_runtime_evidence": [
+        {
+          "source": {
+            "path": "pyoxidizer.bzl",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unreal/blob/afd3408767c72d63db85615e89f60caad8175069/pyoxidizer.bzl"
+          },
+          "hits": [
+            {
+              "line": 4,
+              "text": "dist = default_python_distribution()"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcc-mcp-liquigen",
+      "targets": [
+        "liquigen"
+      ],
+      "catalog_version": "0.1.0",
+      "source_version": "0.2.0",
+      "source_sha": "79cdd21b61c7dcf2a4ba7cc0e583bcbc46f1806f",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-liquigen",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_native_bridge",
+        "details": "External service and optional companion menu/launcher bind native LiquiGen command bridge; adapter does not run in host Python.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_liquigen/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-liquigen/blob/79cdd21b61c7dcf2a4ba7cc0e583bcbc46f1806f/src/dcc_mcp_liquigen/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-liquigen/blob/79cdd21b61c7dcf2a4ba7cc0e583bcbc46f1806f/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.22,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "capstone>=5,<6",
+            "pefile>=2024.8.26",
+            "pytest>=8",
+            "ruff>=0.8",
+            "twine>=6"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "setuptools>=77"
+          ],
+          "build-backend": "setuptools.build_meta"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-liquigen/blob/79cdd21b61c7dcf2a4ba7cc0e583bcbc46f1806f/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-liquigen/releases/tag/v0.2.0",
+        "tag": "v0.2.0",
+        "published_at": "2026-09-02T10:45:13Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-zbrush",
+      "targets": [
+        "zbrush"
+      ],
+      "catalog_version": "0.2.18",
+      "source_version": "0.2.29",
+      "source_sha": "931190e4bfe2cc9d5ad933494a0a5c86001dda40",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-zbrush",
+      "requires_python": ">=3.10",
+      "execution": {
+        "mode": "external_python_with_host_python_plugin",
+        "details": "Recommended production mode is external Core Python sidecar and pure Python ZBrush socket plugin. Core extension inside ZBrush VM explicitly unsupported; embedded pure-Python experiments are documented separately.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_zbrush/cli.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-zbrush/blob/931190e4bfe2cc9d5ad933494a0a5c86001dda40/src/dcc_mcp_zbrush/cli.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-zbrush/blob/931190e4bfe2cc9d5ad933494a0a5c86001dda40/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.14,<0.21.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "pytest>=7.0",
+            "pytest-mock>=3.0",
+            "ruff>=0.8.0",
+            "hatchling",
+            "build>=1.0",
+            "twine>=5.0",
+            "pyyaml>=6.0",
+            "jsonschema>=4.23"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-zbrush/blob/931190e4bfe2cc9d5ad933494a0a5c86001dda40/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-zbrush/releases/tag/v0.2.29",
+        "tag": "v0.2.29",
+        "published_at": "2026-10-12T13:22:41Z",
+        "assets": [
+          {
+            "name": "dcc-mcp-zbrush-plugin-0.2.29.zip",
+            "size_bytes": 15076,
+            "digest": "sha256:c1fbdfe1fbe2fe6bf7ef62d2c123a7547e0297ecb9e496ba1a1dca72544fce85",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-zbrush/releases/download/v0.2.29/dcc-mcp-zbrush-plugin-0.2.29.zip"
+          },
+          {
+            "name": "dcc_mcp_zbrush-0.2.29-py3-none-any.whl",
+            "size_bytes": 100433,
+            "digest": "sha256:a64c34bd34586db5d226743ee567d0a405dff99bf817271e439415a522607d17",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-zbrush/releases/download/v0.2.29/dcc_mcp_zbrush-0.2.29-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_zbrush-0.2.29.tar.gz",
+            "size_bytes": 1469802,
+            "digest": "sha256:58876ef144f1791d02ec33ae2954fb5a75443cac8589e109c145f39b438a1858",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-zbrush/releases/download/v0.2.29/dcc_mcp_zbrush-0.2.29.tar.gz"
+          },
+          {
+            "name": "SHA256SUMS",
+            "size_bytes": 111,
+            "digest": "sha256:b76673c4a102e60c0b252bb6d18c57b2902b5419785ec31c2d687cfc760f06c8",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-zbrush/releases/download/v0.2.29/SHA256SUMS"
+          }
+        ]
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-premiere",
+      "targets": [
+        "premiere"
+      ],
+      "catalog_version": "0.5.0",
+      "source_version": "0.6.2",
+      "source_sha": "236bfaa4f62862ce3f0c7f747e58bfe803a14e27",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-premiere",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_adobe_bridge",
+        "details": "External Python service uses adobepy facade/broker to reach Premiere host APIs.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_premiere/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-premiere/blob/236bfaa4f62862ce3f0c7f747e58bfe803a14e27/src/dcc_mcp_premiere/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-premiere/blob/236bfaa4f62862ce3f0c7f747e58bfe803a14e27/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.34,<1.0.0"
+        ],
+        "non_core_mandatory": [
+          "adobepy>=0.6.2,<1.0.0"
+        ],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "pytest>=8",
+            "ruff>=0.8",
+            "twine>=6"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-premiere/blob/236bfaa4f62862ce3f0c7f747e58bfe803a14e27/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-premiere/releases/tag/v0.6.2",
+        "tag": "v0.6.2",
+        "published_at": "2026-10-02T22:41:22Z",
+        "assets": [
+          {
+            "name": "dcc_mcp_premiere-0.6.2-py3-none-any.whl",
+            "size_bytes": 45106,
+            "digest": "sha256:7df06586858d690c809cd8d3235bb209124fbe0452b9c4fa8c8c17586b44e7cd",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-premiere/releases/download/v0.6.2/dcc_mcp_premiere-0.6.2-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_premiere-0.6.2.tar.gz",
+            "size_bytes": 56244,
+            "digest": "sha256:10d7cd13a259a9fa73b66d9cae5d9078b7215b69b9d0144e4a37f617ab992c19",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-premiere/releases/download/v0.6.2/dcc_mcp_premiere-0.6.2.tar.gz"
+          }
+        ]
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-aftereffects",
+      "targets": [
+        "aftereffects",
+        "after-effects",
+        "after effects"
+      ],
+      "catalog_version": "0.6.0",
+      "source_version": "0.7.1",
+      "source_sha": "f33a2461732344993e0baaa3ddb48c3f1f550bcb",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-aftereffects",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_adobe_bridge",
+        "details": "External Python service uses adobepy facade/broker to reach Adobe host APIs.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_aftereffects/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-aftereffects/blob/f33a2461732344993e0baaa3ddb48c3f1f550bcb/src/dcc_mcp_aftereffects/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-aftereffects/blob/f33a2461732344993e0baaa3ddb48c3f1f550bcb/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.14,<1.0.0"
+        ],
+        "non_core_mandatory": [
+          "adobepy==0.6.2",
+          "packaging>=24"
+        ],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "jsonschema>=4.23",
+            "pytest>=8",
+            "ruff>=0.8",
+            "twine>=6"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-aftereffects/blob/f33a2461732344993e0baaa3ddb48c3f1f550bcb/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-aftereffects/releases/tag/v0.7.1",
+        "tag": "v0.7.1",
+        "published_at": "2026-10-11T04:43:49Z",
+        "assets": [
+          {
+            "name": "dcc_mcp_aftereffects-0.7.1-py3-none-any.whl",
+            "size_bytes": 84995,
+            "digest": "sha256:89d7423656c1f82c790011377a947c22adf24aa10e676180f155b7be91ee94fd",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-aftereffects/releases/download/v0.7.1/dcc_mcp_aftereffects-0.7.1-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_aftereffects-0.7.1.tar.gz",
+            "size_bytes": 1084794,
+            "digest": "sha256:c8d3ba9f77ddbb61efe6ecfc02d636e76f51c18b3c5ac3314c79b982888dadf7",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-aftereffects/releases/download/v0.7.1/dcc_mcp_aftereffects-0.7.1.tar.gz"
+          }
+        ]
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-illustrator",
+      "targets": [
+        "illustrator"
+      ],
+      "catalog_version": "0.2.0",
+      "source_version": "0.3.2",
+      "source_sha": "a58baf7e8745b5aa5136fb17005d0082dd95498d",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-illustrator",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_adobe_bridge",
+        "details": "External Python service uses adobepy facade/broker to reach Adobe host APIs.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_illustrator/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-illustrator/blob/a58baf7e8745b5aa5136fb17005d0082dd95498d/src/dcc_mcp_illustrator/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-illustrator/blob/a58baf7e8745b5aa5136fb17005d0082dd95498d/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.14,<1.0.0"
+        ],
+        "non_core_mandatory": [
+          "adobepy==0.8.0",
+          "packaging>=24"
+        ],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "jsonschema>=4.23",
+            "pytest>=8",
+            "pyyaml>=6",
+            "ruff>=0.8",
+            "twine>=6"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-illustrator/blob/a58baf7e8745b5aa5136fb17005d0082dd95498d/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-illustrator/releases/tag/v0.3.2",
+        "tag": "v0.3.2",
+        "published_at": "2026-10-17T10:35:18Z",
+        "assets": [
+          {
+            "name": "dcc_mcp_illustrator-0.3.2-py3-none-any.whl",
+            "size_bytes": 67862,
+            "digest": "sha256:9afdc99e63ac6a5e7c26374e995ca37db17cb0ea6ce5a1ff09688f05bcdc4e28",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-illustrator/releases/download/v0.3.2/dcc_mcp_illustrator-0.3.2-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_illustrator-0.3.2.tar.gz",
+            "size_bytes": 77232,
+            "digest": "sha256:3583e0ed07bd9b205c0d3aaef5f7166fadd579a0a085110194121b0395743afc",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-illustrator/releases/download/v0.3.2/dcc_mcp_illustrator-0.3.2.tar.gz"
+          }
+        ]
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-gimp",
+      "targets": [
+        "gimp"
+      ],
+      "catalog_version": "0.4.1",
+      "source_version": "0.6.0",
+      "source_sha": "5e1690ef219088499fdd5944e5717b8cfe081566",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-gimp",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_with_host_python_plugin",
+        "details": "External MCP service with persistent GIMP 3 Python plugin; authenticated JSON-lines bridge dispatches GI/GIMP calls on GLib host thread.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_gimp/bridge.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-gimp/blob/5e1690ef219088499fdd5944e5717b8cfe081566/src/dcc_mcp_gimp/bridge.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-gimp/blob/5e1690ef219088499fdd5944e5717b8cfe081566/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.19.91,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "pytest>=8",
+            "jsonschema>=4.18",
+            "ruff>=0.8",
+            "twine>=6.2,<7; python_version < '3.10'",
+            "twine>=7; python_version >= '3.10'"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-gimp/blob/5e1690ef219088499fdd5944e5717b8cfe081566/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-gimp/releases/tag/v0.6.0",
+        "tag": "v0.6.0",
+        "published_at": "2026-10-17T09:27:47Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-krita",
+      "targets": [
+        "krita"
+      ],
+      "catalog_version": "0.3.0",
+      "source_version": "0.4.0",
+      "source_sha": "89f444aa3db6531718686d974889acd488c78e49",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-krita",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_with_host_python_plugin",
+        "details": "External MCP service with small Krita Python extension; authenticated socket queue marshals LibKis calls to UI thread.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_krita/bridge.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-krita/blob/89f444aa3db6531718686d974889acd488c78e49/src/dcc_mcp_krita/bridge.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-krita/blob/89f444aa3db6531718686d974889acd488c78e49/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.19.38,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "pytest>=8",
+            "ruff>=0.8",
+            "tomli>=2; python_version < '3.11'",
+            "twine>=7.0; python_version >= '3.10'"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-krita/blob/89f444aa3db6531718686d974889acd488c78e49/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-krita/releases/tag/v0.4.0",
+        "tag": "v0.4.0",
+        "published_at": "2026-08-25T17:10:39Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-katana",
+      "targets": [
+        "katana"
+      ],
+      "catalog_version": "0.4.0",
+      "source_version": "0.5.2",
+      "source_sha": "d69b53c79056ba6ed92a81ba00e15104e123146b",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-katana",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "host_python_embedded",
+        "details": "Core MCP server is hosted by running Katana session; Katana dispatcher marshals host API calls.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_katana/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-katana/blob/d69b53c79056ba6ed92a81ba00e15104e123146b/src/dcc_mcp_katana/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-katana/blob/d69b53c79056ba6ed92a81ba00e15104e123146b/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.19.45,<0.21.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "pytest>=8",
+            "ruff>=0.8",
+            "twine>=6",
+            "pyyaml>=5.0"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-katana/blob/d69b53c79056ba6ed92a81ba00e15104e123146b/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-katana/releases/tag/v0.5.2",
+        "tag": "v0.5.2",
+        "published_at": "2026-10-17T10:35:43Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-mobu",
+      "targets": [
+        "mobu"
+      ],
+      "catalog_version": "0.3.0",
+      "source_version": "0.4.0",
+      "source_sha": "bbdf9b132502835fbcf464df76b0d22224ba8ef6",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-mobu",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "host_python_embedded",
+        "details": "Server starts from MotionBuilder startup code and dispatches pyfbsdk calls using UI-idle callback.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_mobu/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-mobu/blob/bbdf9b132502835fbcf464df76b0d22224ba8ef6/src/dcc_mcp_mobu/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-mobu/blob/bbdf9b132502835fbcf464df76b0d22224ba8ef6/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.19.45,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "pytest>=8",
+            "ruff>=0.8",
+            "twine>=6"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-mobu/blob/bbdf9b132502835fbcf464df76b0d22224ba8ef6/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-mobu/releases/tag/v0.4.0",
+        "tag": "v0.4.0",
+        "published_at": "2026-08-26T08:43:40Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-renderdoc",
+      "targets": [
+        "renderdoc"
+      ],
+      "catalog_version": "0.3.0",
+      "source_version": "0.9.2",
+      "source_sha": "872c234eabfb0b644f34d74a176e68ada6800991",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-renderdoc",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_with_host_python_worker",
+        "details": "External headless-first service uses renderdoccmd; replay/Target Control can use qrenderdoc bundled Python SDK worker.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_renderdoc/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-renderdoc/blob/872c234eabfb0b644f34d74a176e68ada6800991/src/dcc_mcp_renderdoc/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-renderdoc/blob/872c234eabfb0b644f34d74a176e68ada6800991/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.14,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "jsonschema>=4.23,<5",
+            "pytest>=8",
+            "pyyaml>=6,<7",
+            "ruff>=0.8",
+            "twine>=6"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26,<1.32"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-renderdoc/blob/872c234eabfb0b644f34d74a176e68ada6800991/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-renderdoc/releases/tag/v0.9.2",
+        "tag": "v0.9.2",
+        "published_at": "2026-10-17T07:29:50Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": [
+        {
+          "source": {
+            "path": ".github/workflows/ci.yml",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-renderdoc/blob/872c234eabfb0b644f34d74a176e68ada6800991/.github/workflows/ci.yml"
+          },
+          "hits": [
+            {
+              "line": 89,
+              "text": "DCC_MCP_RUNTIME_CACHE: ${{ github.workspace }}/.renderdoc-bin"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcc-mcp-obs",
+      "targets": [
+        "obs"
+      ],
+      "catalog_version": "1.5.1",
+      "source_version": "1.5.2",
+      "source_sha": "8726cc04ea31e932817fcad83e96366a9a4ee7b9",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-obs",
+      "requires_python": ">=3.10",
+      "execution": {
+        "mode": "external_python_native_bridge",
+        "details": "C++ plugin runs in exact OBS process; external Python sidecar controls it through authenticated official OBS WebSocket 5 vendor protocol. Does not use OBS Python scripting.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_obs/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-obs/blob/8726cc04ea31e932817fcad83e96366a9a4ee7b9/src/dcc_mcp_obs/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-obs/blob/8726cc04ea31e932817fcad83e96366a9a4ee7b9/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.14,<1.0.0"
+        ],
+        "non_core_mandatory": [
+          "psutil>=5.9,<8",
+          "websocket-client>=1.8,<2"
+        ],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2,<2",
+            "jsonschema>=4.23,<5",
+            "pytest>=8,<9",
+            "pytest-cov>=5,<7",
+            "pyyaml>=6,<7",
+            "ruff>=0.12,<1",
+            "tomli>=2,<3; python_version < '3.11'",
+            "twine>=6,<7",
+            "websockets>=15,<16"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.27,<1.30"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-obs/blob/8726cc04ea31e932817fcad83e96366a9a4ee7b9/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-obs/releases/tag/v1.5.2",
+        "tag": "v1.5.2",
+        "published_at": "2026-10-17T10:10:25Z",
+        "assets": [
+          {
+            "name": "dcc-mcp-obs-1.5.2-linux-runtime.zip",
+            "size_bytes": 275064,
+            "digest": "sha256:e0e1d2077edf4eedd83c943c51f7125c3376ec8f145ec2a7131c56b7451b8e09",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-obs/releases/download/v1.5.2/dcc-mcp-obs-1.5.2-linux-runtime.zip"
+          },
+          {
+            "name": "dcc-mcp-obs-1.5.2-linux.zip",
+            "size_bytes": 134280,
+            "digest": "sha256:c50714d206d2f35c581da0aa2770c5456402261313c5def17f9fad80cf074a0a",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-obs/releases/download/v1.5.2/dcc-mcp-obs-1.5.2-linux.zip"
+          },
+          {
+            "name": "dcc-mcp-obs-1.5.2-macos-runtime.zip",
+            "size_bytes": 356201,
+            "digest": "sha256:c2212a2cbafb5bc4f70deb1cc900841ccfe312df637fb0a6b8c519af204c30bc",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-obs/releases/download/v1.5.2/dcc-mcp-obs-1.5.2-macos-runtime.zip"
+          },
+          {
+            "name": "dcc-mcp-obs-1.5.2-macos.zip",
+            "size_bytes": 215807,
+            "digest": "sha256:1684240e1499fb99aebfd0390b9211ac56d913c8261e087b97cd3ec622807792",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-obs/releases/download/v1.5.2/dcc-mcp-obs-1.5.2-macos.zip"
+          },
+          {
+            "name": "dcc-mcp-obs-1.5.2-windows-runtime.zip",
+            "size_bytes": 256854,
+            "digest": "sha256:d8c7bb66d192eaac3490b8a991a4fa2d6da4ad1dac8a1d6c4dbfad62ed3135c0",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-obs/releases/download/v1.5.2/dcc-mcp-obs-1.5.2-windows-runtime.zip"
+          },
+          {
+            "name": "dcc-mcp-obs-1.5.2-windows.zip",
+            "size_bytes": 114622,
+            "digest": "sha256:9345b2a2ea26dd1bb2cf99ab2ee5a218894fd451dc50e34e932041d4efe8f3d2",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-obs/releases/download/v1.5.2/dcc-mcp-obs-1.5.2-windows.zip"
+          },
+          {
+            "name": "dcc_mcp_obs-1.5.2-py3-none-any.whl",
+            "size_bytes": 148163,
+            "digest": "sha256:1c6a723c853b6727ff1e6f39a3031cd4a0e9676501a3c99bb079097aab8f9877",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-obs/releases/download/v1.5.2/dcc_mcp_obs-1.5.2-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_obs-1.5.2.tar.gz",
+            "size_bytes": 251552,
+            "digest": "sha256:b1eaabbfc1db89f96d484fc05318cf235bc98a7bd4608a12ec71a0763956f66b",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-obs/releases/download/v1.5.2/dcc_mcp_obs-1.5.2.tar.gz"
+          },
+          {
+            "name": "SHA256SUMS",
+            "size_bytes": 1058,
+            "digest": "sha256:b4cfbaeb1f79d6fce4cec065f187453cdf45af05d28bb41a63ec7202ed0e40df",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-obs/releases/download/v1.5.2/SHA256SUMS"
+          }
+        ]
+      },
+      "distribution_runtime_class": "shared_runtime_wheels_only_current_release_legacy_pyoxidizer_source",
+      "packaging_runtime_evidence": [
+        {
+          "source": {
+            "path": ".github/workflows/release.yml",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-obs/blob/8726cc04ea31e932817fcad83e96366a9a4ee7b9/.github/workflows/release.yml"
+          },
+          "hits": [
+            {
+              "line": 297,
+              "text": "--pattern \"dcc_mcp_runtime-${RUNTIME_VERSION}-py3-none-any.whl\" \\"
+            },
+            {
+              "line": 307,
+              "text": "(f\"dcc_mcp_runtime-{os.environ['RUNTIME_VERSION']}-py3-none-any.whl\", \"RUNTIME_WHEEL_SHA256\"),"
+            },
+            {
+              "line": 338,
+              "text": "--runtime-wheel \"runtime-artifact/dcc_mcp_runtime-${RUNTIME_VERSION}-py3-none-any.whl\" \\"
+            }
+          ]
+        },
+        {
+          "source": {
+            "path": "packaging/install_runtime.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-obs/blob/8726cc04ea31e932817fcad83e96366a9a4ee7b9/packaging/install_runtime.py"
+          },
+          "hits": [
+            {
+              "line": 134,
+              "text": "runtime_wheel = _one(files, prefix=\"wheels/dcc_mcp_runtime-\", suffix=\".whl\")"
+            },
+            {
+              "line": 195,
+              "text": "plan[\"environment\"] = {\"DCC_MCP_RUNTIME_ROOT\": str(root)}"
+            }
+          ]
+        },
+        {
+          "source": {
+            "path": "packaging/shared-runtime.toml",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-obs/blob/8726cc04ea31e932817fcad83e96366a9a4ee7b9/packaging/shared-runtime.toml"
+          },
+          "hits": [
+            {
+              "line": 2,
+              "text": "runtime_repository = \"dcc-mcp/dcc-mcp-runtime\""
+            }
+          ]
+        },
+        {
+          "source": {
+            "path": "pyoxidizer.bzl",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-obs/blob/8726cc04ea31e932817fcad83e96366a9a4ee7b9/pyoxidizer.bzl"
+          },
+          "hits": [
+            {
+              "line": 4,
+              "text": "dist = default_python_distribution()"
+            }
+          ]
+        },
+        {
+          "source": {
+            "path": "tools/build_shared_runtime.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-obs/blob/8726cc04ea31e932817fcad83e96366a9a4ee7b9/tools/build_shared_runtime.py"
+          },
+          "hits": [
+            {
+              "line": 50,
+              "text": "f\"wheels/dcc_mcp_runtime-{runtime_version}-py3-none-any.whl\": runtime_wheel.read_bytes(),"
+            }
+          ]
+        },
+        {
+          "source": {
+            "path": "tools/release_delivery.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-obs/blob/8726cc04ea31e932817fcad83e96366a9a4ee7b9/tools/release_delivery.py"
+          },
+          "hits": [
+            {
+              "line": 301,
+              "text": "runtime_name = f\"wheels/dcc_mcp_runtime-{runtime_version}-py3-none-any.whl\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcc-mcp-substance3d-designer",
+      "targets": [
+        "substance3d_designer"
+      ],
+      "catalog_version": "0.3.0",
+      "source_version": "0.8.1",
+      "source_sha": "6c0566c9149271ffa72f1703801f8a2c0c5bdb96",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-substance3d-designer",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "host_python_embedded_and_external_offline",
+        "details": "Primary GUI Core server embeds in Designer Python with sd/Qt modules. Additional standalone offline_server exposes non-host offline workflows.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_substance3d_designer/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-substance3d-designer/blob/6c0566c9149271ffa72f1703801f8a2c0c5bdb96/src/dcc_mcp_substance3d_designer/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-substance3d-designer/blob/6c0566c9149271ffa72f1703801f8a2c0c5bdb96/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.15,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build",
+            "jsonschema>=4.23",
+            "packaging>=24.0",
+            "pytest>=7.0",
+            "ruff>=0.8.0",
+            "twine",
+            "pyyaml>=6.0"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-substance3d-designer/blob/6c0566c9149271ffa72f1703801f8a2c0c5bdb96/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-substance3d-designer/releases/tag/v0.8.1",
+        "tag": "v0.8.1",
+        "published_at": "2026-09-21T11:10:30Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-substance3d-painter",
+      "targets": [
+        "substance3d_painter"
+      ],
+      "catalog_version": "0.1.3",
+      "source_version": "0.6.3",
+      "source_sha": "40e9ebecba8e40d71186452d20e1708475cbc54a",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-substance3d-painter",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "host_python_embedded",
+        "details": "Host Python/Core server uses substance_painter and host Qt dispatcher.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_substance3d_painter/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-substance3d-painter/blob/40e9ebecba8e40d71186452d20e1708475cbc54a/src/dcc_mcp_substance3d_painter/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-substance3d-painter/blob/40e9ebecba8e40d71186452d20e1708475cbc54a/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.15,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build",
+            "jsonschema>=4.23",
+            "packaging>=24.0",
+            "pytest>=7.0",
+            "ruff>=0.8.0",
+            "twine",
+            "pyyaml>=6.0"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-substance3d-painter/blob/40e9ebecba8e40d71186452d20e1708475cbc54a/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-substance3d-painter/releases/tag/v0.6.3",
+        "tag": "v0.6.3",
+        "published_at": "2026-10-17T07:26:09Z",
+        "assets": [
+          {
+            "name": "dcc_mcp_substance3d_painter-0.6.3-py3-none-any.whl",
+            "size_bytes": 117023,
+            "digest": "sha256:6a7d38c5c6ea73acef010f8ba61d60b7077c7d09d62739993c06ce5959a9d1cd",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-substance3d-painter/releases/download/v0.6.3/dcc_mcp_substance3d_painter-0.6.3-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_substance3d_painter-0.6.3.tar.gz",
+            "size_bytes": 149944,
+            "digest": "sha256:ad2817c333c506ee75f877a95d4952e203dce3b282150e3421f6b5a3de23217f",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-substance3d-painter/releases/download/v0.6.3/dcc_mcp_substance3d_painter-0.6.3.tar.gz"
+          },
+          {
+            "name": "SHA256SUMS",
+            "size_bytes": 234,
+            "digest": "sha256:9faefe1bc97737460c69878a632866dbeeeda5bbfaec430fca435d9909742217",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-substance3d-painter/releases/download/v0.6.3/SHA256SUMS"
+          }
+        ]
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-godot",
+      "targets": [
+        "godot"
+      ],
+      "catalog_version": "0.9.6",
+      "source_version": "0.9.8",
+      "source_sha": "f55f364b294483e1122eb874a69e469cca05b35b",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-godot",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_native_bridge",
+        "details": "External Python service provides WebSocket bridge; Godot editor plugin owns engine calls. websockets and Pillow are declared mandatory.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_godot/bridge.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-godot/blob/f55f364b294483e1122eb874a69e469cca05b35b/src/dcc_mcp_godot/bridge.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-godot/blob/f55f364b294483e1122eb874a69e469cca05b35b/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.41,<1.0.0"
+        ],
+        "non_core_mandatory": [
+          "websockets>=12",
+          "Pillow>=10"
+        ],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "pytest>=8",
+            "ruff>=0.8",
+            "twine>=6",
+            "PyYAML>=6",
+            "jsonschema>=4",
+            "mcp>=1.30,<2; python_version >= '3.10'"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-godot/blob/f55f364b294483e1122eb874a69e469cca05b35b/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-godot/releases/tag/v0.9.8",
+        "tag": "v0.9.8",
+        "published_at": "2026-10-13T09:17:48Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-unity",
+      "targets": [
+        "unity"
+      ],
+      "catalog_version": "0.11.2",
+      "source_version": "0.15.0",
+      "source_sha": "3fd2af312d80062ab12c0026591a5df14d68194f",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-unity",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_native_bridge",
+        "details": "External Python sidecar owns MCP; C# UPM editor package owns Unity host calls over loopback WebSocket. PyOxidizer release independently bundles CPython.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_unity/_standalone_entry.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unity/blob/3fd2af312d80062ab12c0026591a5df14d68194f/src/dcc_mcp_unity/_standalone_entry.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unity/blob/3fd2af312d80062ab12c0026591a5df14d68194f/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.19.90,<1.0.0"
+        ],
+        "non_core_mandatory": [
+          "websockets>=12"
+        ],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "jsonschema>=4",
+            "pytest>=8",
+            "pyyaml>=6",
+            "ruff>=0.8",
+            "twine>=6"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-unity/blob/3fd2af312d80062ab12c0026591a5df14d68194f/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-unity/releases/tag/v0.15.0",
+        "tag": "v0.15.0",
+        "published_at": "2026-10-13T09:19:52Z",
+        "assets": [
+          {
+            "name": "dcc-mcp-unity-v0.15.0-linux-X64.tar.gz",
+            "size_bytes": 68188825,
+            "digest": "sha256:efa61b902b285c8205023e2a162747a0cfb742ac04e227eb6baecb21b381f2f4",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unity/releases/download/v0.15.0/dcc-mcp-unity-v0.15.0-linux-X64.tar.gz"
+          },
+          {
+            "name": "dcc-mcp-unity-v0.15.0-macOS-ARM64.tar.gz",
+            "size_bytes": 63976449,
+            "digest": "sha256:a0ee5ea1c4a70dcef6d7b75f557f2bd063053fa4d7a87d65e819946e35fb9033",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unity/releases/download/v0.15.0/dcc-mcp-unity-v0.15.0-macOS-ARM64.tar.gz"
+          },
+          {
+            "name": "dcc-mcp-unity-v0.15.0-windows-X64.zip",
+            "size_bytes": 45380507,
+            "digest": "sha256:6eeaefb9f95dcc58e85d85860fa760d19098b9a9d88d0305c502355ec45cd59c",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unity/releases/download/v0.15.0/dcc-mcp-unity-v0.15.0-windows-X64.zip"
+          }
+        ]
+      },
+      "distribution_runtime_class": "independent_pyoxidizer_interpreter_release",
+      "packaging_runtime_evidence": [
+        {
+          "source": {
+            "path": "pyoxidizer.bzl",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-unity/blob/3fd2af312d80062ab12c0026591a5df14d68194f/pyoxidizer.bzl"
+          },
+          "hits": [
+            {
+              "line": 5,
+              "text": "dist = default_python_distribution()"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcc-mcp-marmoset",
+      "targets": [
+        "marmoset"
+      ],
+      "catalog_version": "0.1.1",
+      "source_version": "0.1.3",
+      "source_sha": "dfe015455cae7a38e85fa0ade8452740c59fb834",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-marmoset",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_with_host_python_plugin",
+        "details": "Toolbag pure-Python mset plugin owns host callback execution; external DccServerBase process owns MCP/gateway/jobs.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_marmoset/toolbag_plugin/__main__.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-marmoset/blob/dfe015455cae7a38e85fa0ade8452740c59fb834/src/dcc_mcp_marmoset/toolbag_plugin/__main__.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-marmoset/blob/dfe015455cae7a38e85fa0ade8452740c59fb834/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.14,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "jsonschema>=4.23,<5",
+            "pytest>=8",
+            "ruff>=0.8",
+            "twine>=6",
+            "uv==0.11.19"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-marmoset/blob/dfe015455cae7a38e85fa0ade8452740c59fb834/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-marmoset/releases/tag/v0.1.3",
+        "tag": "v0.1.3",
+        "published_at": "2026-10-09T23:27:51Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-openscad",
+      "targets": [
+        "openscad"
+      ],
+      "catalog_version": "0.2.1",
+      "source_version": "0.5.0",
+      "source_sha": "bdb4e81c47520bd2783575f7510c65aff9722e92",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-openscad",
+      "requires_python": ">=3.7",
+      "execution": {
+        "mode": "external_python_cli",
+        "details": "External service launches openscad CLI; no second host Python interpreter.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_openscad/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-openscad/blob/bdb4e81c47520bd2783575f7510c65aff9722e92/src/dcc_mcp_openscad/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-openscad/blob/bdb4e81c47520bd2783575f7510c65aff9722e92/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.36,<1.0.0"
+        ],
+        "non_core_mandatory": [
+          "importlib-metadata>=4.13,<7; python_version<'3.8'"
+        ],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "test": [
+            "pytest>=7.4,<8; python_version<'3.8'",
+            "pytest>=8; python_version>='3.8'",
+            "ruff>=0.8",
+            "PyYAML>=6",
+            "jsonschema==4.17.3; python_version<'3.8'",
+            "jsonschema>=4.18; python_version>='3.8'"
+          ],
+          "dev": [
+            "pytest>=7.4,<8; python_version<'3.8'",
+            "pytest>=8; python_version>='3.8'",
+            "ruff>=0.8",
+            "PyYAML>=6",
+            "jsonschema==4.17.3; python_version<'3.8'",
+            "jsonschema>=4.18; python_version>='3.8'",
+            "build>=1.2",
+            "twine>=6"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.17"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-openscad/blob/bdb4e81c47520bd2783575f7510c65aff9722e92/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-openscad/releases/tag/v0.5.0",
+        "tag": "v0.5.0",
+        "published_at": "2026-10-17T07:32:11Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-freecad",
+      "targets": [
+        "freecad"
+      ],
+      "catalog_version": "0.3.0",
+      "source_version": "0.11.0",
+      "source_sha": "3cebf96e03e52204f56c73a989181f4c112b9a44",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-freecad",
+      "requires_python": ">=3.7",
+      "execution": {
+        "mode": "external_python_with_host_python_worker",
+        "details": "External wrapper/service launches FreeCADCmd driver. Installing adapter wheel into FreeCAD Python is explicitly unsupported; optional configured python-module backend still needs compatible native FreeCAD SDK.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_freecad/bridge.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-freecad/blob/3cebf96e03e52204f56c73a989181f4c112b9a44/src/dcc_mcp_freecad/bridge.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-freecad/blob/3cebf96e03e52204f56c73a989181f4c112b9a44/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.36,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "test": [
+            "pytest>=7.4,<8; python_version<'3.8'",
+            "pytest>=8; python_version>='3.8'",
+            "ruff>=0.8",
+            "PyYAML>=6",
+            "jsonschema>=4.0"
+          ],
+          "dev": [
+            "pytest>=7.4,<8; python_version<'3.8'",
+            "pytest>=8; python_version>='3.8'",
+            "ruff>=0.8",
+            "PyYAML>=6",
+            "jsonschema>=4.0",
+            "build>=1.2",
+            "twine>=6"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.17"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-freecad/blob/3cebf96e03e52204f56c73a989181f4c112b9a44/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-freecad/releases/tag/v0.11.0",
+        "tag": "v0.11.0",
+        "published_at": "2026-10-17T07:27:16Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-cinema4d",
+      "targets": [
+        "c4d",
+        "cinema4d"
+      ],
+      "catalog_version": "0.2.0",
+      "source_version": "0.3.2",
+      "source_sha": "55269d87cdbd5c342b071be7ae0de712cfc694d5",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-cinema4d",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_with_host_python_worker",
+        "details": "External service launches licensed c4dpy in a separate process with package-owned driver. Core belongs in service Python, c4d only in vendor worker.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_cinema4d/bridge.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-cinema4d/blob/55269d87cdbd5c342b071be7ae0de712cfc694d5/src/dcc_mcp_cinema4d/bridge.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-cinema4d/blob/55269d87cdbd5c342b071be7ae0de712cfc694d5/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.36,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "test": [
+            "pytest>=8",
+            "ruff>=0.8",
+            "PyYAML>=6",
+            "jsonschema>=4.23"
+          ],
+          "dev": [
+            "pytest>=8",
+            "ruff>=0.8",
+            "PyYAML>=6",
+            "jsonschema>=4.23",
+            "build>=1.2",
+            "twine>=6"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-cinema4d/blob/55269d87cdbd5c342b071be7ae0de712cfc694d5/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-cinema4d/releases/tag/v0.3.2",
+        "tag": "v0.3.2",
+        "published_at": "2026-10-17T07:28:33Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-comfyui",
+      "targets": [
+        "comfyui",
+        "comfy-ui"
+      ],
+      "catalog_version": "0.1.1",
+      "source_version": "0.1.6",
+      "source_sha": "ec7f230ce72dbd29b1aa89a7c51d31a4a60cf709",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-comfyui",
+      "requires_python": ">=3.10",
+      "execution": {
+        "mode": "external_python_http",
+        "details": "External Python service accesses ComfyUI REST API with httpx. A bundled custom-node sync helper uses ComfyUI host Python/modules separately.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_comfyui/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-comfyui/blob/ec7f230ce72dbd29b1aa89a7c51d31a4a60cf709/src/dcc_mcp_comfyui/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-comfyui/blob/ec7f230ce72dbd29b1aa89a7c51d31a4a60cf709/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.8,<1.0.0"
+        ],
+        "non_core_mandatory": [
+          "httpx>=0.25.0"
+        ],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "pytest>=7.0",
+            "pytest-mock>=3.0",
+            "pytest-asyncio>=0.23",
+            "ruff>=0.8.0",
+            "hatchling",
+            "build>=1.0",
+            "pyyaml>=6.0",
+            "tomli>=2.0; python_version < '3.11'",
+            "twine>=5.0"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-comfyui/blob/ec7f230ce72dbd29b1aa89a7c51d31a4a60cf709/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-comfyui/releases/tag/v0.1.6",
+        "tag": "v0.1.6",
+        "published_at": "2026-10-17T09:25:56Z",
+        "assets": [
+          {
+            "name": "dcc_mcp_comfyui-0.1.6-py3-none-any.whl",
+            "size_bytes": 89390,
+            "digest": "sha256:67327f70067e092dd61a37afeca08ed1e3a9f91acffc2d9a964d3f0792bb1c4b",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-comfyui/releases/download/v0.1.6/dcc_mcp_comfyui-0.1.6-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_comfyui-0.1.6.tar.gz",
+            "size_bytes": 1456106,
+            "digest": "sha256:60370e04d4a04dbfe4a2ba469336689c74897acc7c07bd58a9f750770508d714",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-comfyui/releases/download/v0.1.6/dcc_mcp_comfyui-0.1.6.tar.gz"
+          }
+        ]
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-mari",
+      "targets": [
+        "mari"
+      ],
+      "catalog_version": "0.2.1",
+      "source_version": "0.3.0",
+      "source_sha": "64f1212de37af2588c661d7c6d19a6c77f4bf232",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-mari",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_with_host_python_plugin",
+        "details": "Mari stdlib/host-module plugin starts separate Python 3.9+ Core sidecar; Qt timer owns Mari API calls.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_mari/mari_plugin/runtime.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-mari/blob/64f1212de37af2588c661d7c6d19a6c77f4bf232/src/dcc_mcp_mari/mari_plugin/runtime.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-mari/blob/64f1212de37af2588c661d7c6d19a6c77f4bf232/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.19.91,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "test": [
+            "pytest>=8",
+            "ruff>=0.8",
+            "PyYAML>=6"
+          ],
+          "dev": [
+            "pytest>=8",
+            "ruff>=0.8",
+            "PyYAML>=6",
+            "build>=1.2",
+            "twine>=6"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-mari/blob/64f1212de37af2588c661d7c6d19a6c77f4bf232/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-mari/releases/tag/v0.3.0",
+        "tag": "v0.3.0",
+        "published_at": "2026-08-25T18:52:36Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-sketchup",
+      "targets": [
+        "sketchup"
+      ],
+      "catalog_version": "0.2.0",
+      "source_version": "0.3.2",
+      "source_sha": "b46b947fef7d09f1c144b2329909f631d02e5be6",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-sketchup",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_native_bridge",
+        "details": "SketchUp Ruby extension launches external Python Core sidecar and serves authenticated typed socket requests.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_sketchup/bridge.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-sketchup/blob/b46b947fef7d09f1c144b2329909f631d02e5be6/src/dcc_mcp_sketchup/bridge.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-sketchup/blob/b46b947fef7d09f1c144b2329909f631d02e5be6/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.36,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "test": [
+            "pytest>=8",
+            "ruff>=0.8",
+            "PyYAML>=6",
+            "jsonschema>=4.23"
+          ],
+          "dev": [
+            "pytest>=8",
+            "ruff>=0.8",
+            "PyYAML>=6",
+            "jsonschema>=4.23",
+            "build>=1.2",
+            "twine>=6"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-sketchup/blob/b46b947fef7d09f1c144b2329909f631d02e5be6/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-sketchup/releases/tag/v0.3.2",
+        "tag": "v0.3.2",
+        "published_at": "2026-10-17T08:42:03Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-touchdesigner",
+      "targets": [
+        "touchdesigner"
+      ],
+      "catalog_version": "0.1.1",
+      "source_version": "0.1.4",
+      "source_sha": "a6affd188aba9b82349113ae20dd589833b87784",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-touchdesigner",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "host_python_embedded",
+        "details": "Core HTTP server embeds in TouchDesigner and marshals td API work through td.run scheduler.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_touchdesigner/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-touchdesigner/blob/a6affd188aba9b82349113ae20dd589833b87784/src/dcc_mcp_touchdesigner/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-touchdesigner/blob/a6affd188aba9b82349113ae20dd589833b87784/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.19.91,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "pytest>=8.0",
+            "pytest-cov>=4.0",
+            "pytest-mock>=3.0",
+            "ruff>=0.8.0",
+            "pyyaml>=5.0",
+            "build>=1.2",
+            "twine>=7.0; python_version >= '3.10'",
+            "twine>=6.2,<7.0; python_version < '3.10'"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-touchdesigner/blob/a6affd188aba9b82349113ae20dd589833b87784/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-touchdesigner/releases/tag/v0.1.4",
+        "tag": "v0.1.4",
+        "published_at": "2026-10-17T06:07:03Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-shogun",
+      "targets": [
+        "shogun"
+      ],
+      "catalog_version": "0.10.0",
+      "source_version": "0.11.2",
+      "source_sha": "e7461842f83b579f5654374a7fcd99ce6a95f77f",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-shogun",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_vendor_sdk",
+        "details": "External Python service loads vendor ViconShogunPost SDK and connects local control stream; not a Shogun embedded Python server.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_shogun/sdk.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-shogun/blob/e7461842f83b579f5654374a7fcd99ce6a95f77f/src/dcc_mcp_shogun/sdk.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-shogun/blob/e7461842f83b579f5654374a7fcd99ce6a95f77f/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.19.86,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "jsonschema>=4.18",
+            "pytest>=8",
+            "PyYAML>=6.0",
+            "ruff>=0.8",
+            "twine>=6"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-shogun/blob/e7461842f83b579f5654374a7fcd99ce6a95f77f/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-shogun/releases/tag/v0.11.2",
+        "tag": "v0.11.2",
+        "published_at": "2026-10-17T09:50:43Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-tiled",
+      "targets": [
+        "tiled"
+      ],
+      "catalog_version": "0.5.1",
+      "source_version": "0.5.1",
+      "source_sha": "6351eb5820b4c50009d29173451c726cea293250",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-tiled",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_cli",
+        "details": "Standalone external Python service authors bounded map files and invokes Tiled conversion CLI; no in-process Python plugin.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_tiled/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-tiled/blob/6351eb5820b4c50009d29173451c726cea293250/src/dcc_mcp_tiled/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-tiled/blob/6351eb5820b4c50009d29173451c726cea293250/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.14,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "jsonschema>=4.23",
+            "pytest>=8",
+            "pyyaml>=6.0",
+            "ruff>=0.8",
+            "tomli>=2.0; python_version < '3.11'",
+            "twine>=7.0; python_version >= '3.10'"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling==1.27.0"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-tiled/blob/6351eb5820b4c50009d29173451c726cea293250/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-tiled/releases/tag/v0.5.1",
+        "tag": "v0.5.1",
+        "published_at": "2026-09-28T03:46:20Z",
+        "assets": [
+          {
+            "name": "dcc_mcp_tiled-0.5.1-py3-none-any.whl",
+            "size_bytes": 31867,
+            "digest": "sha256:9ce57d7fc56c00c222d0f24cd3c76e5775b50e7be53391f4c2c939d521236891",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-tiled/releases/download/v0.5.1/dcc_mcp_tiled-0.5.1-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_tiled-0.5.1.tar.gz",
+            "size_bytes": 98017,
+            "digest": "sha256:bd44a3601e41387a5aba8b64d055d24ae9c77a2df6153d20b7243f3e891748f6",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-tiled/releases/download/v0.5.1/dcc_mcp_tiled-0.5.1.tar.gz"
+          },
+          {
+            "name": "SHA256SUMS",
+            "size_bytes": 206,
+            "digest": "sha256:b3f4943056bd6acc9f776b3ef1748e3b43a654cda5e9853e06b4ad6968eef127",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-tiled/releases/download/v0.5.1/SHA256SUMS"
+          }
+        ]
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-material-maker",
+      "targets": [
+        "material-maker"
+      ],
+      "catalog_version": "0.3.1",
+      "source_version": "0.4.1",
+      "source_sha": "77082cfc2666dd1a965594cc35560073c5c45f55",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-material-maker",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_cli",
+        "details": "Standalone service inspects .ptex and uses Material Maker native export; no in-process plugin/bridge.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_material_maker/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-material-maker/blob/77082cfc2666dd1a965594cc35560073c5c45f55/src/dcc_mcp_material_maker/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-material-maker/blob/77082cfc2666dd1a965594cc35560073c5c45f55/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.14,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "jsonschema>=4.17,<5",
+            "pytest>=8",
+            "pyyaml>=6,<7",
+            "ruff>=0.8",
+            "tomli>=2,<3; python_version < '3.11'",
+            "twine>=7.0; python_version >= '3.10'"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-material-maker/blob/77082cfc2666dd1a965594cc35560073c5c45f55/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-material-maker/releases/tag/v0.4.1",
+        "tag": "v0.4.1",
+        "published_at": "2026-10-12T15:04:00Z",
+        "assets": [
+          {
+            "name": "dcc_mcp_material_maker-0.4.1-py3-none-any.whl",
+            "size_bytes": 28425,
+            "digest": "sha256:084b78c0123d3806de76e5b41334a38547671c0466af457cacbf5d9d1b6d683e",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-material-maker/releases/download/v0.4.1/dcc_mcp_material_maker-0.4.1-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_material_maker-0.4.1.tar.gz",
+            "size_bytes": 79579,
+            "digest": "sha256:e0bad8914797db39a6426d15fcca08e87200cc175f25cc10c822f3e35690fbc6",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-material-maker/releases/download/v0.4.1/dcc_mcp_material_maker-0.4.1.tar.gz"
+          }
+        ]
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": [
+        {
+          "source": {
+            "path": "tools/wheel_smoke.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-material-maker/blob/77082cfc2666dd1a965594cc35560073c5c45f55/tools/wheel_smoke.py"
+          },
+          "hits": [
+            {
+              "line": 86,
+              "text": "venv.EnvBuilder(with_pip=True, clear=True).create(environment)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcc-mcp-wwise",
+      "targets": [
+        "wwise"
+      ],
+      "catalog_version": "0.1.6",
+      "source_version": "0.1.8",
+      "source_sha": "ddc3e31b3187dd2224d5eeb284ed0b4a870a93ac",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-wwise",
+      "requires_python": ">=3.10",
+      "execution": {
+        "mode": "external_python_vendor_sdk",
+        "details": "External Python service uses waapi-client to connect official Wwise loopback Authoring API.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_wwise/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-wwise/blob/ddc3e31b3187dd2224d5eeb284ed0b4a870a93ac/src/dcc_mcp_wwise/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-wwise/blob/ddc3e31b3187dd2224d5eeb284ed0b4a870a93ac/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.14,<1.0.0"
+        ],
+        "non_core_mandatory": [
+          "packaging>=24,<27",
+          "waapi-client>=0.8.1,<0.9"
+        ],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "jsonschema>=4.17,<5",
+            "pytest>=8",
+            "ruff>=0.8",
+            "twine>=6"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-wwise/blob/ddc3e31b3187dd2224d5eeb284ed0b4a870a93ac/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-wwise/releases/tag/v0.1.8",
+        "tag": "v0.1.8",
+        "published_at": "2026-10-17T06:00:37Z",
+        "assets": [
+          {
+            "name": "dcc_mcp_wwise-0.1.8-py3-none-any.whl",
+            "size_bytes": 53209,
+            "digest": "sha256:b2bec100a03e7b02cd2ee219f57e3746eb270554d9dfd1a523b44bd7c4131e15",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-wwise/releases/download/v0.1.8/dcc_mcp_wwise-0.1.8-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_wwise-0.1.8.tar.gz",
+            "size_bytes": 90714,
+            "digest": "sha256:be4e88eab38948990055e176dc713ea06027dc6d1c59bbf5ec455431d872987b",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-wwise/releases/download/v0.1.8/dcc_mcp_wwise-0.1.8.tar.gz"
+          },
+          {
+            "name": "SHA256SUMS",
+            "size_bytes": 196,
+            "digest": "sha256:0facd8097ee33659586d08ab34cc5e3edfeeb3e9709d5031be687e7c59f16315",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-wwise/releases/download/v0.1.8/SHA256SUMS"
+          }
+        ]
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": [
+        {
+          "source": {
+            "path": "tools/verify_release_archives.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-wwise/blob/ddc3e31b3187dd2224d5eeb284ed0b4a870a93ac/tools/verify_release_archives.py"
+          },
+          "hits": [
+            {
+              "line": 806,
+              "text": "[sys.executable, \"-m\", \"venv\", str(environment_root)],"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dcc-mcp-excel",
+      "targets": [
+        "excel"
+      ],
+      "catalog_version": "0.1.0",
+      "source_version": "0.1.3",
+      "source_sha": "0fe44fa5fd42f3a4098679561b65088d4f5efd29",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-excel",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_office_bridge",
+        "details": "External Python service/skills over native Office host/Core sidecar; openpyxl headless extra provides Python compilation path.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_excel/_standalone_entry.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-excel/blob/0fe44fa5fd42f3a4098679561b65088d4f5efd29/src/dcc_mcp_excel/_standalone_entry.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-excel/blob/0fe44fa5fd42f3a4098679561b65088d4f5efd29/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.18.2,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {
+          "headless": [
+            "openpyxl>=3.1"
+          ],
+          "sidecar": [
+            "dcc-mcp-server>=0.17.43"
+          ]
+        },
+        "dev_test_docs_extras": {
+          "dev": [
+            "pytest>=7.0",
+            "pytest-cov>=4.0",
+            "ruff>=0.8.0",
+            "hatchling",
+            "build",
+            "openpyxl>=3.1",
+            "pywin32>=306; sys_platform == 'win32'"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-excel/blob/0fe44fa5fd42f3a4098679561b65088d4f5efd29/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-excel/releases/tag/v0.1.3",
+        "tag": "v0.1.3",
+        "published_at": "2026-10-17T07:28:05Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-word",
+      "targets": [
+        "word"
+      ],
+      "catalog_version": "0.1.0",
+      "source_version": "0.1.2",
+      "source_sha": "8e59aa34b34ac23ffc9c419979c5644046561d22",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-word",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_office_bridge",
+        "details": "External Python service/skills with Office host and Core sidecar; python-docx optional headless extra provides compile path.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_word/_standalone_entry.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-word/blob/8e59aa34b34ac23ffc9c419979c5644046561d22/src/dcc_mcp_word/_standalone_entry.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-word/blob/8e59aa34b34ac23ffc9c419979c5644046561d22/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.18.2,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {
+          "headless": [
+            "python-docx>=1.1"
+          ],
+          "sidecar": [
+            "dcc-mcp-server>=0.17.43"
+          ]
+        },
+        "dev_test_docs_extras": {
+          "dev": [
+            "pytest>=7.0",
+            "pytest-cov>=4.0",
+            "ruff>=0.8.0",
+            "hatchling",
+            "build",
+            "python-docx>=1.1",
+            "pywin32>=306; sys_platform == 'win32'"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-word/blob/8e59aa34b34ac23ffc9c419979c5644046561d22/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-word/releases/tag/v0.1.2",
+        "tag": "v0.1.2",
+        "published_at": "2026-10-17T10:18:56Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-fpt",
+      "targets": [
+        "shotgrid"
+      ],
+      "catalog_version": "0.1.8",
+      "source_version": "0.1.10",
+      "source_sha": "1238c0b5e9a56410b0ae0bff4926251bddf66e4e",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-fpt",
+      "requires_python": ">=3.8",
+      "execution": {
+        "mode": "external_python_http",
+        "details": "External Python service talks to Flow Production Tracking through REST; no host interpreter is used.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_fpt/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-fpt/blob/1238c0b5e9a56410b0ae0bff4926251bddf66e4e/src/dcc_mcp_fpt/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-fpt/blob/1238c0b5e9a56410b0ae0bff4926251bddf66e4e/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.19.45,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "pytest>=7.0",
+            "pytest-asyncio>=0.23",
+            "pytest-mock>=3.0",
+            "pytest-cov>=4.0",
+            "ruff>=0.8.0",
+            "hatchling",
+            "build",
+            "pyyaml>=6.0"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-fpt/blob/1238c0b5e9a56410b0ae0bff4926251bddf66e4e/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-fpt/releases/tag/v0.1.10",
+        "tag": "v0.1.10",
+        "published_at": "2026-10-13T09:05:33Z",
+        "assets": [
+          {
+            "name": "dcc_mcp_fpt-0.1.10-py3-none-any.whl",
+            "size_bytes": 75949,
+            "digest": "sha256:734516b5e1b835266d585eb7a3efcd0b9aa79873e5a10f8c7cf8579487ac38c0",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-fpt/releases/download/v0.1.10/dcc_mcp_fpt-0.1.10-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_fpt-0.1.10.tar.gz",
+            "size_bytes": 1137010,
+            "digest": "sha256:f92be0b626e2c7c1127a3f1e6e49ebe64da5b4d11bd55ceb1d5c2ee99228add7",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-fpt/releases/download/v0.1.10/dcc_mcp_fpt-0.1.10.tar.gz"
+          }
+        ]
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-openusd",
+      "targets": [
+        "openusd"
+      ],
+      "catalog_version": "0.8.1",
+      "source_version": "0.11.2",
+      "source_sha": "7443fc53253673c86bfe32c008a103b8e9ad96d3",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-openusd",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_sdk",
+        "details": "Headless Python MCP service uses pxr USD SDK in selected environment; usd-core and opentimelineio are optional extras, feature-required when used.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_openusd/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-openusd/blob/7443fc53253673c86bfe32c008a103b8e9ad96d3/src/dcc_mcp_openusd/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-openusd/blob/7443fc53253673c86bfe32c008a103b8e9ad96d3/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.19.45,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {
+          "openusd": [
+            "usd-core>=24.11,<27"
+          ],
+          "timeline": [
+            "opentimelineio>=0.15,<1.0"
+          ],
+          "daemon": [
+            "dcc-mcp-server>=0.18.0,<1.0.0"
+          ]
+        },
+        "dev_test_docs_extras": {
+          "dev": [
+            "build",
+            "pytest>=7.0",
+            "ruff>=0.8.0",
+            "twine",
+            "pyyaml>=6.0",
+            "opentimelineio>=0.15,<1.0",
+            "dcc-mcp-server>=0.18.0,<1.0.0"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-openusd/blob/7443fc53253673c86bfe32c008a103b8e9ad96d3/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-openusd/releases/tag/v0.11.2",
+        "tag": "v0.11.2",
+        "published_at": "2026-10-17T07:26:27Z",
+        "assets": [
+          {
+            "name": "dcc_mcp_openusd-0.11.2-py3-none-any.whl",
+            "size_bytes": 124614,
+            "digest": "sha256:2417a1c45a1973be70e6be7028c9bac6dd8e939c716444f08d2c43a34e5a48a3",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-openusd/releases/download/v0.11.2/dcc_mcp_openusd-0.11.2-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_openusd-0.11.2.tar.gz",
+            "size_bytes": 172907,
+            "digest": "sha256:7e05de3584f7b3d6550d092a00f22b01d7eaa36f899069d90f55d67e318d8c7a",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-openusd/releases/download/v0.11.2/dcc_mcp_openusd-0.11.2.tar.gz"
+          }
+        ]
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-autocad",
+      "targets": [
+        "autocad"
+      ],
+      "catalog_version": "0.1.2",
+      "source_version": "0.1.3",
+      "source_sha": "d2acd4859b5a724b6032bd3044684291972a26e2",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-autocad",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_com_or_cli",
+        "details": "External Python drives interactive AutoCAD COM (optional pywin32) or accoreconsole subprocess; no host Python used.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_autocad/transports/com_transport.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-autocad/blob/d2acd4859b5a724b6032bd3044684291972a26e2/src/dcc_mcp_autocad/transports/com_transport.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-autocad/blob/d2acd4859b5a724b6032bd3044684291972a26e2/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.36,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {
+          "windows": [
+            "pywin32>=306"
+          ]
+        },
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "pytest>=8",
+            "pyyaml>=6.0",
+            "ruff>=0.8",
+            "tomli>=2.0; python_version < '3.11'"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling==1.27.0"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-autocad/blob/d2acd4859b5a724b6032bd3044684291972a26e2/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-autocad/releases/tag/v0.1.3",
+        "tag": "v0.1.3",
+        "published_at": "2026-10-13T08:58:25Z",
+        "assets": [
+          {
+            "name": "dcc_mcp_autocad-0.1.3-py3-none-any.whl",
+            "size_bytes": 49387,
+            "digest": "sha256:6ffb7c37cbc2f861f2bc3e3b6e278d58787a038308734eac7506e80912640afc",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-autocad/releases/download/v0.1.3/dcc_mcp_autocad-0.1.3-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_autocad-0.1.3.tar.gz",
+            "size_bytes": 56214,
+            "digest": "sha256:dd6fdebff7d613a3e08cf464d80b43fb9bebed5de3446848dab03419deed9558",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-autocad/releases/download/v0.1.3/dcc_mcp_autocad-0.1.3.tar.gz"
+          }
+        ]
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-capcut",
+      "targets": [
+        "capcut"
+      ],
+      "catalog_version": "0.5.0",
+      "source_version": "0.5.1",
+      "source_sha": "b6f59a03aa420005007ac01042e57f41fae74df3",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-capcut",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_native_bridge",
+        "details": "External Python service uses typed localhost bridge to CapCut-side panel. Shared-runtime entry checks separately supplied dcc-mcp-runtime; ordinary bootstrap is also present.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_capcut/runtime_entry.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-capcut/blob/b6f59a03aa420005007ac01042e57f41fae74df3/src/dcc_mcp_capcut/runtime_entry.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-capcut/blob/b6f59a03aa420005007ac01042e57f41fae74df3/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.19.90,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {
+          "interchange": [
+            "opentimelineio>=0.16,<1"
+          ]
+        },
+        "dev_test_docs_extras": {
+          "dev": [
+            "pytest>=8",
+            "ruff>=0.8",
+            "build>=1.2",
+            "pyyaml>=6",
+            "opentimelineio>=0.16,<1"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-capcut/blob/b6f59a03aa420005007ac01042e57f41fae74df3/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-capcut/releases/tag/v0.5.1",
+        "tag": "v0.5.1",
+        "published_at": "2026-10-17T10:34:55Z",
+        "assets": [
+          {
+            "name": "dcc-mcp-capcut-0.5.1-panel.zip",
+            "size_bytes": 5069,
+            "digest": "sha256:cea6ab2184e9e4c74df53a8e8cc9d722124a47c7047b06d1345f58f3d4de155a",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-capcut/releases/download/v0.5.1/dcc-mcp-capcut-0.5.1-panel.zip"
+          },
+          {
+            "name": "dcc_mcp_capcut-0.5.1-py3-none-any.whl",
+            "size_bytes": 264168,
+            "digest": "sha256:5cfaf1488730013130255b358cd2f9c1b5ec96bb7d306662f152a0fd82acddf4",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-capcut/releases/download/v0.5.1/dcc_mcp_capcut-0.5.1-py3-none-any.whl"
+          },
+          {
+            "name": "dcc_mcp_capcut-0.5.1.tar.gz",
+            "size_bytes": 356459,
+            "digest": "sha256:5eacafaa70e9a141dbbd10a82cc38baf4139ac64a00d8f5cefd83fe4531464e8",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-capcut/releases/download/v0.5.1/dcc_mcp_capcut-0.5.1.tar.gz"
+          },
+          {
+            "name": "SHA256SUMS",
+            "size_bytes": 310,
+            "digest": "sha256:f8c7ddd76de2739f183d5ffb315a8430b15a9956024c2046d364c0aa1edc5415",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-capcut/releases/download/v0.5.1/SHA256SUMS"
+          }
+        ]
+      },
+      "distribution_runtime_class": "shared_runtime_consumer_handshake_no_interpreter_release",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-epic",
+      "targets": [
+        "epic",
+        "unreal"
+      ],
+      "catalog_version": "0.2.1",
+      "source_version": "0.2.2",
+      "source_sha": "399814cfb1637433156ab8ad49ba8df372bb412a",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-epic",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_mcp_sdk",
+        "details": "External Python CLI/services use psutil; direct MCP server requires optional mcp SDK. No mandatory Core dependency. Runtime doctor reports/prefer shared runtime but is not proof of a deployable bundle.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_epic/runtime.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-epic/blob/399814cfb1637433156ab8ad49ba8df372bb412a/src/dcc_mcp_epic/runtime.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-epic/blob/399814cfb1637433156ab8ad49ba8df372bb412a/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [],
+        "non_core_mandatory": [
+          "psutil>=5.9,<8.0"
+        ],
+        "optional_extras": {
+          "mcp": [
+            "mcp>=1.0,<2.0; python_version >= '3.10'"
+          ]
+        },
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "mcp>=1.0,<2.0; python_version >= '3.10'",
+            "pytest>=8",
+            "ruff>=0.8"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "setuptools>=77"
+          ],
+          "build-backend": "setuptools.build_meta"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-epic/blob/399814cfb1637433156ab8ad49ba8df372bb412a/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-epic/releases/tag/v0.2.2",
+        "tag": "v0.2.2",
+        "published_at": "2026-10-17T07:02:55Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-gaea",
+      "targets": [
+        "gaea"
+      ],
+      "catalog_version": "0.1.1",
+      "source_version": "0.1.2",
+      "source_sha": "401344b885e5a395c6f9ba3ef631484d38ecb5f7",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-gaea",
+      "requires_python": ">=3.7",
+      "execution": {
+        "mode": "external_python_cli",
+        "details": "External Python service invokes Gaea Build Swarm and verifies exported images; README says real Gaea builds remain unvalidated.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_gaea/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-gaea/blob/401344b885e5a395c6f9ba3ef631484d38ecb5f7/src/dcc_mcp_gaea/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-gaea/blob/401344b885e5a395c6f9ba3ef631484d38ecb5f7/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.23"
+        ],
+        "non_core_mandatory": [
+          "Pillow>=9"
+        ],
+        "optional_extras": {},
+        "dev_test_docs_extras": {},
+        "build_system": {
+          "requires": [
+            "hatchling"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-gaea/blob/401344b885e5a395c6f9ba3ef631484d38ecb5f7/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-gaea/releases/tag/v0.1.2",
+        "tag": "v0.1.2",
+        "published_at": "2026-10-17T07:10:47Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-openscreen",
+      "targets": [
+        "openscreen"
+      ],
+      "catalog_version": "0.1.1",
+      "source_version": "0.1.2",
+      "source_sha": "072f4ea8f2b59cb037ff96e46a9f287484c3c9cd",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-openscreen",
+      "requires_python": ">=3.7",
+      "execution": {
+        "mode": "external_python_native_bridge",
+        "details": "Standalone Python adapter integrates OpenScreen; service lifetime and Python are external.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_openscreen/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-openscreen/blob/072f4ea8f2b59cb037ff96e46a9f287484c3c9cd/src/dcc_mcp_openscreen/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-openscreen/blob/072f4ea8f2b59cb037ff96e46a9f287484c3c9cd/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.14,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {},
+        "build_system": {
+          "requires": [
+            "hatchling>=1.27,<1.30"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-openscreen/blob/072f4ea8f2b59cb037ff96e46a9f287484c3c9cd/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-openscreen/releases/tag/v0.1.2",
+        "tag": "v0.1.2",
+        "published_at": "2026-10-11T10:11:18Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-speedtree",
+      "targets": [
+        "speedtree"
+      ],
+      "catalog_version": "0.1.1",
+      "source_version": "0.1.2",
+      "source_sha": "7baacd7836bc928fdd1a5c359a7b77c7f12d9023",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-speedtree",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_cli",
+        "details": "Standalone external service handles observed SPM/STT formats and licensed Modeler CLI exporter; live host graph authoring remains experimental.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_speedtree/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-speedtree/blob/7baacd7836bc928fdd1a5c359a7b77c7f12d9023/src/dcc_mcp_speedtree/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-speedtree/blob/7baacd7836bc928fdd1a5c359a7b77c7f12d9023/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.20.22,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "test": [
+            "pytest>=8",
+            "ruff>=0.11",
+            "build>=1"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "setuptools>=77"
+          ],
+          "build-backend": "setuptools.build_meta"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-speedtree/blob/7baacd7836bc928fdd1a5c359a7b77c7f12d9023/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-speedtree/releases/tag/v0.1.2",
+        "tag": "v0.1.2",
+        "published_at": "2026-10-11T10:22:47Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    },
+    {
+      "name": "dcc-mcp-tracy",
+      "targets": [
+        "tracy"
+      ],
+      "catalog_version": "0.2.5",
+      "source_version": "0.2.7",
+      "source_sha": "99c7d981c289fa0d4ff24b8600ecf8b368a3ac13",
+      "source_repo": "https://github.com/dcc-mcp/dcc-mcp-tracy",
+      "requires_python": ">=3.9",
+      "execution": {
+        "mode": "external_python_cli",
+        "details": "Standalone external Python service controls tracy-capture/tracy-csvexport and analyzes trace output; no Tracy interpreter injection.",
+        "evidence": [
+          {
+            "path": "src/dcc_mcp_tracy/server.py",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-tracy/blob/99c7d981c289fa0d4ff24b8600ecf8b368a3ac13/src/dcc_mcp_tracy/server.py"
+          },
+          {
+            "path": "README.md",
+            "url": "https://github.com/dcc-mcp/dcc-mcp-tracy/blob/99c7d981c289fa0d4ff24b8600ecf8b368a3ac13/README.md"
+          }
+        ],
+        "classification_basis": "Static source and documented startup behavior; no live host was launched."
+      },
+      "dependencies": {
+        "first_party_mandatory": [
+          "dcc-mcp-core>=0.19.38,<1.0.0"
+        ],
+        "non_core_mandatory": [],
+        "optional_extras": {},
+        "dev_test_docs_extras": {
+          "dev": [
+            "build>=1.2",
+            "pytest>=8",
+            "ruff>=0.8",
+            "twine>=6"
+          ]
+        },
+        "build_system": {
+          "requires": [
+            "hatchling>=1.26"
+          ],
+          "build-backend": "hatchling.build"
+        },
+        "evidence": {
+          "path": "pyproject.toml",
+          "url": "https://github.com/dcc-mcp/dcc-mcp-tracy/blob/99c7d981c289fa0d4ff24b8600ecf8b368a3ac13/pyproject.toml"
+        }
+      },
+      "latest_release": {
+        "url": "https://github.com/dcc-mcp/dcc-mcp-tracy/releases/tag/v0.2.7",
+        "tag": "v0.2.7",
+        "published_at": "2026-10-17T10:53:08Z",
+        "assets": []
+      },
+      "distribution_runtime_class": "no_independent_interpreter_bundle_verified",
+      "packaging_runtime_evidence": []
+    }
+  ]
+}
