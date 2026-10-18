@@ -1385,6 +1385,58 @@ class TestR012ReleaseIdentity(ContractTestCase):
         self.assertEqual(len(self.r012()), 1)
 
 
+    def test_unquoted_brackets_and_keywords_in_arguments_are_not_commands(self) -> None:
+        for command in (
+            'echo [ "$RELEASE_SHA" != "$GITHUB_SHA" ]',
+            'printf "%s\\n" [ "$RELEASE_SHA" != "$GITHUB_SHA" ]',
+            'echo [[ "$RELEASE_SHA" != "$GITHUB_SHA" ]]',
+            'echo if test "$RELEASE_SHA" = "$GITHUB_SHA"',
+            'echo then [ "$RELEASE_SHA" = "$GITHUB_SHA" ]',
+        ):
+            with self.subTest(command=command):
+                self.write_release('jobs:\n  release:\n    steps:\n      - run: |\n          ' + command + '\n')
+                self.assertEqual(self.r012(), [])
+
+    def test_single_quoted_and_escaped_shell_tokens_are_literals(self) -> None:
+        for command in (
+            'test \'$RELEASE_SHA\' = "$GITHUB_SHA"',
+            'test "$RELEASE_SHA" = \'$GITHUB_SHA\'',
+            '[ \'${RELEASE_SHA}\' != "$GITHUB_SHA" ]',
+            'test "\\$RELEASE_SHA" = "$GITHUB_SHA"',
+            'test "$RELEASE_SHA" = "\\$GITHUB_SHA"',
+            'test \\$RELEASE_SHA = "$GITHUB_SHA"',
+        ):
+            with self.subTest(command=command):
+                self.write_release('jobs:\n  release:\n    steps:\n      - run: |\n          ' + command + '\n')
+                self.assertEqual(self.r012(), [])
+
+    def test_real_commands_and_double_quoted_expansions_remain_reported(self) -> None:
+        for command in (
+            'if [ "$RELEASE_SHA" != "$GITHUB_SHA" ]; then exit 1; fi',
+            '{ [[ "$RELEASE_SHA" != "$GITHUB_SHA" ]]; }',
+            '! [ "$RELEASE_SHA" = "$GITHUB_SHA" ]',
+            'builtin test "$RELEASE_SHA" = "$GITHUB_SHA"',
+            'command test "$RELEASE_SHA" = "$GITHUB_SHA"',
+            'true && test "$RELEASE_SHA" = "$GITHUB_SHA"',
+            'test "\'$RELEASE_SHA\'" = "$GITHUB_SHA"',
+        ):
+            with self.subTest(command=command):
+                self.write_release('jobs:\n  release:\n    steps:\n      - run: |\n          ' + command + '\n')
+                self.assertEqual(len(self.r012()), 1)
+
+    def test_github_interpolation_survives_shell_single_quotes(self) -> None:
+        self.write_release("jobs:\n  release:\n    steps:\n      - run: |\n          test '${{ env.RELEASE_SHA }}' = '${{ github.sha }}'\n")
+        self.assertEqual(len(self.r012()), 1)
+
+    def test_quoted_github_expression_operand_is_not_run_head(self) -> None:
+        self.write_release("jobs:\n  release:\n    steps:\n      - if: ${{ env.RELEASE_SHA != 'github.sha' }}\n        run: exit 1\n")
+        self.assertEqual(self.r012(), [])
+
+    def test_bound_identity_consumed_only_as_shell_literal_is_clean(self) -> None:
+        self.write_release("jobs:\n  release:\n    steps:\n      - env:\n          EXPECTED_SHA: ${{ github.sha }}\n        run: |\n          test '$EXPECTED_SHA' = \"$tag_commit\"\n")
+        self.assertEqual(self.r012(), [])
+
+
 class TestAnnotationOutput(ContractTestCase):
     def test_github_format_marks_the_file_and_rule(self) -> None:
         self.repo.clean()

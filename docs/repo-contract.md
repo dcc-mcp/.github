@@ -357,6 +357,13 @@ The files it reads and the identity names it matches are configurable via
 `release_workflow_globs` and `release_identity_names` in
 `contract/repo_contract.json`.
 
+R012 recognizes shell `test`, `[` and `[[` only in command position, so
+unquoted bracket text passed to `echo` or `printf` is still provenance text.
+Single-quoted or escaped shell variable names are literals; double-quoted
+variables still expand and remain checked. GitHub `${{ ... }}` interpolation
+is checked separately because it happens before the shell, including inside
+shell single quotes. This remains a bounded textual check, not a shell evaluator.
+
 ## Changing a rule
 
 Edit `contract/repo_contract.json` — not the script. The script only implements

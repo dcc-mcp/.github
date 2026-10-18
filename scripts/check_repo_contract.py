@@ -108,9 +108,13 @@ GITHUB_EXPRESSION_RE = re.compile(r"\$\{\{(.*?)\}\}")
 # keeps `make test ...` and an echoed or argument word `test` from being read as
 # the start of a comparison, while still matching `test "$A" = "$B"`,
 # `; test ...`, `&& test ...`, `if test ...` and `run: test ...`.
-TEST_COMMAND_RE = re.compile(
-    r"(?:^|[;&|()]|\b(?:if|elif|then|else|while|until|do)\b|\brun\s*:)"
-    r"[ \t]*test(?![A-Za-z0-9_])"
+SHELL_COMMAND_POSITION = (
+    r"(?:^|[;&|(){}]|\brun\s*:)[ \t]*"
+    r"(?:(?:if|elif|then|else|while|until|do|!|command|builtin)[ \t]+)*"
+)
+TEST_COMMAND_RE = re.compile(SHELL_COMMAND_POSITION + r"test(?![A-Za-z0-9_])")
+BRACKET_COMMAND_RE = re.compile(
+    SHELL_COMMAND_POSITION + r"(?:\[\[(.*?)\]\]|\[(?!\[)(.*?)\])"
 )
 
 JUSTFILE_NAMES = ("justfile", ".justfile", "JUSTFILE", "Justfile")
@@ -1302,6 +1306,50 @@ def _expression_operands(span: str) -> list[str]:
     return operands
 
 
+def _shell_variable_text(span: str) -> str:
+    """Hide shell literals without suppressing double-quoted expansion.
+
+    GitHub expressions are evaluated before the shell, even inside shell single
+    quotes. Exclude their bodies from shell-variable matching; expression
+    operands are handled independently by _expression_operands.
+    """
+    expressions = {match.start(): match.end() for match in GITHUB_EXPRESSION_RE.finditer(span)}
+    masked = list(span)
+    quote = ""
+    index = 0
+    while index < len(span):
+        if index in expressions:
+            end = expressions[index]
+            masked[index:end] = " " * (end - index)
+            index = end
+            continue
+        char = span[index]
+        if quote == "'":
+            masked[index] = " "
+            if char == "'":
+                quote = ""
+        elif char == "\\" and index + 1 < len(span):
+            # A dollar escaped outside single quotes cannot expand. Skip an
+            # escaped quote too, so it cannot change the surrounding state.
+            if not quote or span[index + 1] in '$`"\\':
+                masked[index:index + 2] = "  "
+                index += 2
+                continue
+        elif char in "\"'":
+            if not quote:
+                quote = char
+            elif char == quote:
+                quote = ""
+        index += 1
+    return "".join(masked)
+
+
+def _references_run_head(span: str) -> bool:
+    return bool(RUN_HEAD_SHA_RE.search(_shell_variable_text(span))) or any(
+        operand.lower() == "github.sha" for operand in _expression_operands(span)
+    )
+
+
 def _comparison_spans(line: str) -> list[str]:
     """The parts of a workflow line that compare two values.
 
@@ -1330,14 +1378,14 @@ def _comparison_spans(line: str) -> list[str]:
     """
     masked = _mask_shell_quotes(line)
     spans: list[str] = []
-    for match in re.finditer(r"\[\[(.*?)\]\]|(?<!\[)\[(?!\[)(.*?)\]", masked):
+    for match in BRACKET_COMMAND_RE.finditer(masked):
         group = 1 if match.group(1) is not None else 2
         spans.append(line[match.start(group):match.end(group)])
     for match in TEST_COMMAND_RE.finditer(masked):
         start = match.end()
         end = len(masked)
         for separator in range(start, len(masked)):
-            if masked[separator] in ";&|":
+            if masked[separator] in ";&|)":
                 end = separator
                 break
         spans.append(line[start:end])
@@ -1361,7 +1409,7 @@ def _identity_variable(span: str, identity_names: Sequence[str]) -> str | None:
     the context prefix never hides a release identity; a dotted path is required,
     so ordinary prose is never mistaken for an identifier.
     """
-    for match in SHELL_VAR_RE.finditer(span):
+    for match in SHELL_VAR_RE.finditer(_shell_variable_text(span)):
         name = (match.group(1) or match.group(2)).upper()
         if any(token in name for token in identity_names):
             return match.group(0)
@@ -1381,7 +1429,7 @@ def _references_name(span: str, name: str) -> bool:
     reference: both forms require a concrete variable or a dotted expression
     operand.
     """
-    for match in SHELL_VAR_RE.finditer(span):
+    for match in SHELL_VAR_RE.finditer(_shell_variable_text(span)):
         if (match.group(1) or match.group(2)) == name:
             return True
     for operand in _expression_operands(span):
@@ -1456,7 +1504,7 @@ def check_release_identity_anchored_on_tag(
 
         for lineno, line in enumerate(live, start=1):
             for span in _comparison_spans(line):
-                if not RUN_HEAD_SHA_RE.search(span):
+                if not _references_run_head(span):
                     continue
                 identity = _identity_variable(span, identity_names)
                 if identity is None:
