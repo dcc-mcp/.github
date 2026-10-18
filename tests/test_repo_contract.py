@@ -143,6 +143,7 @@ class TestContractFile(ContractTestCase):
         for module in (
             Path("scripts/check_repo_contract.py"),
             Path("scripts/adapter_contract_rules.py"),
+            Path("scripts/adapter_package_rules.py"),
         ):
             source = (ROOT / module).read_text(encoding="utf-8")
             referenced |= {
@@ -160,7 +161,8 @@ class TestContractFile(ContractTestCase):
         baseline = {
             rule_id for rule_id, rule in contract.rules.items() if "baseline" in rule["profiles"]
         }
-        self.assertEqual(baseline, {"A001", "A003"})
+        self.assertEqual(baseline, {"A001", "A003", "A007"})
+        self.assertEqual(contract.rules["A007"]["severity"], "warning")
         self.assertEqual(contract.rules["A001"]["severity"], "error")
         self.assertEqual(contract.rules["A003"]["severity"], "error")
 
@@ -1644,7 +1646,7 @@ class TestAutomationWorkflowWiring(unittest.TestCase):
 
     def test_inventory_changes_trigger_existing_test_workflow(self) -> None:
         workflow = (ROOT / ".github/workflows/profile-contract.yml").read_text(encoding="utf-8")
-        for path in ("contract/automation*", "scripts/check_automation_contract.py", ".github/workflows/repo-contract.yml"):
+        for path in ("contract/**", "scripts/check_automation_contract.py", ".github/workflows/repo-contract.yml"):
             self.assertEqual(workflow.count(f'      - "{path}"'), 2, path)
 
 
