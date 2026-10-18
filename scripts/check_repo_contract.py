@@ -1,40 +1,52 @@
 #!/usr/bin/env python3
 """Check a repository against the dcc-mcp repository contract.
 
-The pass/fail criteria live in ``contract/repo_contract.json``. This script only
-implements the mechanics; both this CI gate and the ``vx-repo-contract`` skill read
-that same file, so a rule is never defined twice.
+The pass/fail criteria live under ``contract/``. This script only implements the
+mechanics; both this CI gate and the ``vx-repo-contract`` skill read those files, so
+a rule is never defined twice. Two contracts ship side by side and are selected
+with ``--contract``:
 
-``--contract`` selects a different rule set. ``contract/adapter_contract.json``
-holds the rules that only apply to the Python adapter packages, and its ids use
-the ``A0xx`` namespace so the two rule sets can never collide.
+    contract/repo_contract.json     R0xx, configuration and documentation contract
+                                    for every repository (PIP-3741).
+    contract/adapter_contract.json  A0xx, Python adapter package contract: interface
+                                    rules plus code-convention rules (PIP-4104).
 
-Rules
------
+Rules (repo_contract.json)
+--------------------------
     R001 no-root-artifacts       no build/test artifacts at the repository root
     R002 justfile-lowercase      `justfile`, never `Justfile`
     R003 agents-md-exists        AGENTS.md is present
     R004 vx-toml-parses          vx.toml parses and only uses known tables
     R005 tools-version-format    [tools] pins are stable/latest/X[.Y[.Z]]
     R006 root-allowlist          every top-level entry is allowlisted
-    R007 no-scripts-with-justfile no vx.toml [scripts] when a justfile exists
+    R007 no-scripts-with-justfile no [scripts] entry forwards to just or shadows a recipe
     R008 agents-derived-symlink  CLAUDE.md & friends are symlinks or generated
     R009 tools-no-latest         [tools] pins are concrete, not `latest`
     R010 llms-txt-fresh          llms.txt exists when a generator exists
+    R011 no-tracked-agent-dirs   nothing is tracked under an agents_ide_dir
 
-    A001 adapter-python-package  a registered adapter declares a dcc-mcp-core
-                                 dependency (contract/adapter_contract.json)
-    A010-A014 live in the same file: the Install SOP interface family for the
-                                 adapter packages (see docs/adapter-contract.md).
+Rules (adapter_contract.json)
+-----------------------------
+    A001 no-deprecated-install-sop-alias    no reference to Core's deprecated alias
+    A002 no-hand-rolled-report-schema-version  read the report schema version from Core
+    A003 core-floor-declared                a declared Core dep pins a lower bound
+    A012 core-floor-baseline                the declared floor is at/above the org baseline
+    A004 ruff-line-length                   [tool.ruff] line-length is the baseline
+    A005 requires-python-declared           project.requires-python is declared
+    A006 pre-commit-config-exists           .pre-commit-config.yaml is present
+    A013 doctor-module-present              install adapters ship a doctor self-check
+    A014 report-validates-against-schema    a real report is validated once
+
+A007–A012 are unassigned: the Install SOP interface family was numbered A010–A014
+by its owning issue (PIP-4106) before A001–A006 existed, and the three rules that
+overlapped A001–A003 were superseded by them rather than renumbered.
 
 Profiles
 --------
-    baseline  R001-R005, the rules every repository satisfies today (A001 for the
-              adapter contract).
-    strict    every rule of the selected contract. Rules still being rolled out
-              report as warnings so that a repository can adopt the gate before it
-              is clean; promote them with ``--error-rule`` or fail the job on
-              warnings with ``--fail-on warning``.
+    baseline  the rules every repository satisfies today.
+    strict    every rule. Rules still being rolled out report as warnings so that a
+              repository can adopt the gate before it is clean; promote them with
+              ``--error-rule`` or fail the job on warnings with ``--fail-on warning``.
 
 Exit codes
 ----------
@@ -49,7 +61,9 @@ import argparse
 import ast
 import fnmatch
 import json
+import os
 import re
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -57,10 +71,15 @@ from typing import Any, Callable, Iterable, Sequence
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONTRACT_PATH = ROOT / "contract" / "repo_contract.json"
+ADAPTER_CONTRACT_PATH = ROOT / "contract" / "adapter_contract.json"
 
 SEVERITY_ORDER = {"notice": 0, "warning": 1, "error": 2}
 SEVERITY_ALIASES = {"warn": "warning", "err": "error"}
 MAX_PROVENANCE_SCAN_LINES = 10
+# R011 reports each tracked file, so cap the output: a whole skill tree should
+# still fail, but not by printing the same finding two hundred times.
+MAX_TRACKED_AGENT_FILES = 20
+GIT_LS_FILES_TIMEOUT_SECONDS = 30
 
 JUSTFILE_NAMES = ("justfile", ".justfile", "JUSTFILE", "Justfile")
 
@@ -176,7 +195,7 @@ def _coerce(raw: str) -> Any:
 def _consume_multiline_value(
     lines: list[str], index: int, value: str
 ) -> tuple[str, int]:
-    """Join a TOML multi-line string onto one logical value.
+    """Join a TOML multi-line string or array onto one logical value.
 
     Returns the joined text and the index of the last line that belongs to the
     value, so the caller can skip the continuation lines instead of reporting
@@ -196,18 +215,97 @@ def _consume_multiline_value(
                 return "\n".join(collected), cursor
             cursor += 1
         return "\n".join(collected), len(lines) - 1
-    return value, index
+    if not stripped.startswith("["):
+        return value, index
+    # An array may span lines (`dependencies = [...]`). Join it, dropping the
+    # trailing comments line by line so that a comment cannot swallow the rest
+    # of the array, and stop as soon as the brackets balance. The opening line
+    # carries the `value` the caller already split off, so it needs the same
+    # comment stripping as every continuation line: a `dependencies = [  # note`
+    # head would otherwise parse as the bare `[` and drop the whole array.
+    collected: list[str] = []
+    depth = 0
+    quote = ""
+    cursor = index
+    while cursor < len(lines):
+        line = _strip_comment(lines[cursor] if cursor != index else value)
+        collected.append(line)
+        for char in line:
+            if quote:
+                if char == quote:
+                    quote = ""
+            elif char in "\"'":
+                quote = char
+            elif char == "[":
+                depth += 1
+            elif char == "]":
+                depth -= 1
+        if depth <= 0:
+            break
+        cursor += 1
+    return "\n".join(collected), cursor
 
 
-def parse_vx_toml(text: str) -> tuple[dict[str, Any], list[tuple[int, str]]]:
+def _split_top_level(text: str, separator: str = ",") -> list[str]:
+    """Split on `separator`, ignoring separators inside quotes and brackets."""
+    parts: list[str] = []
+    current: list[str] = []
+    quote = ""
+    depth = 0
+    for char in text:
+        if quote:
+            current.append(char)
+            if char == quote:
+                quote = ""
+            continue
+        if char in "\"'":
+            quote = char
+            current.append(char)
+            continue
+        if char in "[{(":
+            depth += 1
+        elif char in "]})":
+            depth -= 1
+        if char == separator and depth == 0:
+            parts.append("".join(current))
+            current = []
+            continue
+        current.append(char)
+    parts.append("".join(current))
+    return parts
+
+
+def _parse_string_array(raw: str) -> list[str] | None:
+    """Parse a TOML array of strings into a list.
+
+    Returns ``None`` when the text is not a single bracketed array, so that a
+    value the parser does not understand is left alone rather than mangled.
+    """
+    text = raw.strip()
+    if not (text.startswith("[") and text.endswith("]")):
+        return None
+    items = []
+    for chunk in _split_top_level(text[1:-1]):
+        chunk = _strip_comment(chunk).strip()
+        if not chunk:
+            continue
+        items.append(_coerce(chunk))
+    return items
+
+
+def parse_vx_toml(
+    text: str,
+) -> tuple[dict[str, Any], list[tuple[int, str]], dict[str, int]]:
     """Parse the TOML subset used by ``vx.toml``.
 
-    Returns the parsed mapping plus the lines that could not be understood. The
-    parser is deliberately lenient: it never raises, because a syntax error is a
-    reportable finding rather than a crash.
+    Returns the parsed mapping, the lines that could not be understood, and the
+    1-based line number of every ``table.key`` that was assigned. The parser is
+    deliberately lenient: it never raises, because a syntax error is a reportable
+    finding rather than a crash.
     """
     data: dict[str, Any] = {}
     unparsed: list[tuple[int, str]] = []
+    positions: dict[str, int] = {}
     table: str | None = None
     lines = text.splitlines()
     index = 0
@@ -221,6 +319,7 @@ def parse_vx_toml(text: str) -> tuple[dict[str, Any], list[tuple[int, str]]]:
         if line.startswith("[") and line.endswith("]") and not line.startswith("[["):
             table = line[1:-1].strip().strip("\"'")
             data.setdefault(table, {})
+            positions[table] = lineno
             index += 1
             continue
         if "=" not in line:
@@ -235,9 +334,15 @@ def parse_vx_toml(text: str) -> tuple[dict[str, Any], list[tuple[int, str]]]:
             index += 1
             continue
         target = data if table is None else data.setdefault(table, {})
-        target[key] = _coerce(_unwrap_inline_table(_strip_comment(value.strip())))
+        value = _coerce(_unwrap_inline_table(_strip_comment(value.strip())))
+        if isinstance(value, str) and value.startswith("["):
+            array = _parse_string_array(value)
+            if array is not None:
+                value = array
+        target[key] = value
+        positions[f"{table}.{key}" if table else key] = lineno
         index += 1
-    return data, unparsed
+    return data, unparsed, positions
 
 
 # --------------------------------------------------------------------- utilities
@@ -290,134 +395,336 @@ def _justfile_recipes(path: Path) -> set[str]:
     return recipes
 
 
-# ------------------------------------------------------------------- pyproject
-#
-# The adapter rules need two things out of a pyproject.toml: the dependency
-# lists and the distribution name. A lenient reader is deliberate -- one exotic
-# manifest must not fail the whole organisation sweep -- so this collects raw
-# text rather than modelling TOML values.
-
-TOML_KEY_VALUE_RE = re.compile(r"^(?P<key>[A-Za-z0-9_.\-]+)\s*=\s*(?P<value>.+)$")
-TOML_ARRAY_RE = re.compile(r"^(?P<key>[A-Za-z0-9_.\-]+)\s*=\s*\[(?P<rest>.*)$")
-TOML_STRING_RE = re.compile(r"""["']([^"']*)["']""")
-# Everything after a distribution name in a PEP 508 requirement: extras,
-# version specifiers, environment markers, and direct references.
-REQUIREMENT_TAIL_RE = re.compile(r"[<>=!~;\[\(\s]")
+# ------------------------------------------------------------------ source scan
 
 
-def _skip_quoted(text: str, start: int) -> int:
-    """Return the index just past the quoted span that begins at ``start``."""
-    quote = text[start]
-    index = start + 1
-    while index < len(text):
-        if quote == '"' and text[index] == "\\":
-            index += 2
-            continue
-        if text[index] == quote:
-            return index + 1
-        index += 1
-    return len(text)
+def _iter_source_files(root: Path, contract: Contract) -> tuple[list[Path], list[tuple[Path, str]]]:
+    """Walk the repository for in-scope source files.
 
-
-def _consume_array(first: str, lines: list[str], start: int) -> tuple[str, int]:
-    """Join a possibly multi-line TOML array into one raw string.
-
-    ``first`` is the text that follows the opening ``[`` on the key line and
-    ``start`` is the index of the next line. Returns ``(body, next_index)``,
-    where the body excludes the closing bracket and ``next_index`` is the first
-    line that was not consumed.
-
-    Brackets inside quotes are skipped, so a PEP 508 extra such as
-    ``dcc-mcp-core[server]>=0.20.40`` does not close the array early.
+    Returns the files to parse plus the ones that were deliberately skipped, so
+    that a blind spot is reported instead of silently shrinking the gate.
     """
-    depth = 1
-    chunks: list[str] = []
-    text = first
-    cursor = 0
-    index = start
-    while True:
-        while cursor < len(text):
-            char = text[cursor]
-            if char in "\"'":
-                cursor = _skip_quoted(text, cursor)
+    suffixes = tuple(contract.value("scan_suffixes", [".py"]))
+    exclude_dirs = set(contract.value("scan_exclude_dirs", []))
+    exclude_globs = contract.value("scan_exclude_globs", [])
+    max_files = int(contract.value("scan_max_files", 20000))
+    max_bytes = int(contract.value("scan_max_file_bytes", 2000000))
+    files: list[Path] = []
+    skipped: list[tuple[Path, str]] = []
+    truncated = False
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(
+            name
+            for name in dirnames
+            if name not in exclude_dirs and not name.startswith(".")
+        )
+        for name in sorted(filenames):
+            if not name.endswith(suffixes):
                 continue
-            if char == "[":
-                depth += 1
-            elif char == "]":
-                depth -= 1
-                if depth == 0:
-                    break
-            cursor += 1
-        chunks.append(text[:cursor])
-        if depth == 0 or index >= len(lines):
-            break
-        text = _strip_comment(lines[index])
-        index += 1
-        cursor = 0
-    return "\n".join(chunks), index
+            path = Path(dirpath) / name
+            relative = _rel(root, path)
+            if _matches_any(relative, exclude_globs):
+                continue
+            if len(files) >= max_files:
+                truncated = True
+                skipped.append((path, f"beyond scan_max_files ({max_files})"))
+                continue
+            try:
+                size = path.stat().st_size
+            except OSError as exc:
+                skipped.append((path, f"unreadable: {exc}"))
+                continue
+            if size > max_bytes:
+                skipped.append((path, f"{size} bytes exceeds scan_max_file_bytes"))
+                continue
+            files.append(path)
+    if truncated:
+        print(
+            f"::warning title=Repo contract::stopped scanning at scan_max_files ({max_files})",
+            file=sys.stderr,
+        )
+    return files, skipped
 
 
-def parse_pyproject(text: str) -> dict[str, str]:
-    """Return every ``table.key`` of a pyproject.toml as raw text.
+def _source_modules(
+    root: Path, contract: Contract
+) -> tuple[list[tuple[Path, ast.Module]], list[tuple[Path, str]]]:
+    """Parse every in-scope source file once.
 
-    Scalars and arrays are both collected; an array keeps its joined body so a
-    caller can search it for a distribution name. Lines the reader cannot model
-    are skipped rather than reported: the point is to answer "which
-    distributions does this package declare", not to be a TOML validator.
+    A file that cannot be read or parsed is reported as skipped rather than
+    crashed on: one odd file must not take the whole gate down, and a silent
+    skip would make the gate weaker than it looks.
     """
-    values: dict[str, str] = {}
-    table = ""
-    lines = text.splitlines()
-    index = 0
-    while index < len(lines):
-        raw = _strip_comment(lines[index]).strip()
-        index += 1
-        if not raw:
+    files, skipped = _iter_source_files(root, contract)
+    modules: list[tuple[Path, ast.Module]] = []
+    for path in files:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            skipped.append((path, f"unreadable: {exc}"))
             continue
-        if raw.startswith("[["):
-            table = ""
+        try:
+            modules.append((path, ast.parse(text, filename=str(path))))
+        except (SyntaxError, ValueError) as exc:
+            skipped.append((path, f"not parseable as Python: {exc}"))
+    return modules, skipped
+
+
+def _prepare_scan(
+    root: Path, contract: Contract, ctx: dict, rule: dict
+) -> tuple[list[tuple[Path, ast.Module]], list[Finding]]:
+    """Return the parsed modules plus the scan notices, emitted only once.
+
+    Several rules share one parse of the tree. The skip notices belong to the
+    run rather than to any single rule, so they ride along with whichever rule
+    asks first and are emitted exactly once.
+    """
+    if "modules" not in ctx:
+        ctx["modules"], skipped = _source_modules(root, contract)
+        ctx["scan_notices"] = [
+            Finding(rule["id"], rule["name"], "notice", _rel(root, path), f"skipped: {reason}")
+            for path, reason in skipped
+        ]
+        ctx["scan_notices_pending"] = True
+    if ctx.get("scan_notices_pending"):
+        ctx["scan_notices_pending"] = False
+        return ctx["modules"], ctx["scan_notices"]
+    return ctx["modules"], []
+
+
+def _read_text(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def _source_texts(
+    modules: Sequence[tuple[Path, ast.Module]]
+) -> list[tuple[Path, str]]:
+    """Return the scanned sources as (path, text) for the rules that read text.
+
+    A013 and A014 look for names anywhere in a module, including in a literal or
+    a workflow file, which is a text question rather than a syntax question. The
+    text is not cached in ``ctx``: a repository this gate scans is small enough
+    that a second read costs far less than a cache that can go stale.
+    """
+    return [(path, _read_text(path) or "") for path, _ in modules]
+
+
+def _has_install_sop_surface(
+    root: Path, contract: Contract, sources: Sequence[tuple[Path, str]]
+) -> bool:
+    """True when the repository assembles an Install SOP report at all.
+
+    A013 and A014 are about the report, so they are skipped for the ~42 adapters
+    that have no install capability rather than reported. Two signals count: a
+    source file that touches one of the Core symbols a report assembler has to
+    touch, or a module named for installation -- the second catches an adapter
+    that has not yet adopted the shared symbols.
+    """
+    symbols = [symbol for symbol in contract.value("install_sop_symbols", []) if symbol]
+    if symbols:
+        pattern = re.compile(
+            "|".join(r"\b" + re.escape(symbol) + r"\b" for symbol in symbols)
+        )
+        for _path, text in sources:
+            if pattern.search(text):
+                return True
+    for pattern in contract.value("install_source_globs", []):
+        if any(root.glob(pattern)):
+            return True
+    return False
+
+
+def _dotted_name(node: ast.AST) -> str:
+    """Return `dcc_mcp_core.deployment.X` for a Name/Attribute chain, else ''."""
+    parts: list[str] = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return ""
+    parts.append(node.id)
+    return ".".join(reversed(parts))
+
+
+def _module_aliases(tree: ast.Module) -> dict[str, str]:
+    """Map a local name onto the module it was imported as.
+
+    `import dcc_mcp_core.deployment as deployment` binds a name that no longer
+    looks like the provider, so a dotted-name check alone would miss it.
+    """
+    aliases: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Import):
             continue
-        if raw.startswith("["):
-            if raw.endswith("]"):
-                table = raw[1:-1].strip().strip("\"'")
-            continue
-        array = TOML_ARRAY_RE.match(raw)
-        if array:
-            body, index = _consume_array(array.group("rest"), lines, index)
-            values[_qualify(table, array.group("key"))] = body
-            continue
-        scalar = TOML_KEY_VALUE_RE.match(raw)
-        if scalar:
-            values[_qualify(table, scalar.group("key"))] = str(
-                _coerce(scalar.group("value").strip())
-            )
-    return values
+        for alias in node.names:
+            bound = alias.asname or alias.name.split(".")[0]
+            aliases[bound] = alias.name
+    return aliases
 
 
-def _qualify(table: str, key: str) -> str:
-    return f"{table}.{key}" if table else key
+def _resolve_dotted(dotted: str, aliases: dict[str, str]) -> str:
+    """Rewrite the head of a dotted name through the module alias map."""
+    head, _, rest = dotted.partition(".")
+    resolved = aliases.get(head, head)
+    return f"{resolved}.{rest}" if rest else resolved
 
 
-def _normalise_distribution(name: str) -> str:
-    """Normalise a distribution name the way PEP 503 does for comparison."""
-    return re.sub(r"[-_.]+", "-", name.strip()).lower()
+def _assignment_targets(node: ast.AST) -> list[ast.Name]:
+    if isinstance(node, ast.Assign):
+        return [target for target in node.targets if isinstance(target, ast.Name)]
+    if isinstance(node, ast.AnnAssign):
+        return [node.target] if isinstance(node.target, ast.Name) else []
+    if isinstance(node, ast.AugAssign):
+        return [node.target] if isinstance(node.target, ast.Name) else []
+    return []
 
 
-def _matched_values(values: dict[str, str], patterns: Sequence[str]) -> list[str]:
-    """Return the values whose key matches any of the contract patterns."""
-    compiled = [re.compile(pattern) for pattern in patterns]
-    return [value for key, value in values.items() if any(p.search(key) for p in compiled)]
+def _int_constant(node: ast.AST) -> int | None:
+    """Return the value of an integer literal, or None for anything else."""
+    # `ast.Num` is the Python 3.7 spelling of `ast.Constant`. It is reached
+    # lazily and only on 3.7, because merely touching it on 3.12+ emits a
+    # DeprecationWarning; the organisation's Python 3.7 red line (PIP-2519)
+    # runs to 2026-12-31.
+    if sys.version_info >= (3, 8):
+        if not isinstance(node, ast.Constant):
+            return None
+        value = node.value
+    else:
+        legacy: Any = getattr(ast, "Num", ())
+        if not (legacy and isinstance(node, legacy)):
+            return None
+        value = node.n
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
 
 
-def _declared_distributions(values: dict[str, str], patterns: Sequence[str]) -> set[str]:
-    """Return the normalised distribution names held by the matching arrays."""
-    names: set[str] = set()
-    for body in _matched_values(values, patterns):
-        for element in TOML_STRING_RE.findall(body):
-            name = REQUIREMENT_TAIL_RE.split(element, maxsplit=1)[0].strip()
-            if name:
-                names.add(_normalise_distribution(name))
-    return names
+def _pyproject(contract: Contract, ctx: dict) -> dict[str, Any]:
+    """Parse pyproject.toml once per run with the shared lenient parser."""
+    if "pyproject" not in ctx:
+        path = Path(ctx["root"]) / contract.value("pyproject_file", "pyproject.toml")
+        ctx["pyproject"] = (
+            parse_vx_toml(path.read_text(encoding="utf-8", errors="replace"))[0]
+            if path.is_file()
+            else {}
+        )
+    return ctx["pyproject"]
+
+
+def _value(data: dict[str, Any], name: str) -> Any:
+    """Resolve a dotted path against a parsed pyproject.toml.
+
+    ``[tool.ruff]`` arrives as the literal key ``tool.ruff``, while
+    ``dependencies`` under ``[project]`` arrives nested two levels down, so a
+    flat lookup is tried first and a nested walk second.
+    """
+    if name in data:
+        return data[name]
+    current: Any = data
+    for part in name.split("."):
+        if not isinstance(current, dict) or part not in current:
+            return None
+        current = current[part]
+    return current
+
+
+def _table(data: dict[str, Any], name: str) -> dict[str, Any]:
+    table = _value(data, name)
+    return table if isinstance(table, dict) else {}
+
+
+def _ruff_table(data: dict[str, Any], name: str) -> dict[str, Any]:
+    """Resolve the ruff table the way A021 does, sub-tables included.
+
+    ``_table`` only matches the literal key, so a repository that writes nothing
+    but ``[tool.ruff.lint]`` resolves to ``{}`` here -- as if the table were
+    absent -- while A021's resolver sees the sub-table and calls it present. Two
+    rules reading the same file through two resolvers is how the messages drifted
+    apart, so A004 reads the table through A021's resolver instead.
+    """
+    from adapter_contract_rules import _resolve_dotted
+
+    table = _resolve_dotted(data, name)
+    return table if isinstance(table, dict) else {}
+
+
+def _table_settings(table: dict[str, Any]) -> dict[str, Any]:
+    """The entries of a resolved ruff table that are settings, not sub-tables.
+
+    A nested-only ``[tool.ruff.lint]`` resolves to a non-empty mapping that still
+    declares nothing at the top level, so a plain truth test would read "declared
+    nothing" as "declared something". A004 stays silent on that shape and on an
+    empty table -- A021 reports both -- and this keeps the two rules agreeing on
+    where the boundary sits.
+    """
+    return {key: value for key, value in table.items() if not isinstance(value, dict)}
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, str)]
+    if isinstance(value, str):
+        return [value]
+    return []
+
+
+def _requirement_strings(value: Any) -> list[str]:
+    """Flatten a dependency table into PEP 508 requirement strings.
+
+    ``[project.dependencies]`` is a list of strings, while poetry spells the
+    same thing as a table of ``name = spec`` entries. A rule that promises to
+    read both tables has to flatten the table form too, or the poetry half of
+    that promise inspects nothing and reports no finding at all.
+    """
+    if not isinstance(value, dict):
+        return _string_list(value)
+    requirements: list[str] = []
+    for name, spec in value.items():
+        if isinstance(spec, str):
+            requirements.append(f"{name} {spec}" if spec else name)
+        elif isinstance(spec, list):
+            # Poetry allows several constraints: `dcc-mcp-core = [">=0.20.40", "<1"]`.
+            constraints = [item for item in spec if isinstance(item, str)]
+            if constraints:
+                requirements.append(f"{name} {','.join(constraints)}")
+        elif isinstance(spec, dict) and isinstance(spec.get("version"), str):
+            requirements.append(f"{name} {spec['version']}")
+    return requirements
+
+
+def _version_tuple(value: str) -> tuple[int, ...]:
+    """Parse the leading numeric part of a version, ignoring any pre-release."""
+    numbers: list[int] = []
+    for part in re.split(r"[.\-+]", str(value).strip()):
+        if not part.isdigit():
+            break
+        numbers.append(int(part))
+    return tuple(numbers)
+
+
+def _version_cmp(left: tuple[int, ...], right: tuple[int, ...]) -> int:
+    """Compare release tuples, padding the shorter one with zeros."""
+    width = max(len(left), len(right))
+    a = tuple(list(left) + [0] * (width - len(left)))
+    b = tuple(list(right) + [0] * (width - len(right)))
+    return (a > b) - (a < b)
+
+
+def _floor_versions(requirement: str, operators: Sequence[str]) -> list[str]:
+    """Every version a requirement pins as a lower bound.
+
+    Upper bounds are ignored because ``core_floor_operators`` never contains
+    ``<``; the operators are matched longest-first so that ``>=`` wins over the
+    ``>`` it starts with.
+    """
+    versions: list[str] = []
+    for operator in sorted(operators, key=len, reverse=True):
+        pattern = re.escape(operator) + r"\s*([0-9][0-9A-Za-z.\-+]*)"
+        versions.extend(match.group(1) for match in re.finditer(pattern, requirement))
+    return versions
 
 
 # ------------------------------------------------------------------------- rules
@@ -490,7 +797,7 @@ def check_vx_toml_parses(root: Path, contract: Contract, ctx: dict) -> list[Find
     if not vx_toml.is_file():
         return []
     text = vx_toml.read_text(encoding="utf-8", errors="replace")
-    parsed, unparsed = parse_vx_toml(text)
+    parsed, unparsed, _positions = parse_vx_toml(text)
     findings = []
     for lineno, raw in unparsed:
         findings.append(
@@ -612,6 +919,45 @@ def check_root_allowlist(root: Path, contract: Contract, ctx: dict) -> list[Find
     return findings
 
 
+def _normalise_recipe_name(name: str, separators: Sequence[str]) -> str:
+    """Fold the separators that just and vx treat as interchangeable."""
+    folded = name
+    for sep in separators:
+        folded = folded.replace(sep, "-")
+    return folded.lower()
+
+
+def _script_forwards_to_just(command: Any, commands: Sequence[str]) -> str | None:
+    """Return the recipe a [scripts] value delegates to, or None.
+
+    A script may be a single line or a triple-quoted block; only the leading
+    command matters, so leading whitespace and the block delimiters are stripped
+    before matching. Nothing after the recipe name is considered: `just test --
+    --nocapture` still forwards to `test`.
+    """
+    if not isinstance(command, str):
+        return None
+    text = command.strip()
+    for fence in ('"""', "'''"):
+        if text.startswith(fence):
+            text = text[len(fence) :]
+        if text.endswith(fence):
+            text = text[: -len(fence)]
+    for line in text.splitlines():
+        stripped = line.strip().strip('"').strip("'").strip()
+        if not stripped:
+            continue
+        for prefix in sorted(commands, key=len, reverse=True):
+            if stripped == prefix:
+                return ""
+            lead = prefix + " "
+            if stripped.startswith(lead):
+                recipe = stripped[len(lead) :].split(None, 1)[0].strip('"').strip("'")
+                return recipe
+        break
+    return None
+
+
 def check_no_scripts_with_justfile(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
     rule = contract.rules["R007"]
     justfile = ctx.get("justfile")
@@ -621,18 +967,45 @@ def check_no_scripts_with_justfile(root: Path, contract: Contract, ctx: dict) ->
     scripts = vx.get("scripts")
     if not isinstance(scripts, dict) or not scripts:
         return []
+    commands = contract.value("scripts_just_forward_commands", ["just", "vx just"])
+    if not isinstance(commands, list) or not all(isinstance(item, str) for item in commands):
+        commands = ["just", "vx just"]
+    separators = contract.value("scripts_recipe_name_separators", ["-", "_"])
+    if not isinstance(separators, list) or not all(
+        isinstance(item, str) and item for item in separators
+    ):
+        separators = ["-", "_"]
+    recipes = {
+        _normalise_recipe_name(name, separators) for name in _justfile_recipes(justfile)
+    }
+    positions: dict[str, int] = ctx.get("vx_positions") or {}
     findings = []
     for name in sorted(scripts):
         command = scripts[name]
+        forwarded = _script_forwards_to_just(command, commands)
+        if forwarded is not None:
+            reason = (
+                f"forwards to `{forwarded or 'just'}`"
+                if forwarded
+                else "forwards to just itself"
+            )
+        elif _normalise_recipe_name(name, separators) in recipes:
+            reason = f"shares the name of justfile recipe `{name}`"
+        else:
+            continue
+        # The parser records the line of the assignment, so the finding points at
+        # the entry itself rather than at the file: in a repository with 64
+        # entries, a report that only names vx.toml is unusable.
+        lineno = positions.get(f"scripts.{name}")
         findings.append(
             Finding(
                 rule["id"],
                 rule["name"],
                 rule["severity"],
-                "vx.toml",
+                f"vx.toml:{lineno}" if lineno else "vx.toml",
                 (
-                    f"[scripts] {name} = {command!r} duplicates `{justfile.name}`; keep recipes "
-                    "in the justfile and reserve [scripts] for repositories without one"
+                    f"[scripts] {name} = {command!r} duplicates `{justfile.name}`: {reason}; "
+                    "run the recipe from the justfile or drop it from [scripts]"
                 ),
             )
         )
@@ -693,6 +1066,10 @@ def check_agents_derived_symlink(root: Path, contract: Contract, ctx: dict) -> l
     for name in contract.value("agents_ide_dirs", []):
         path = root / name
         if path.is_dir() and not path.is_symlink():
+            if _tracked_files_under(root, name):
+                # R011 reports each tracked file at error severity. Warning about
+                # the directory as well would only duplicate the finding.
+                continue
             findings.append(
                 Finding(
                     rule["id"],
@@ -703,6 +1080,75 @@ def check_agents_derived_symlink(root: Path, contract: Contract, ctx: dict) -> l
                         f"agent directory `{name}/` is committed; generate it from `{source}` "
                         "at setup time and keep it out of version control"
                     ),
+                )
+            )
+    return findings
+
+
+def _tracked_files_under(root: Path, rel: str) -> list[str]:
+    """Files version-controlled under ``rel``, relative to ``root``.
+
+    Prefers ``git ls-files`` so that untracked output sitting inside an ignored
+    agent directory is not reported — "present on disk" and "committed" are not
+    the same thing once the directory is ignored. Falls back to a filesystem
+    walk when the target is not a git working tree (a tarball export, or the
+    temp directories the contract tests build), where every file present is the
+    best available approximation of the tracked set.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "ls-files", "--", rel],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=GIT_LS_FILES_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError):
+        proc = None
+    if proc is not None and proc.returncode == 0:
+        return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+
+    path = root / rel
+    if not path.is_dir():
+        return []
+    return sorted(
+        item.relative_to(root).as_posix() for item in path.rglob("*") if item.is_file()
+    )
+
+
+def check_no_tracked_agent_dirs(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
+    rule = contract.rules["R011"]
+    findings = []
+    for name in contract.value("agents_ide_dirs", []):
+        path = root / name
+        if not path.is_dir() or path.is_symlink():
+            continue
+        tracked = _tracked_files_under(root, name)
+        if not tracked:
+            continue
+        for rel_file in tracked[:MAX_TRACKED_AGENT_FILES]:
+            findings.append(
+                Finding(
+                    rule["id"],
+                    rule["name"],
+                    rule["severity"],
+                    rel_file,
+                    (
+                        f"`{rel_file}` is tracked under the agent/IDE directory `{name}/`; "
+                        f"add `/{name}/` to .gitignore and untrack it, or move the asset to "
+                        "a committed path outside the agent directories"
+                    ),
+                )
+            )
+        hidden = len(tracked) - MAX_TRACKED_AGENT_FILES
+        if hidden > 0:
+            findings.append(
+                Finding(
+                    rule["id"],
+                    rule["name"],
+                    rule["severity"],
+                    name + "/",
+                    f"... and {hidden} more tracked file(s) under `{name}/`",
                 )
             )
     return findings
@@ -763,583 +1209,435 @@ def check_llms_txt_fresh(root: Path, contract: Contract, ctx: dict) -> list[Find
     ]
 
 
-def check_adapter_python_package(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
-    """A001 -- the applicability gate for every other adapter rule.
+def check_no_deprecated_install_sop_alias(
+    root: Path, contract: Contract, ctx: dict
+) -> list[Finding]:
+    """A001 — adapter code must not reference a deprecated Core symbol.
 
-    A repository swept by ``contract/adapter_repositories.json`` is only an
-    adapter when it ships a ``pyproject.toml`` that declares a ``dcc-mcp-core``
-    dependency. The core package cannot depend on itself, so its own
-    distribution name is exempt. The rule carries no business constraint: it
-    reports the registrations that are wrong so that the rest of the contract
-    is not silently applied to repositories it was never written for.
+    Three reference shapes are reported: an import from the provider package, a
+    module-qualified attribute access, and a local rebinding (the
+    ``except ImportError:`` fallback that exists only to support the import, and
+    the ``__all__`` re-export that keeps the deprecated name in the adapter's
+    own public surface). Comments and docstrings are invisible here because the
+    check runs on the syntax tree, not on text.
+
+    Files under `provider_package_dirs` are exempt: the provider is allowed to
+    define and re-export the deprecated alias, its consumers are not.
     """
     rule = contract.rules["A001"]
-    config = contract.value("adapter_python_package") or {}
-    manifest_name = str(config.get("manifest", "pyproject.toml"))
-    manifest = root / manifest_name
-    if not manifest.is_file():
-        ctx["adapter_applicable"] = False
-        return [
-            Finding(
-                rule["id"],
-                rule["name"],
-                rule["severity"],
-                manifest_name,
-                (
-                    f"`{manifest_name}` is missing; a repository swept by the adapter "
-                    "contract must be a Python package -- drop it from "
-                    "contract/adapter_repositories.json or add the manifest"
-                ),
-            )
-        ]
-
-    try:
-        text = manifest.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        text = ""
-    values = parse_pyproject(text)
-    # Later adapter rules read pyproject.toml too; parse it once.
-    ctx["pyproject"] = values
-
-    core_names = {
-        _normalise_distribution(name) for name in config.get("core_distribution_names", [])
-    }
-    self_names = {
-        _normalise_distribution(name) for name in config.get("self_distributions", [])
-    }
-    declared = _declared_distributions(values, config.get("dependency_key_patterns", []))
-    ctx["adapter_dependencies"] = sorted(declared)
-    ctx["adapter_applicable"] = bool(declared & core_names)
-    if ctx["adapter_applicable"]:
+    symbols = contract.value("deprecated_symbols", {})
+    if not isinstance(symbols, dict) or not symbols:
         return []
-
-    own_names = {
-        _normalise_distribution(value)
-        for value in _matched_values(values, config.get("distribution_name_key_patterns", []))
-    }
-    if own_names & self_names:
-        # The distribution the adapters depend on is in scope without depending
-        # on itself, but it is not what the later rules mean by "an adapter".
-        return []
-
-    expected = "`, `".join(sorted(core_names)) or "dcc-mcp-core"
-    return [
-        Finding(
-            rule["id"],
-            rule["name"],
-            rule["severity"],
-            manifest_name,
-            (
-                f"`{manifest_name}` declares no `{expected}` dependency; the adapter "
-                "contract does not apply to this repository -- declare the dependency "
-                "or drop it from contract/adapter_repositories.json"
-            ),
-        )
-    ]
-
-
-# ------------------------------------------------------------ adapter machinery
-#
-# The A0xx rules live in contract/adapter_contract.json and only apply to Python
-# adapter packages. They read the repository's Python sources, so they need a
-# tree walk, an AST pass and a pyproject dependency read; everything they decide
-# (thresholds, symbol names, globs) still comes from the contract.
-
-_MISSING = object()
-
-# Python 3.7's parser emits ast.Num / ast.Str / ast.Bytes / ast.NameConstant
-# where 3.8+ emits ast.Constant. Those classes are deprecated from 3.12 and
-# removed in 3.14, so they are matched by *name* rather than by getattr(ast, ...):
-# touching them by attribute is itself deprecated and would make the checker
-# warn about deprecation while it is checking for deprecation.
-_LEGACY_CONST_NAMES = frozenset({"Num", "Str", "Bytes", "NameConstant"})
-
-_FLOOR_OPERATOR_RE = re.compile(r"(>=|==|~=|\^|>)\s*([0-9][0-9A-Za-z.\-]*)")
-
-
-def _literal(node: Any) -> Any:
-    """Return the Python value of a literal node, or ``_MISSING``."""
-    if isinstance(node, ast.Constant):
-        return node.value
-    if type(node).__name__ in _LEGACY_CONST_NAMES:
-        for attribute in ("value", "n", "s"):
-            if hasattr(node, attribute):
-                return getattr(node, attribute)
-    return _MISSING
-
-
-def _iter_repo_files(
-    root: Path, globs: Iterable[str], exclude_dirs: Iterable[str]
-) -> Iterable[Path]:
-    """Yield tracked files matching ``globs``, skipping vendored directories."""
-    excludes = set(exclude_dirs or ())
-    seen: set[Path] = set()
-    for pattern in globs or ():
-        try:
-            candidates = sorted(root.glob(pattern))
-        except (OSError, ValueError):
+    prefixes = tuple(contract.value("provider_modules", []))
+    provider_globs = contract.value("provider_package_dirs", [])
+    modules, notices = _prepare_scan(root, contract, ctx, rule)
+    findings = list(notices)
+    for path, tree in modules:
+        relative = _rel(root, path)
+        if _matches_any(relative, provider_globs):
             continue
-        for path in candidates:
-            if not path.is_file() or path in seen:
-                continue
-            parts = path.relative_to(root).parts
-            if any(part in excludes for part in parts[:-1]):
-                continue
-            seen.add(path)
-            yield path
-
-
-def _read_text(path: Path) -> str | None:
-    try:
-        return path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return None
-
-
-def _parse_module(path: Path) -> ast.Module | None:
-    """Parse a Python file, or return None when it cannot be parsed.
-
-    A file written for a newer Python than the interpreter running the check
-    raises SyntaxError. That is a property of the file, not a contract finding,
-    so it is skipped: A010 still covers it with a text scan.
-    """
-    text = _read_text(path)
-    if text is None:
-        return None
-    try:
-        return ast.parse(text, filename=str(path))
-    except (SyntaxError, ValueError, RecursionError):
-        return None
-
-
-def _referenced_names(node: Any) -> set[str]:
-    """Every bare name and attribute touched by an expression."""
-    names: set[str] = set()
-    if node is None:
-        return names
-    for child in ast.walk(node):
-        if isinstance(child, ast.Name):
-            names.add(child.id)
-        elif isinstance(child, ast.Attribute):
-            names.add(child.attr)
-    return names
-
-
-def _bindings(tree: ast.Module) -> dict[str, Any]:
-    """Map every assigned name in the module, at any scope, to its value node."""
-    mapping: dict[str, Any] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    mapping.setdefault(target.id, node.value)
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            if node.value is not None:
-                mapping.setdefault(node.target.id, node.value)
-    return mapping
-
-
-def _resolve(node: Any, bindings: dict[str, Any], depth: int) -> Any:
-    """Follow module-level aliasing, so `SCHEMA_VERSION` reaches its literal."""
-    cursor = node
-    for _ in range(max(0, depth)):
-        if not isinstance(cursor, ast.Name):
-            return cursor
-        following = bindings.get(cursor.id)
-        if following is None:
-            return cursor
-        cursor = following
-    return cursor
-
-
-def _dict_value_for_key(node: ast.Dict, field: str) -> Any:
-    for key, value in zip(node.keys, node.values):
-        if key is None:
-            continue
-        text = _literal(key)
-        if isinstance(text, str) and text == field:
-            return value
-    return None
-
-
-def _dict_has_any_key(node: ast.Dict, keys: Iterable[str]) -> bool:
-    wanted = set(keys or ())
-    if not wanted:
-        return True
-    for key in node.keys:
-        if key is None:
-            continue
-        text = _literal(key)
-        if isinstance(text, str) and text in wanted:
-            return True
-    return False
-
-
-def _const_read_names(tree: ast.Module, const_reads: Iterable[str]) -> set[str]:
-    """Names in this module that produce the schema ``const``.
-
-    Direct calls to a known reader, plus one hop of local helpers that return
-    one: a test helper such as ``_published_schema_const()`` is how an adapter
-    normally spells the assertion that pins a hardcoded value to the schema.
-    """
-    wanted = set(const_reads or ())
-    names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-            if node.func.id in wanted:
-                names.add(node.func.id)
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for child in ast.walk(node):
-                if (
-                    isinstance(child, ast.Call)
-                    and isinstance(child.func, ast.Name)
-                    and child.func.id in wanted
-                ):
-                    names.add(node.name)
-                    break
-    return names
-
-
-def _is_const_read(node: Any, names: set[str]) -> bool:
-    """True when an expression reads the schema const, subscripts included."""
-    if not names:
-        return False
-    return bool(names & _referenced_names(node))
-
-
-def _collect_schema_const_guards(root: Path, contract: Contract) -> set[tuple[str, Any]]:
-    """Names and literal values that a test pins to the schema ``const``."""
-    const_reads = set(contract.value("a011_schema_const_reads", []))
-    guards: set[tuple[str, Any]] = set()
-    if not const_reads:
-        return guards
-    for path in _iter_repo_files(
-        root, contract.value("a011_guard_globs", []), contract.value("scan_exclude_dirs", [])
-    ):
-        tree = _parse_module(path)
-        if tree is None:
-            continue
-        readers = _const_read_names(tree, const_reads)
-        if not readers:
-            continue
-        bindings = _bindings(tree)
+        hits: dict[str, list[int]] = {}
+        aliases = _module_aliases(tree)
         for node in ast.walk(tree):
-            if not isinstance(node, ast.Compare):
-                continue
-            sides = [node.left, *node.comparators]
-            if not any(_is_const_read(side, readers) for side in sides):
-                continue
-            for side in sides:
-                if _is_const_read(side, readers):
+            if isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                if not any(
+                    module == prefix or module.startswith(prefix + ".") for prefix in prefixes
+                ):
                     continue
-                if isinstance(side, ast.Name):
-                    guards.add(("name", side.id))
-                value = _literal(_resolve(side, bindings, 2))
-                if value is not _MISSING and not isinstance(value, bool):
-                    guards.add(("value", value))
-    return guards
+                for alias in node.names:
+                    if alias.name in symbols:
+                        hits.setdefault(alias.name, []).append(node.lineno)
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name in symbols:
+                        hits.setdefault(alias.name, []).append(node.lineno)
+            elif isinstance(node, ast.Attribute):
+                if node.attr not in symbols:
+                    continue
+                dotted = _resolve_dotted(_dotted_name(node), aliases)
+                if any(
+                    dotted == prefix or dotted.startswith(prefix + ".") for prefix in prefixes
+                ):
+                    hits.setdefault(node.attr, []).append(node.lineno)
+            else:
+                for target in _assignment_targets(node):
+                    if target.id in symbols:
+                        hits.setdefault(target.id, []).append(node.lineno)
+        for symbol in sorted(hits):
+            lines = ", ".join(f"L{lineno}" for lineno in sorted(set(hits[symbol])))
+            findings.append(
+                Finding(
+                    rule["id"],
+                    rule["name"],
+                    rule["severity"],
+                    relative,
+                    (
+                        f"`{symbol}` is a deprecated dcc-mcp-core alias ({lines}); "
+                        f"{symbols[symbol]}"
+                    ),
+                )
+            )
+    return findings
 
 
-def _classify_schema_version(
-    value: Any,
-    bindings: dict[str, Any],
-    depth: int,
-    sources: set[str],
-    artifact: set[str],
-    guards: set[tuple[str, Any]],
-) -> tuple[str, str] | None:
-    """Return ``None`` when the source is acceptable, else ``(kind, detail)``."""
-    resolved = _resolve(value, bindings, depth)
-    names = _referenced_names(value) | _referenced_names(resolved)
-    if names & sources:
-        return None
-    if names & artifact:
-        return ("artifact", ", ".join(sorted(names & artifact)))
-    literal = _literal(resolved)
-    if literal is _MISSING or isinstance(literal, bool):
-        return None
-    if ("value", literal) in guards:
-        return None
-    if isinstance(value, ast.Name) and ("name", value.id) in guards:
-        return None
-    return ("constant", repr(literal))
+def check_no_hand_rolled_report_schema_version(
+    root: Path, contract: Contract, ctx: dict
+) -> list[Finding]:
+    """A002 — the report schema version is a value Core already publishes.
 
-
-def _serves_alias(text: str, alias: str) -> bool:
-    """True when a file defines or serves the alias rather than consuming it.
-
-    core keeps the deprecated name alive through ``__getattr__`` so that old
-    adapters keep working. The file that does that is the provider of the alias;
-    penalising it would flag the one repository that is supposed to have it.
+    A module-level ``*_REPORT_SCHEMA_VERSION = 2`` is a second source of truth
+    for the schema ``const``. It is reported as a warning only: converging a
+    repository on ``install_sop_report_schema_version()`` first needs its Core
+    floor raised to >=0.20.40, which is PIP-4101's job, not this gate's.
     """
-    if "def __getattr__" in text and alias in text:
-        return True
-    return re.search(r"^\s*" + re.escape(alias) + r"\s*=", text, re.M) is not None
-
-
-def _has_install_sop_surface(
-    root: Path, contract: Contract, source_files: Sequence[Path]
-) -> bool:
-    """True when the repository has an Install SOP surface to be checked."""
-    symbols = list(contract.value("install_sop_symbols", []))
-    if symbols:
-        pattern = re.compile("|".join(r"\b" + re.escape(symbol) + r"\b" for symbol in symbols))
-        for path in source_files:
-            text = _read_text(path)
-            if text and pattern.search(text):
-                return True
-    for pattern in contract.value("install_source_globs", []):
-        if any(root.glob(pattern)):
-            return True
-    return False
-
-
-def _version_tuple(value: str) -> tuple[int, ...]:
-    numbers: list[int] = []
-    for part in re.split(r"[.\-+]", str(value).strip()):
-        if not part.isdigit():
-            break
-        numbers.append(int(part))
-    return tuple(numbers)
-
-
-def _version_cmp(left: tuple[int, ...], right: tuple[int, ...]) -> int:
-    width = max(len(left), len(right))
-    a = tuple(list(left) + [0] * (width - len(left)))
-    b = tuple(list(right) + [0] * (width - len(right)))
-    return (a > b) - (a < b)
-
-
-def _lower_bound(operators: str) -> str | None:
-    best: tuple[tuple[int, ...], str] | None = None
-    for _, version in _FLOOR_OPERATOR_RE.findall(operators or ""):
-        parsed = _version_tuple(version)
-        if not parsed:
-            continue
-        if best is None or _version_cmp(parsed, best[0]) > 0:
-            best = (parsed, version)
-    return best[1] if best else None
-
-
-def _core_distribution_names(contract: Contract) -> list[str]:
-    """The distributions that count as the core dependency.
-
-    A001 already declares them, so A012 reads that list instead of keeping a
-    second one that could drift: a criterion is never written down twice.
-    """
-    block = contract.value("adapter_python_package") or {}
-    names = block.get("core_distribution_names") if isinstance(block, dict) else None
-    if names:
-        return list(names)
-    return list(contract.value("core_dependency_names", ["dcc-mcp-core"]))
-
-
-def _core_dependency(root: Path, contract: Contract) -> tuple[str, str | None] | None:
-    """Find the dcc-mcp-core requirement and its lower bound.
-
-    A001 already ships a pyproject reader, so A012 reads the same tables
-    through the same contract patterns instead of keeping a second reader that
-    could disagree about which dependencies a package declares.
-
-    A package may declare dependencies in several tables. The PEP 621
-    ``project.dependencies`` table wins, so a dev extra or a build requirement
-    cannot silently stand in for the real floor.
-    """
-    block = contract.value("adapter_python_package") or {}
-    manifest = root / str(block.get("manifest", "pyproject.toml"))
-    text = _read_text(manifest)
-    if text is None:
-        return None
-    patterns = [
-        re.compile(pattern)
-        for pattern in (block.get("dependency_key_patterns") or ["^project\\.dependencies$"])
-    ]
-    wanted = {_normalise_distribution(name) for name in _core_distribution_names(contract)}
-    best: tuple[int, str, str | None] | None = None
-    for key, body in parse_pyproject(text).items():
-        if not any(pattern.search(key) for pattern in patterns):
-            continue
-        rank = 0 if key.startswith("project.dependencies") else 1
-        for element in TOML_STRING_RE.findall(body):
-            requirement = element.strip()
-            head = REQUIREMENT_TAIL_RE.split(requirement, maxsplit=1)[0].strip()
-            if not head or _normalise_distribution(head) not in wanted:
+    rule = contract.rules["A002"]
+    globs = contract.value("hand_rolled_schema_version_globs", [])
+    modules, notices = _prepare_scan(root, contract, ctx, rule)
+    findings = list(notices)
+    for path, tree in modules:
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.Assign, ast.AnnAssign)):
                 continue
-            if best is None or rank < best[0]:
-                best = (rank, requirement, _lower_bound(requirement))
-    if best is None:
-        return None
-    return best[1], best[2]
-
-
-# ----------------------------------------------------------------- A0xx rules
-
-
-def check_no_deprecated_schema_alias(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
-    rule = contract.rules["A010"]
-    alias = contract.value("deprecated_schema_alias", "INSTALL_SOP_SCHEMA_VERSION")
-    pattern = re.compile(r"\b" + re.escape(alias) + r"\b")
-    exempt = contract.value("a010_exempt_path_globs", [])
-    findings = []
-    for path in _iter_repo_files(
-        root, contract.value("scan_source_globs", []), contract.value("scan_exclude_dirs", [])
-    ):
-        rel = _rel(root, path)
-        if _matches_any(rel, exempt):
-            continue
-        text = _read_text(path)
-        if text is None or _serves_alias(text, alias):
-            continue
-        for lineno, line in enumerate(text.splitlines(), start=1):
-            if line.strip().startswith("#"):
+            value = getattr(node, "value", None)
+            if value is None:
                 continue
-            if pattern.search(line):
+            number = _int_constant(value)
+            if number is None:
+                continue
+            for target in _assignment_targets(node):
+                if not _matches_any(target.id, globs):
+                    continue
                 findings.append(
                     Finding(
                         rule["id"],
                         rule["name"],
                         rule["severity"],
-                        f"{rel}:{lineno}",
+                        _rel(root, path),
                         (
-                            f"`{alias}` is a deprecated alias that core serves through "
-                            "__getattr__ with a DeprecationWarning; use "
-                            "`INSTALL_SOP_SCHEMA_REVISION` for the artifact revision, or "
-                            "`install_sop_report_schema_version()` for the report field. "
-                            "Fix the value, not just the name: PIP-3990 shipped because six "
-                            "adapters published the artifact revision as the report field."
+                            f"`{target.id} = {number}` (L{node.lineno}) hard-codes the report "
+                            "schema version; read it from "
+                            "`install_sop_report_schema_version()` once the Core floor is "
+                            ">=0.20.40 (PIP-4101)"
                         ),
                     )
                 )
     return findings
 
 
-def check_report_schema_version_source(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
-    rule = contract.rules["A011"]
-    field = contract.value("a011_schema_version_field", "schema_version")
-    sources = set(contract.value("a011_schema_version_sources", []))
-    artifact = set(contract.value("a011_artifact_revision_symbols", []))
-    markers = set(contract.value("a011_report_marker_keys", []))
-    depth = int(contract.value("a011_max_resolve_depth", 3))
-    guards = _collect_schema_const_guards(root, contract)
+def check_core_floor_declared(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
+    """A003 — a declared Core dependency pins a lower bound.
+
+    Only the runtime dependency tables are read. Extras are excluded on purpose:
+    `dcc-mcp-core[test]` in a dev extra is a self-reference, not a deployment
+    requirement. A repository that declares no Core dependency at all is out of
+    scope for an adapter contract and is skipped rather than failed.
+
+    Both spellings of a dependency table are flattened first: `[project.dependencies]`
+    is a list of requirement strings, `[tool.poetry.dependencies]` is a table of
+    `name = spec` entries.
+    """
+    rule = contract.rules["A003"]
+    data = _pyproject(contract, ctx)
+    names = {name.lower() for name in contract.value("core_distributions", [])}
+    tables = contract.value("core_dependency_tables", [])
+    operators = tuple(contract.value("core_floor_operators", [">="]))
+    name = contract.value("pyproject_file", "pyproject.toml")
     findings = []
-    for path in _iter_repo_files(
-        root, contract.value("scan_source_globs", []), contract.value("scan_exclude_dirs", [])
-    ):
-        tree = _parse_module(path)
-        if tree is None:
-            continue
-        bindings = _bindings(tree)
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Dict):
+    seen = False
+    for table_name in tables:
+        for requirement in _requirement_strings(_value(data, table_name)):
+            distribution = re.split(r"[<>=!~;\s\[]", requirement, maxsplit=1)[0].strip()
+            if distribution.lower() not in names:
                 continue
-            value = _dict_value_for_key(node, field)
-            if value is None or not _dict_has_any_key(node, markers):
-                continue
-            verdict = _classify_schema_version(
-                value, bindings, depth, sources, artifact, guards
-            )
-            if verdict is None:
-                continue
-            kind, detail = verdict
-            if kind == "artifact":
-                message = (
-                    f"the report `{field}` is bound to the Install SOP artifact revision "
-                    f"({detail}); the field must come from "
-                    "`install_sop_report_schema_version()` or the schema `const`. This is "
-                    "exactly the PIP-3990 defect: the artifact revision is 2 while the "
-                    "report field is pinned to 1."
+            seen = True
+            if not any(operator in requirement for operator in operators):
+                findings.append(
+                    Finding(
+                        rule["id"],
+                        rule["name"],
+                        rule["severity"],
+                        name,
+                        (
+                            f"[{table_name}] `{requirement}` pins no lower bound; declare one "
+                            f"with {', '.join(operators)} so a resolve cannot silently pick "
+                            "any installed Core"
+                        ),
+                    )
                 )
-            else:
-                message = (
-                    f"the report `{field}` is the literal {detail}; read it from "
-                    "`install_sop_report_schema_version()` so that a schema `const` change "
-                    "cannot be published silently. A literal that a test pins to the "
-                    "schema const is accepted as guarded."
-                )
-            findings.append(
-                Finding(
-                    rule["id"],
-                    rule["name"],
-                    rule["severity"],
-                    f"{_rel(root, path)}:{getattr(node, 'lineno', 0)}",
-                    message,
-                )
-            )
+    if not seen:
+        return []
     return findings
 
 
-def check_core_floor_policy(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
+def check_core_floor_baseline(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
+    """A012 — the declared Core floor is at or above the organisation baseline.
+
+    A003 already fails a Core dependency that pins no bound at all, so this rule
+    stays silent in that case: one gap, one finding. What it adds is the ratchet.
+    The floor a repository has to *declare* and the floor the organisation has
+    agreed to *sit at* are different numbers, and only the second one moves the
+    fleet.
+
+    ``core_floor_baseline`` is the highest floor any adapter already declares, so
+    the target is reachable on the day the rule lands rather than aspirational —
+    a baseline nobody meets is noise, not a signal. ``core_floor_target`` is where
+    the shared Install SOP API becomes unconditionally available; sitting above
+    the baseline but short of the target is a notice, which is reported but can
+    never fail a run.
+    """
     rule = contract.rules["A012"]
-    manifest = str((contract.value("adapter_python_package") or {}).get("manifest", "pyproject.toml"))
-    if not (root / manifest).is_file():
-        return []
-    dependency = _core_dependency(root, contract)
-    if dependency is None:
-        return []
-    specifier, lower = dependency
-    if lower is None:
-        return [
-            Finding(
-                rule["id"],
-                rule["name"],
-                rule["severity"],
-                manifest,
-                (
-                    f"the core dependency is declared as `{specifier}` with no lower bound; "
-                    "declare `dcc-mcp-core>=<version>` so the resolved core is "
-                    "reproducible instead of whatever happens to be latest"
-                ),
-            )
-        ]
     baseline_value = contract.value("core_floor_baseline")
     target_value = contract.value("core_floor_target")
+    if not baseline_value and not target_value:
+        return []
+    data = _pyproject(contract, ctx)
+    names = {name.lower() for name in contract.value("core_distributions", [])}
+    tables = contract.value("core_dependency_tables", [])
+    operators = list(contract.value("core_floor_operators", [">="]))
+    name = contract.value("pyproject_file", "pyproject.toml")
+
+    declared = False
+    best: tuple[tuple[int, ...], str] | None = None
+    for table_name in tables:
+        for requirement in _requirement_strings(_value(data, table_name)):
+            distribution = re.split(r"[<>=!~;\s\[]", requirement, maxsplit=1)[0].strip()
+            if distribution.lower() not in names:
+                continue
+            declared = True
+            for version in _floor_versions(requirement, operators):
+                parsed = _version_tuple(version)
+                if parsed and (best is None or _version_cmp(parsed, best[0]) > 0):
+                    best = (parsed, version)
+    if not declared or best is None:
+        # No Core dependency at all (out of scope), or A003 is already reporting
+        # the missing bound.
+        return []
+
     baseline = _version_tuple(baseline_value) if baseline_value else None
     target = _version_tuple(target_value) if target_value else None
-    actual = _version_tuple(lower)
-    if baseline is not None and _version_cmp(actual, baseline) < 0:
+    if baseline and _version_cmp(best[0], baseline) < 0:
         return [
             Finding(
                 rule["id"],
                 rule["name"],
                 rule["severity"],
-                "pyproject.toml",
+                name,
                 (
-                    f"declared core floor `{lower}` (from `{specifier}`) is "
-                    f"below the organisation baseline `{baseline_value}`; the 2026-10-02 "
-                    "sweep spans 54 patch versions, from >=0.18.2 to >=0.20.36"
+                    f"declared Core floor `{best[1]}` is below the organisation baseline "
+                    f"`{baseline_value}`; the fleet spans 54 patch versions from "
+                    ">=0.18.2 (dcc-mcp-powerpoint) to >=0.20.36"
                 ),
             )
         ]
-    if target is not None and _version_cmp(actual, target) < 0:
-        # Advisory only. The baseline is met, so this never fails the build; it
-        # records that the new Install SOP API is not unconditionally available.
+    if target and _version_cmp(best[0], target) < 0:
         return [
             Finding(
                 rule["id"],
                 rule["name"],
                 "notice",
-                "pyproject.toml",
+                name,
                 (
-                    f"declared core floor `{lower}` meets the baseline `{baseline_value}` "
-                    f"but is below the target `{target_value}`; "
+                    f"declared Core floor `{best[1]}` meets the baseline "
+                    f"`{baseline_value}` but is below the target `{target_value}`; "
                     "`install_sop_report_schema_version()` and "
-                    "`validate_install_sop_report()` need core 0.20.40"
+                    "`validate_install_sop_report()` are only present from 0.20.40"
                 ),
             )
         ]
     return []
 
 
-def check_doctor_module_present(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
-    rule = contract.rules["A013"]
-    globs = contract.value("scan_source_globs", [])
-    excludes = contract.value("scan_exclude_dirs", [])
-    source_files = list(_iter_repo_files(root, globs, excludes))
-    if not _has_install_sop_surface(root, contract, source_files):
+def _line_length_finding(
+    rule: dict, path: str, target: object, declared: object
+) -> list[Finding]:
+    """The single verdict A004 renders, wherever line-length was declared.
+
+    ``path`` is the file the setting was read from, so the finding points at the
+    file a contributor actually has to edit.
+    """
+    if declared is None:
+        return [
+            Finding(
+                rule["id"],
+                rule["name"],
+                rule["severity"],
+                path,
+                (
+                    f"declares no line-length; set `line-length = {target}` to match "
+                    "the organisation baseline"
+                ),
+            )
+        ]
+    try:
+        value = int(str(declared).strip())
+    except ValueError:
+        return [
+            Finding(
+                rule["id"],
+                rule["name"],
+                rule["severity"],
+                path,
+                f"line-length = {declared!r} is not an integer",
+            )
+        ]
+    if value == int(target):
         return []
+    return [
+        Finding(
+            rule["id"],
+            rule["name"],
+            rule["severity"],
+            path,
+            (
+                f"line-length = {value}; converge on {target} (core, maya, blender, houdini, "
+                "nuke, zbrush and substance3d-* already use it)"
+            ),
+        )
+    ]
+
+
+def check_ruff_line_length(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
+    """A004 — the ruff line-length converges on one value.
+
+    The setting is read the way ruff itself resolves it: a standalone
+    ``ruff.toml`` (or ``.ruff.toml``) wins, and only then does the
+    ``[tool.ruff]`` table in pyproject.toml apply. A repository that moves its
+    configuration into ``ruff.toml`` would otherwise be reported as "declares no
+    line-length" when the setting is simply in the other file.
+
+    Two gaps belong to other rules and are deliberately left silent here:
+    a missing pyproject.toml is A005's, and a repository with no ruff
+    configuration at all is A021's. One gap, one finding.
+    """
+    rule = contract.rules["A004"]
+    target = contract.value("ruff_line_length_target", 120)
+    table_name = contract.value("ruff_line_length_table", "tool.ruff")
+    name = contract.value("pyproject_file", "pyproject.toml")
+
+    for standalone in contract.value("ruff_standalone_configs", []):
+        path = root / standalone
+        if not path.is_file():
+            continue
+        parsed = parse_vx_toml(_read_text(path) or "")[0]
+        settings = _table_settings(parsed)
+        if not settings:
+            # An empty or nested-only standalone file declares nothing, and A021
+            # reports it: there is no line-length here to be wrong about.
+            return []
+        declared = settings.get("line-length")
+        return _line_length_finding(rule, standalone, target, declared)
+
+    data = _pyproject(contract, ctx)
+    if not data:
+        # A005 already reports the missing pyproject.toml; piling a second
+        # finding on it would say the same thing twice.
+        return []
+    table = _ruff_table(data, table_name)
+    if not _table_settings(table):
+        # No [tool.ruff] table and no standalone file: A021 owns that gap.
+        # An empty or nested-only table lands in the same branch, and it has to
+        # stay silent here for the same reason -- there is no line-length to be
+        # wrong about, and A021 now names the empty table itself.
+        return []
+    return _line_length_finding(rule, name, target, table.get("line-length"))
+
+
+def check_requires_python_declared(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
+    """A005 — project.requires-python is declared (visibility only).
+
+    The value is deliberately not checked. Host-side constraints differ
+    legitimately and the organisation Python 3.7 red line runs to 2026-12-31.
+    """
+    rule = contract.rules["A005"]
+    table_name = contract.value("requires_python_table", "project")
+    key = contract.value("requires_python_key", "requires-python")
+    name = contract.value("pyproject_file", "pyproject.toml")
+    data = _pyproject(contract, ctx)
+    if not data:
+        return [
+            Finding(
+                rule["id"],
+                rule["name"],
+                rule["severity"],
+                name,
+                "no pyproject.toml, so the Python support range is invisible to pip",
+            )
+        ]
+    table = _table(data, table_name)
+    if str(table.get(key, "")).strip():
+        return []
+    return [
+        Finding(
+            rule["id"],
+            rule["name"],
+            rule["severity"],
+            name,
+            (
+                f"[{table_name}] does not declare {key}; pip will install this package on any "
+                "interpreter the wheel accepts"
+            ),
+        )
+    ]
+
+
+def check_pre_commit_config_exists(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
+    """A006 — .pre-commit-config.yaml exists, so ruff runs before the push."""
+    rule = contract.rules["A006"]
+    candidates = contract.value("pre_commit_configs", [".pre-commit-config.yaml"])
+    if any((root / candidate).is_file() for candidate in candidates):
+        return []
+    return [
+        Finding(
+            rule["id"],
+            rule["name"],
+            rule["severity"],
+            candidates[0] if candidates else ".pre-commit-config.yaml",
+            (
+                "no pre-commit configuration; the ruff settings in pyproject.toml then run only "
+                "in CI, after the push"
+            ),
+        )
+    ]
+
+
+def _install_sop_sources(
+    root: Path, contract: Contract, ctx: dict, rule: dict
+) -> tuple[list[tuple[Path, str]] | None, list[Finding]]:
+    """Scan once, then answer whether this repository is in scope.
+
+    The sources are ``None`` when the repository has no Install SOP surface, so
+    that both report rules stay silent for the adapters that never install
+    anything. The scan notices are returned either way: a skipped file is a blind
+    spot for the whole run, not for one rule.
+    """
+    modules, notices = _prepare_scan(root, contract, ctx, rule)
+    sources = _source_texts(modules)
+    if not _has_install_sop_surface(root, contract, sources):
+        return None, notices
+    return sources, notices
+
+
+def check_doctor_module_present(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
+    """A013 — an adapter that installs ships a `doctor` self-check module.
+
+    The doctor is where an adapter assembles its Install SOP report and, ideally,
+    validates it before it is published. 8 of the 50 swept adapters have one, so
+    this is a convergence warning rather than a baseline error: the gate reports
+    the gap instead of blocking a release.
+
+    Known boundary: the module is matched by name, so a `doctor` that does not
+    validate a report satisfies the rule, and `install_preflight_docs.py` matches
+    `src/**/install*.py` even though it only documents a preflight. Both are
+    acceptable at warning severity, where the finding is a starting point.
+    """
+    rule = contract.rules["A013"]
+    sources, notices = _install_sop_sources(root, contract, ctx, rule)
+    if sources is None:
+        return list(notices)
     for pattern in contract.value("a013_doctor_module_globs", []):
         if any(root.glob(pattern)):
-            return []
+            return list(notices)
     anchor = "src"
     for pattern in contract.value("install_source_globs", []):
         matches = sorted(root.glob(pattern))
@@ -1347,6 +1645,7 @@ def check_doctor_module_present(root: Path, contract: Contract, ctx: dict) -> li
             anchor = _rel(root, matches[0])
             break
     return [
+        *notices,
         Finding(
             rule["id"],
             rule["name"],
@@ -1355,31 +1654,43 @@ def check_doctor_module_present(root: Path, contract: Contract, ctx: dict) -> li
             (
                 "this adapter provides install capability but ships no `doctor` "
                 "self-check module; add one that assembles the Install SOP report and "
-                "validates it with `validate_install_sop_report()` (8 of 50 adapters "
-                "have one today)"
+                "validates it with `validate_install_sop_report()` (8 of 50 adapters had "
+                "one when the rule was written)"
             ),
-        )
+        ),
     ]
 
 
 def check_report_validates_against_schema(
     root: Path, contract: Contract, ctx: dict
 ) -> list[Finding]:
+    """A014 — a real report is validated with `validate_install_sop_report()`.
+
+    A schema nobody checks is a claim, not a contract: every adapter in the
+    PIP-3990 incident shipped a schema and none of them ran a report through it,
+    which is how the wrong value reached a release. The validation has to live in
+    a test or in a CI workflow, because those are the only places that run before
+    the artefact is published.
+
+    Known boundary: the symbol is matched as text, so an occurrence in a comment
+    or in a `TODO` satisfies the rule. That trades a false negative for a false
+    positive on a warning-severity rule, which is the same trade the ratchet plan
+    makes everywhere.
+    """
     rule = contract.rules["A014"]
-    globs = contract.value("scan_source_globs", [])
-    excludes = contract.value("scan_exclude_dirs", [])
-    source_files = list(_iter_repo_files(root, globs, excludes))
-    if not _has_install_sop_surface(root, contract, source_files):
-        return []
-    symbols = set(contract.value("a014_validator_symbols", []))
-    if not symbols:
-        return []
-    pattern = re.compile("|".join(r"\b" + re.escape(name) + r"\b" for name in sorted(symbols)))
-    for path in _iter_repo_files(root, contract.value("a014_scan_globs", []), excludes):
-        text = _read_text(path)
-        if text and pattern.search(text):
-            return []
+    sources, notices = _install_sop_sources(root, contract, ctx, rule)
+    if sources is None:
+        return list(notices)
+    symbols = [name for name in contract.value("a014_validator_symbols", []) if name]
+    if symbols:
+        pattern = re.compile("|".join(r"\b" + re.escape(name) + r"\b" for name in symbols))
+        for path_glob in contract.value("a014_scan_globs", []):
+            for path in sorted(root.glob(path_glob)):
+                text = _read_text(path)
+                if text and pattern.search(text):
+                    return list(notices)
     return [
+        *notices,
         Finding(
             rule["id"],
             rule["name"],
@@ -1390,12 +1701,11 @@ def check_report_validates_against_schema(
                 "`validate_install_sop_report()`; schema compliance is only claimed, and "
                 "that is how the PIP-3990 defect reached a release"
             ),
-        )
+        ),
     ]
 
 
 RULES: dict[str, Callable[[Path, Contract, dict], list[Finding]]] = {
-    "A001": check_adapter_python_package,
     "R001": check_no_root_artifacts,
     "R002": check_justfile_lowercase,
     "R003": check_agents_md_exists,
@@ -1406,12 +1716,33 @@ RULES: dict[str, Callable[[Path, Contract, dict], list[Finding]]] = {
     "R008": check_agents_derived_symlink,
     "R009": check_tools_no_latest,
     "R010": check_llms_txt_fresh,
-    "A010": check_no_deprecated_schema_alias,
-    "A011": check_report_schema_version_source,
-    "A012": check_core_floor_policy,
+    "R011": check_no_tracked_agent_dirs,
+    "A001": check_no_deprecated_install_sop_alias,
+    "A002": check_no_hand_rolled_report_schema_version,
+    "A003": check_core_floor_declared,
+    "A012": check_core_floor_baseline,
+    "A004": check_ruff_line_length,
+    "A005": check_requires_python_declared,
+    "A006": check_pre_commit_config_exists,
     "A013": check_doctor_module_present,
     "A014": check_report_validates_against_schema,
 }
+
+
+def all_rules() -> dict[str, Callable[..., list[Finding]]]:
+    """Every rule the checker can dispatch, across every contract.
+
+    ``RULES`` stays exactly the rule set of contract/repo_contract.json so that
+    "every contract rule has an implementation" keeps a precise meaning. Rules
+    for other contracts live in their own modules -- the adapter families under
+    ``adapter_contract_rules`` -- and are imported here rather than at module
+    scope, because those modules import ``Finding`` and ``Contract`` back out of
+    this one and a module-level import would be a cycle.
+    """
+    from adapter_contract_rules import ADAPTER_RULES
+    from adapter_package_rules import PACKAGE_RULES
+
+    return {**RULES, **ADAPTER_RULES, **PACKAGE_RULES}
 
 
 # ----------------------------------------------------------------------- driver
@@ -1440,7 +1771,7 @@ def resolve_plan(
     plan = {}
     for rule_id in sorted(selected):
         rule = contract.rules[rule_id]
-        handler = RULES.get(rule_id)
+        handler = all_rules().get(rule_id)
         if handler is None:
             raise ContractError(
                 f"contract defines rule {rule_id} but no checker implements it"
@@ -1455,23 +1786,22 @@ def run_checks(
 ) -> list[Finding]:
     files, dirs = _top_level_entries(root)
     ctx: dict[str, Any] = {
+        "root": root,
         "files": files,
         "dirs": dirs,
         "justfile": _find_justfile(files),
         "allow_extra": list(allow_extra),
-        # Populated by A001 when the repository ships a pyproject.toml, so later
-        # adapter rules can read the parsed manifest instead of parsing it again,
-        # and can stay silent on a repository that turns out not to be an adapter.
-        "pyproject": {},
-        "adapter_applicable": False,
-        "adapter_dependencies": [],
     }
     vx_toml = root / "vx.toml"
-    ctx["vx"] = (
-        parse_vx_toml(vx_toml.read_text(encoding="utf-8", errors="replace"))[0]
-        if vx_toml.is_file()
-        else {}
-    )
+    if vx_toml.is_file():
+        parsed, _unparsed, positions = parse_vx_toml(
+            vx_toml.read_text(encoding="utf-8", errors="replace")
+        )
+        ctx["vx"] = parsed
+        ctx["vx_positions"] = positions
+    else:
+        ctx["vx"] = {}
+        ctx["vx_positions"] = {}
 
     findings: list[Finding] = []
     for rule_id, (handler, severity) in plan.items():

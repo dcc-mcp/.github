@@ -1,144 +1,157 @@
 {
-  "contract_version": "0.1.0",
-  "updated": "2026-10-02",
+  "contract_version": "1.1.0",
+  "updated": "2026-10-03",
   "owner": "dcc-mcp/.github",
   "source_issue": "PIP-4104",
-  "description": "Machine-readable definition of the dcc-mcp adapter contract: the rules that only apply to the Python adapter packages, not to every repository in the organisation. Consumed by scripts/check_repo_contract.py --contract (CI gate) and by the vx-repo-contract skill (local check). Both read this file, so the pass/fail criteria are defined exactly once. Rule ids use the A0xx namespace so they can never collide with the R0xx rules in contract/repo_contract.json.",
+  "description": "Machine-readable definition of the dcc-mcp Python adapter contract: the interface rules that keep 51 adapter packages from re-inventing the same Core API, and the code-convention rules that keep their pyproject.toml files comparable. Consumed by scripts/check_repo_contract.py --contract and by the nightly sweep in .github/workflows/adapter-contract-nightly.yml. Rule ids use the A0xx namespace so that a repository can run this contract alongside contract/repo_contract.json (R0xx) without ambiguity.",
   "profiles": {
-    "baseline": "Rules that every registered adapter package is expected to satisfy today. A repository starts here and ratchets up.",
-    "strict": "All rules including the ones still being rolled out by PIP-4106. Opt in per repository once it is clean."
+    "baseline": "Rules every Python adapter package satisfies today. Two interface rules that are mechanically decidable and safe to enforce immediately (no Core floor bump needed).",
+    "strict": "Adds the convergence rules. Everything here is a warning on purpose: this profile is the stock-take list for PIP-4101, not a same-day blocker. Promote a rule with --error-rule once its owning repository is clean."
   },
   "rules": [
     {
       "id": "A001",
+      "name": "no-deprecated-install-sop-alias",
+      "title": "Adapter code never references Core's deprecated Install SOP alias",
+      "severity": "error",
+      "profiles": ["baseline", "strict"],
+      "source": "PIP-4104",
+      "summary": "Core 0.20.40 renamed INSTALL_SOP_SCHEMA_VERSION to INSTALL_SOP_SCHEMA_REVISION and serves the old name through a __getattr__ that raises DeprecationWarning. The old name is the schema *artifact* revision, not the report field: copying it into a report's schema_version is the defect PIP-4047/4048/4049/4050/4051 fixed one repository at a time. Removing the reference needs no Core floor bump, because every existing reference already sits behind a try/except ImportError fallback."
+    },
+    {
+      "id": "A002",
+      "name": "no-hand-rolled-report-schema-version",
+      "title": "The report schema version is read from Core, not re-declared locally",
+      "severity": "warning",
+      "profiles": ["strict"],
+      "source": "PIP-4104",
+      "summary": "A module-level `*_REPORT_SCHEMA_VERSION = <int>` is a hand-written copy of what install_sop_report_schema_version() now returns by reading the schema `const`. Every copy is a second source of truth that drifts the day Core republishes the artifact. Warns only: converging these needs the Core floor raised to >=0.20.40 first, which PIP-4101 owns."
+    },
+    {
+      "id": "A003",
+      "name": "core-floor-declared",
+      "title": "A declared dcc-mcp-core dependency pins an explicit lower bound",
+      "severity": "error",
+      "profiles": ["baseline", "strict"],
+      "source": "PIP-4104",
+      "summary": "Reads [project.dependencies] and [tool.poetry.dependencies] only. An unversioned `dcc-mcp-core` resolves to whatever happens to be installed, which is how the 54-patch floor spread (>=0.18.2 .. >=0.20.36) appeared. A repository that declares no Core dependency at all is out of scope and is skipped rather than failed."
+    },
+    {
+      "id": "A012",
+      "name": "core-floor-baseline",
+      "title": "The declared dcc-mcp-core floor is at or above the organisation baseline",
+      "severity": "warning",
+      "profiles": ["strict"],
+      "source": "PIP-4106",
+      "summary": "A003 makes a lower bound mandatory; this rule decides whether the bound is high enough. core_floor_baseline (0.20.36) is the highest floor any adapter already declares, so the target is reachable the day the rule lands rather than aspirational — a baseline nobody meets is noise, not a signal. core_floor_target (0.20.40) is where the shared Install SOP API becomes unconditionally available; sitting above the baseline but short of the target is a notice, which is reported but can never fail a run. A Core dependency that pins no bound at all is left to A003, so one gap produces one finding."
+    },
+    {
+      "id": "A004",
+      "name": "ruff-line-length",
+      "title": "[tool.ruff] line-length is the organisation baseline",
+      "severity": "warning",
+      "profiles": ["strict"],
+      "source": "PIP-4104",
+      "summary": "Three values (100 / 110 / 120) coexist across the fleet. 120 is the baseline because core, maya, blender, houdini, nuke, zbrush, substance3d-* and touchdesigner already use it, so converging on 120 is the smallest diff. A repository with no [tool.ruff] line-length at all is reported as undeclared rather than as wrong, because the two need different fixes."
+    },
+    {
+      "id": "A005",
+      "name": "requires-python-declared",
+      "title": "project.requires-python is declared",
+      "severity": "warning",
+      "profiles": ["strict"],
+      "source": "PIP-4104",
+      "summary": "An undeclared requires-python lets pip install the package on any interpreter the wheel happens to accept. This rule deliberately does NOT pick a value: host-side constraints are legitimate (zbrush, wwise and obs need >=3.10), and the organisation Python 3.7 red line (PIP-2519) runs to 2026-12-31. Visibility only."
+    },
+    {
+      "id": "A006",
+      "name": "pre-commit-config-exists",
+      "title": ".pre-commit-config.yaml exists at the repository root",
+      "severity": "warning",
+      "profiles": ["strict"],
+      "source": "PIP-4104",
+      "summary": "Without it, the ruff settings in pyproject.toml only run in CI, so a contributor learns about a lint failure after pushing. 6 of 51 packages have one today."
+    },
+    {
+      "id": "A007",
       "name": "adapter-python-package",
-      "title": "A registered adapter is a Python package that depends on dcc-mcp-core",
+      "title": "A registered adapter is a Python package linked to Core",
       "severity": "warning",
       "profiles": [
         "baseline",
         "strict"
       ],
       "source": "PIP-4105",
-      "summary": "A repository swept by the adapter contract must ship a pyproject.toml that declares a dcc-mcp-core dependency, or be the core distribution itself. This is the applicability gate for every other A0xx rule: it carries no business constraint of its own, it proves the --contract dispatch reaches the registered repository."
-    },
-    {
-      "id": "A010",
-      "name": "no-deprecated-schema-alias",
-      "title": "Adapter code must not reference the deprecated INSTALL_SOP_SCHEMA_VERSION alias",
-      "severity": "error",
-      "profiles": [
-        "baseline",
-        "strict"
-      ],
-      "source": "PIP-4106",
-      "summary": "dcc-mcp-core 0.20.40 renamed the Install SOP artifact revision to INSTALL_SOP_SCHEMA_REVISION and kept INSTALL_SOP_SCHEMA_VERSION as a deprecated alias that emits a DeprecationWarning through __getattr__. Any identifier occurrence in adapter source or tests is a finding, except in a file that itself defines or serves the alias. Purely static, so it can be an error immediately: it does not depend on which core version resolves at runtime.",
-      "remediation": "Use INSTALL_SOP_SCHEMA_REVISION for the artifact revision, or install_sop_report_schema_version() for the report document's schema_version field. Do not rename blindly: PIP-3990 shipped because six adapters published the artifact revision as the report field, and renaming without fixing the value keeps the defect alive and hides it better."
+      "summary": "Advisory registration check: a pyproject manifest declares a Core dependency, or names an exempt provider. Optional/development declarations establish package applicability only; they do not satisfy A003 or A012 runtime floor requirements. Does not skip or weaken other rules."
     },
     {
       "id": "A011",
       "name": "report-schema-version-source",
-      "title": "The report schema_version field comes from the schema const, never from a literal or the artifact revision",
-      "severity": "warn",
+      "title": "Direct Install SOP report fields use the report schema version, not the artifact revision",
+      "severity": "warning",
       "profiles": [
         "strict"
       ],
       "source": "PIP-4106",
-      "summary": "In an Install SOP report envelope, schema_version must come from install_sop_report_schema_version() or from the schema's own properties.schema_version.const. Two failure modes are reported: binding the field to the artifact revision (the defect that shipped in PIP-3990), and hardcoding a literal integer. A hardcoded constant that a test pins to the schema const is accepted as guarded, because the drift this rule exists to catch is then caught by that test. Dicts without an Install SOP marker key are ignored, so an unrelated schema such as a deck IR or patch format is not reported. Known trade-off: the guard is matched by name across files, so a second unrelated constant that happens to share a guarded name is also excused. That is deliberate - the rule is a warning, and a gate people learn to ignore is worse than one that under-reports a defended adapter.",
-      "remediation": "Call install_sop_report_schema_version() from dcc_mcp_core.deployment. That function is only present from core 0.20.40, so an adapter whose declared core floor is lower needs either a guarded import or a floor bump first."
-    },
-    {
-      "id": "A012",
-      "name": "core-floor-policy",
-      "title": "The declared dcc-mcp-core floor is at or above the organisation baseline",
-      "severity": "warn",
-      "profiles": [
-        "strict"
-      ],
-      "source": "PIP-4106",
-      "summary": "The declared lower bound on the dcc-mcp-core dependency must be >= core_floor_baseline. The 2026-10-02 measurement spans 54 patch versions, from >=0.18.2 (dcc-mcp-powerpoint) to >=0.20.36 (autocad, cinema4d, freecad, openscad, sketchup). The baseline is the highest floor any adapter already declares, so the ratchet target is reachable today; core_floor_target records the floor needed for the new Install SOP API and is reported as an advisory when the baseline is met but the target is not. A dependency with no lower bound at all is reported too, because an unbounded floor silently accepts any core.",
-      "remediation": "Raise the floor to at least core_floor_target (0.20.40) so the shared Install SOP API is unconditionally available, and verify the adapter against that core before merging."
+      "summary": "Checks direct integer literals and imported Core artifact-revision references in schema_version fields of dictionaries with Install SOP marker keys. Complements A002 without reclassifying named constants. No cross-file value or test-guard inference; every warning requires review, and arbitrary dataflow is outside scope."
     },
     {
       "id": "A013",
       "name": "doctor-module-present",
       "title": "An adapter that provides install capability ships a doctor self-check module",
-      "severity": "warn",
-      "profiles": [
-        "strict"
-      ],
+      "severity": "warning",
+      "profiles": ["strict"],
       "source": "PIP-4106",
-      "summary": "An adapter whose source references the Install SOP contract or ships an install module should expose a doctor self-check. Only 8 of 50 adapters do (openusd, material-maker, wwise, freecad, sketchup, openscad, liquigen, capcut), so the rule is a warning and the gap is closed by ratchet. Adapters with no install surface at all are skipped rather than reported.",
+      "summary": "The doctor is where an adapter assembles its Install SOP report and validates it before the report is published. 8 of 51 adapters have one (openusd, material-maker, wwise, freecad, sketchup, openscad, liquigen, capcut), so the rule is a convergence warning and the gap closes by ratchet. Adapters with no install surface are skipped rather than reported. Existing A001-A006 remain unchanged; A007 checks applicability and A011 recovers the direct report-field gap from the original interface proposal.",
+      "known_boundaries": [
+        "The module is matched by name, so a doctor that assembles a report without validating it satisfies the rule.",
+        "install_source_globs matches src/**/install*.py, so install_preflight_docs.py counts as install capability while uninstall.py does not."
+      ],
       "remediation": "Add a doctor module that assembles the Install SOP report and validates it with validate_install_sop_report()."
     },
     {
       "id": "A014",
       "name": "report-validates-against-schema",
-      "title": "A real report is validated with validate_install_sop_report() somewhere in tests or CI",
-      "severity": "warn",
-      "profiles": [
-        "strict"
-      ],
+      "title": "A real report is validated with validate_install_sop_report() in tests or CI",
+      "severity": "warning",
+      "profiles": ["strict"],
       "source": "PIP-4106",
-      "summary": "An adapter that assembles an Install SOP report must validate a real report against the schema at least once, in a test or in a CI workflow. Without this the schema is only claimed, and the PIP-3990 class of defect is published silently: every adapter in that incident had a schema and none of them checked a report against it.",
+      "summary": "An adapter that assembles an Install SOP report has to validate a real report against the schema at least once, in a test or in a CI workflow: those are the only places that run before the artefact is published. Every adapter in the PIP-3990 incident shipped a schema and none of them ran a report through it, which is how the wrong value reached a release.",
+      "known_boundaries": [
+        "The validator is matched as text over the scan globs, so a mention in a comment or in a TODO line satisfies the rule."
+      ],
       "remediation": "Call validate_install_sop_report() on the report a doctor run actually produces, not on a hand-written fixture."
+    },
+    {
+      "id": "A021",
+      "name": "ruff-config-present",
+      "title": "The repository configures ruff",
+      "severity": "warn",
+      "profiles": ["strict"],
+      "source": "PIP-4107",
+      "summary": "A standalone ruff.toml or a [tool.ruff] section in pyproject.toml must exist. Without it ruff runs on its own defaults and the lint settings differ per developer."
+    },
+    {
+      "id": "A024",
+      "name": "release-please-present",
+      "title": "release-please config and manifest exist",
+      "severity": "warn",
+      "profiles": ["strict"],
+      "source": "PIP-4107",
+      "summary": "Every file in release_please_files must exist. release-please is how the org versions and publishes, so a repository without it releases by hand."
     }
   ],
-  "adapter_python_package": {
-    "manifest": "pyproject.toml",
-    "core_distribution_names": [
-      "dcc-mcp-core"
-    ],
-    "self_distributions": [
-      "dcc-mcp-core"
-    ],
-    "dependency_key_patterns": [
-      "^project\\.dependencies$",
-      "^project\\.optional-dependencies\\.",
-      "^build-system\\.requires$",
-      "^dependency-groups\\.",
-      "^tool\\.uv\\.dev-dependencies$",
-      "^tool\\.poetry\\.dependencies$",
-      "^tool\\.poetry\\.group\\..*\\.dependencies$"
-    ],
-    "distribution_name_key_patterns": [
-      "^project\\.name$",
-      "^tool\\.poetry\\.name$"
-    ]
+  "deprecated_symbols": {
+    "INSTALL_SOP_SCHEMA_VERSION": "Core 0.20.40 renamed it to INSTALL_SOP_SCHEMA_REVISION. The old name is the schema *artifact* revision, not the report's schema_version field: where the value genuinely means the artifact revision, rename it; where it feeds a report's schema_version or is a vestigial import, delete the reference and read the field from install_sop_report_schema_version() instead."
   },
-  "scan_source_globs": [
-    "src/**/*.py",
-    "python/**/*.py",
-    "tests/**/*.py",
-    "test/**/*.py",
-    "tools/**/*.py",
-    "scripts/**/*.py"
-  ],
-  "scan_exclude_dirs": [
-    ".git",
-    ".hg",
-    ".svn",
-    ".eggs",
-    ".mypy_cache",
-    ".nox",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".tox",
-    ".venv",
-    "__pycache__",
-    "build",
-    "dist",
-    "node_modules",
-    "site-packages",
-    "target",
-    "third_party",
-    "vendor",
-    "venv"
-  ],
-  "deprecated_schema_alias": "INSTALL_SOP_SCHEMA_VERSION",
-  "a010_exempt_path_globs": [
+  "provider_modules": ["dcc_mcp_core"],
+  "provider_package_dirs": [
     "python/dcc_mcp_core/**",
-    "tests/test_install_sop_contract.py"
+    "src/dcc_mcp_core/**",
+    "dcc_mcp_core/**",
+    "pkg/**/dcc_mcp_core/**"
   ],
+  "hand_rolled_schema_version_globs": ["*_REPORT_SCHEMA_VERSION", "*_SOP_SCHEMA_VERSION"],
   "install_sop_symbols": [
     "INSTALL_EXIT_OK",
     "INSTALL_EXIT_PREFLIGHT",
@@ -149,47 +162,88 @@
     "load_install_sop_schema",
     "validate_install_sop_report"
   ],
-  "install_source_globs": [
-    "src/**/install*.py",
-    "python/**/install*.py"
-  ],
-  "a011_schema_version_field": "schema_version",
-  "a011_schema_version_sources": [
-    "install_sop_report_schema_version"
-  ],
-  "a011_schema_const_reads": [
-    "install_sop_report_schema_version",
-    "load_install_sop_schema"
-  ],
-  "a011_artifact_revision_symbols": [
-    "INSTALL_SOP_SCHEMA_VERSION",
-    "INSTALL_SOP_SCHEMA_REVISION"
-  ],
-  "a011_report_marker_keys": [
-    "steps",
-    "next_steps",
-    "receipt_path"
-  ],
-  "a011_guard_globs": [
-    "tests/**/*.py",
-    "test/**/*.py"
-  ],
-  "a011_max_resolve_depth": 3,
-  "core_floor_baseline": "0.20.36",
-  "core_floor_target": "0.20.40",
+  "install_source_globs": ["src/**/install*.py", "python/**/install*.py"],
   "a013_doctor_module_globs": [
     "src/**/doctor.py",
     "src/**/doctor/__init__.py",
     "python/**/doctor.py",
     "python/**/doctor/__init__.py"
   ],
-  "a014_validator_symbols": [
-    "validate_install_sop_report"
-  ],
   "a014_scan_globs": [
     "tests/**/*.py",
     "test/**/*.py",
     ".github/workflows/*.yml",
     ".github/workflows/*.yaml"
+  ],
+  "a014_validator_symbols": ["validate_install_sop_report"],
+  "scan_suffixes": [".py", ".pyi"],
+  "scan_exclude_dirs": [
+    ".git",
+    ".hg",
+    ".svn",
+    ".venv",
+    "venv",
+    ".tox",
+    ".nox",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "node_modules",
+    "build",
+    "dist",
+    "target",
+    "third_party",
+    "vendor",
+    "_vendor",
+    "__pycache__",
+    "tests",
+    "test"
+  ],
+  "scan_exclude_globs": ["**/conftest.py"],
+  "scan_max_files": 20000,
+  "scan_max_file_bytes": 2000000,
+  "pyproject_file": "pyproject.toml",
+  "core_distributions": ["dcc-mcp-core", "dcc_mcp_core"],
+  "core_dependency_tables": ["project.dependencies", "tool.poetry.dependencies"],
+  "core_floor_operators": [">=", ">", "==", "~=", "~", "^"],
+  "core_floor_baseline": "0.20.36",
+  "core_floor_target": "0.20.40",
+  "ruff_line_length_target": 120,
+  "ruff_line_length_table": "tool.ruff",
+  "requires_python_table": "project",
+  "requires_python_key": "requires-python",
+  "pre_commit_configs": [
+    ".pre-commit-config.yaml",
+    ".pre-commit-config.yml"
+  ],
+  "ruff_standalone_configs": [
+    ".ruff.toml",
+    "ruff.toml"
+  ],
+  "release_please_files": ["release-please-config.json", ".release-please-manifest.json"],
+  "adapter_package_applicability": {
+    "distribution_name_keys": [
+      "project.name",
+      "tool.poetry.name"
+    ],
+    "self_distributions": [
+      "dcc-mcp-core"
+    ],
+    "dependency_key_patterns": [
+      "^project\\.dependencies$",
+      "^project\\.optional-dependencies\\.[^.]+$",
+      "^dependency-groups\\.[^.]+$",
+      "^tool\\.poetry\\.dependencies$"
+    ]
+  },
+  "report_schema_version_field": "schema_version",
+  "report_schema_marker_keys": [
+    "steps",
+    "next_steps",
+    "receipt_path"
+  ],
+  "report_schema_artifact_symbols": [
+    "dcc_mcp_core.deployment.INSTALL_SOP_SCHEMA_REVISION",
+    "dcc_mcp_core.deployment.INSTALL_SOP_SCHEMA_VERSION"
   ]
 }

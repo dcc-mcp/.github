@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import contextlib
 import io
-import itertools
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -20,28 +20,26 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from check_repo_contract import (  # noqa: E402
+    ADAPTER_CONTRACT_PATH,
     DEFAULT_CONTRACT_PATH,
     RULES,
+    all_rules,
     Contract,
     main,
     parse_vx_toml,
 )
 
 CONTRACT = str(DEFAULT_CONTRACT_PATH)
-ADAPTER_CONTRACT = str(ROOT / "contract" / "adapter_contract.json")
-ALL_CONTRACTS = [CONTRACT, ADAPTER_CONTRACT]
+ADAPTER_CONTRACT = str(ADAPTER_CONTRACT_PATH)
+ALL_CONTRACTS = (CONTRACT, ADAPTER_CONTRACT)
 
 
-def run_cli_with(contract: str, root: Path, *args: str) -> tuple[int, list[dict]]:
+def run_cli(root: Path, *args: str, contract: str = CONTRACT) -> tuple[int, list[dict]]:
     stdout, stderr = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
         code = main(["--root", str(root), "--contract", contract, "--format", "json", *args])
     payload = stdout.getvalue().strip()
     return code, (json.loads(payload) if payload else [])
-
-
-def run_cli(root: Path, *args: str) -> tuple[int, list[dict]]:
-    return run_cli_with(CONTRACT, root, *args)
 
 
 class FixtureRepo:
@@ -95,57 +93,90 @@ class ContractTestCase(unittest.TestCase):
 
 class TestContractFile(ContractTestCase):
     def test_every_rule_has_an_implementation(self) -> None:
-        # RULES spans both contracts: --contract picks a rule set, it does not
-        # have its own checker. So every declared rule must be implemented, and
-        # every handler must be claimed by some contract.
-        implemented: set[str] = set()
+        # all_rules(), not RULES: a rule family may live in its own module and
+        # be folded in by all_rules() rather than written into RULES directly.
         for path in ALL_CONTRACTS:
-            contract = Contract.load(Path(path))
-            self.assertLessEqual(set(contract.rules), set(RULES), path)
-            implemented |= set(contract.rules)
-        self.assertEqual(implemented, set(RULES))
+            with self.subTest(contract=path):
+                contract = Contract.load(Path(path))
+                self.assertEqual(set(contract.rules) - set(all_rules()), set())
 
-    def test_rule_namespaces_do_not_collide(self) -> None:
-        # R0xx is the repository contract, A0xx the adapter contract. A shared
-        # prefix would let --contract silently select the wrong rule.
-        seen: dict[str, set[str]] = {}
+    def test_every_implementation_is_declared_by_a_contract(self) -> None:
+        declared: set[str] = set()
         for path in ALL_CONTRACTS:
-            contract = Contract.load(Path(path))
-            seen[path] = {rule_id[0] for rule_id in contract.rules}
-        for left, right in itertools.combinations(ALL_CONTRACTS, 2):
-            self.assertEqual(seen[left] & seen[right], set(), f"{left} vs {right}")
+            declared |= set(Contract.load(Path(path)).rules)
+        self.assertEqual(set(all_rules()) - declared, set())
+
+    def test_the_two_contracts_do_not_share_rule_ids(self) -> None:
+        repo_rules = set(Contract.load(Path(CONTRACT)).rules)
+        adapter_rules = set(Contract.load(Path(ADAPTER_CONTRACT)).rules)
+        self.assertEqual(repo_rules & adapter_rules, set())
+        self.assertTrue(repo_rules)
+        self.assertTrue(adapter_rules)
 
     def test_every_rule_ids_are_unique_and_ordered(self) -> None:
         for path in ALL_CONTRACTS:
-            contract = Contract.load(Path(path))
-            ids = [rule["id"] for rule in contract.data["rules"]]
-            self.assertEqual(len(ids), len(set(ids)), path)
+            with self.subTest(contract=path):
+                contract = Contract.load(Path(path))
+                ids = [rule["id"] for rule in contract.data["rules"]]
+                self.assertEqual(len(ids), len(set(ids)))
 
     def test_severities_are_normalised(self) -> None:
         for path in ALL_CONTRACTS:
-            contract = Contract.load(Path(path))
-            for rule_id, rule in contract.rules.items():
-                self.assertIn(rule["severity"], {"error", "warning", "notice"}, f"{rule_id} in {path}")
+            with self.subTest(contract=path):
+                contract = Contract.load(Path(path))
+                for rule_id, rule in contract.rules.items():
+                    self.assertIn(rule["severity"], {"error", "warning", "notice"}, rule_id)
+
+    def test_every_contract_key_the_checkers_read_is_defined(self) -> None:
+        """A threshold the code reads has to exist in one of the contracts.
+
+        contract.value() takes a default, so a key that is misspelled or left
+        behind after a rename falls back silently and every test still passes.
+        This pins the vocabulary instead: the checkers may only read keys the
+        contracts actually declare.
+        """
+        declared: set[str] = set()
+        for path in ALL_CONTRACTS:
+            declared |= set(Contract.load(Path(path)).data)
+
+        referenced: set[str] = set()
+        for module in (
+            Path("scripts/check_repo_contract.py"),
+            Path("scripts/adapter_contract_rules.py"),
+            Path("scripts/adapter_package_rules.py"),
+        ):
+            source = (ROOT / module).read_text(encoding="utf-8")
+            referenced |= {
+                key
+                for key, default in re.findall(
+                    r'contract\.value\(\s*"([^"]+)"\s*(?:,\s*([^)]*))?\)', source
+                )
+            }
+        self.assertTrue(referenced, "the regex found no contract.value() calls")
+        self.assertEqual(referenced - declared, set())
+
+    def test_adapter_contract_baseline_is_enforceable_immediately(self) -> None:
+        """The two baseline rules need no Core floor bump to satisfy."""
+        contract = Contract.load(Path(ADAPTER_CONTRACT))
+        baseline = {
+            rule_id for rule_id, rule in contract.rules.items() if "baseline" in rule["profiles"]
+        }
+        self.assertEqual(baseline, {"A001", "A003", "A007"})
+        self.assertEqual(contract.rules["A007"]["severity"], "warning")
+        self.assertEqual(contract.rules["A001"]["severity"], "error")
+        self.assertEqual(contract.rules["A003"]["severity"], "error")
+
+    def test_line_length_rule_is_a_strict_warning(self) -> None:
+        contract = Contract.load(Path(ADAPTER_CONTRACT))
+        self.assertEqual(contract.rules["A004"]["severity"], "warning")
+        self.assertEqual(contract.rules["A004"]["profiles"], ["strict"])
+        self.assertEqual(contract.value("ruff_line_length_target"), 120)
 
     def test_emit_contract_round_trips(self) -> None:
-        for path in ALL_CONTRACTS:
-            stdout = io.StringIO()
-            with contextlib.redirect_stdout(stdout):
-                self.assertEqual(main(["--contract", path, "--emit-contract"]), 0)
-            self.assertEqual(
-                json.loads(stdout.getvalue()),
-                json.loads(Path(path).read_text(encoding="utf-8")),
-                path,
-            )
-
-    def test_a_rule_id_is_unknown_to_the_other_contract(self) -> None:
-        self.repo.clean()
-        stderr = io.StringIO()
-        with contextlib.redirect_stderr(stderr):
-            code = main(
-                ["--root", str(self.repo.root), "--contract", ADAPTER_CONTRACT, "--rule", "R001"]
-            )
-        self.assertEqual(code, 2)
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            self.assertEqual(main(["--contract", CONTRACT, "--emit-contract"]), 0)
+        self.assertEqual(json.loads(stdout.getvalue()), json.loads(Path(CONTRACT).read_text(encoding="utf-8")))
 
     def test_comma_separated_rule_ids_are_accepted(self) -> None:
         self.repo.clean()
@@ -175,7 +206,7 @@ class TestContractFile(ContractTestCase):
 
 class TestVxTomlParser(unittest.TestCase):
     def test_reads_tables_comments_and_scalars(self) -> None:
-        parsed, unparsed = parse_vx_toml(
+        parsed, unparsed, _ = parse_vx_toml(
             "\n".join(
                 [
                     "# leading comment",
@@ -196,20 +227,20 @@ class TestVxTomlParser(unittest.TestCase):
         self.assertIs(parsed["settings"]["auto_install"], True)
 
     def test_keeps_unquoted_versions_as_written(self) -> None:
-        parsed, _ = parse_vx_toml("[tools]\nrust = 1.90.0\n")
+        parsed, _, _ = parse_vx_toml("[tools]\nrust = 1.90.0\n")
         self.assertEqual(parsed["tools"]["rust"], "1.90.0")
 
     def test_dotted_sub_table_is_its_own_key(self) -> None:
-        parsed, _ = parse_vx_toml('[tools.pwsh]\nversion = "7.4.13"\n')
+        parsed, _, _ = parse_vx_toml('[tools.pwsh]\nversion = "7.4.13"\n')
         self.assertEqual(parsed["tools.pwsh"]["version"], "7.4.13")
 
     def test_reports_unparseable_lines(self) -> None:
-        _, unparsed = parse_vx_toml("[tools]\nthis is not toml\n")
+        _, unparsed, _ = parse_vx_toml("[tools]\nthis is not toml\n")
         self.assertEqual(len(unparsed), 1)
         self.assertEqual(unparsed[0][0], 2)
 
     def test_multi_line_string_is_one_value(self) -> None:
-        parsed, unparsed = parse_vx_toml(
+        parsed, unparsed, _ = parse_vx_toml(
             "\n".join(
                 [
                     "[scripts]",
@@ -225,7 +256,7 @@ class TestVxTomlParser(unittest.TestCase):
         self.assertEqual(parsed["scripts"]["other"], "x")
 
     def test_escaped_quotes_inside_a_string(self) -> None:
-        parsed, unparsed = parse_vx_toml(
+        parsed, unparsed, _ = parse_vx_toml(
             '[env]\nUE_5_ROOT = "C:\\\\Program Files\\\\Epic Games\\\\UE_5.7"\n'
         )
         self.assertEqual(unparsed, [])
@@ -237,7 +268,7 @@ class TestVxTomlParser(unittest.TestCase):
         self.assertEqual(run_cli(self.repo.root)[0], 0)
 
     def test_inline_table_reduces_to_its_version(self) -> None:
-        parsed, unparsed = parse_vx_toml(
+        parsed, unparsed, _ = parse_vx_toml(
             '[tools]\nrcedit = { version = "latest", os = ["windows"] }\n'
             'msvc = { version = "14.42", os = ["windows"] }\n'
         )
@@ -246,29 +277,58 @@ class TestVxTomlParser(unittest.TestCase):
         self.assertEqual(parsed["tools"]["msvc"], "14.42")
 
     def test_inline_table_without_a_version_is_left_alone(self) -> None:
-        parsed, _ = parse_vx_toml('[tools]\nfoo = { os = ["windows"] }\n')
+        parsed, _, _ = parse_vx_toml('[tools]\nfoo = { os = ["windows"] }\n')
         self.assertTrue(parsed["tools"]["foo"].startswith("{"))
 
     def test_project_table_is_known(self) -> None:
-        parsed, _ = parse_vx_toml('[project]\nname = "demo"\n\n[tools]\nnode = "22"\n')
+        parsed, _, _ = parse_vx_toml('[project]\nname = "demo"\n\n[tools]\nnode = "22"\n')
         self.assertEqual(parsed["project"]["name"], "demo")
         self.assertEqual(parsed["tools"]["node"], "22")
 
     def test_ignores_array_of_tables_headers(self) -> None:
         # Not supported, but it must not be reported as a value line either.
-        _, unparsed = parse_vx_toml("[[bin]]\nname = \"vx\"\n")
+        _, unparsed, _ = parse_vx_toml("[[bin]]\nname = \"vx\"\n")
         self.assertEqual([line for _, line in unparsed], ["[[bin]]"])
+
+    def test_records_the_line_of_every_table_and_key(self) -> None:
+        _, _, positions = parse_vx_toml(
+            "\n".join(
+                [
+                    "# leading comment",
+                    "[tools]",
+                    'just = "latest"',
+                    "",
+                    "[scripts]",
+                    'ci = "just ci"',
+                ]
+            )
+        )
+        self.assertEqual(positions["tools"], 2)
+        self.assertEqual(positions["tools.just"], 3)
+        self.assertEqual(positions["scripts"], 5)
+        self.assertEqual(positions["scripts.ci"], 6)
+
+    def test_a_multi_line_entry_points_at_its_first_line(self) -> None:
+        _, _, positions = parse_vx_toml(
+            "\n".join(["[scripts]", "build = '''", "python build.py", "'''", 'x = "y"'])
+        )
+        self.assertEqual(positions["scripts.build"], 2)
+        # The continuation lines are part of `build`, so the next entry starts
+        # after the closing delimiter rather than on the line after the key.
+        self.assertEqual(positions["scripts.x"], 5)
 
 
 class TestProfiles(ContractTestCase):
-    def test_baseline_only_runs_the_first_five_rules(self) -> None:
+    def test_baseline_runs_the_mechanical_rules(self) -> None:
+        # R007 joined the baseline: per-entry judging means every finding is a
+        # task defined twice, so it needs no opt-in to be trustworthy.
         self.repo.clean()
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):
             self.assertEqual(main(["--root", str(self.repo.root), "--contract", CONTRACT, "--profile", "baseline", "--list-rules"]), 0)
         self.assertEqual(
             set(line.split()[0] for line in stdout.getvalue().strip().splitlines()),
-            {"R001", "R002", "R003", "R004", "R005"},
+            {"R001", "R002", "R003", "R004", "R005", "R007"},
         )
 
     def test_strict_runs_every_rule(self) -> None:
@@ -276,9 +336,10 @@ class TestProfiles(ContractTestCase):
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):
             main(["--root", str(self.repo.root), "--contract", CONTRACT, "--profile", "strict", "--list-rules"])
-        contract = Contract.load(Path(CONTRACT))
-        expected = sum(1 for rule in contract.data["rules"] if "strict" in rule["profiles"])
-        self.assertEqual(len(stdout.getvalue().strip().splitlines()), expected)
+        self.assertEqual(
+            len(stdout.getvalue().strip().splitlines()),
+            len(Contract.load(Path(CONTRACT)).rules),
+        )
 
     def test_clean_fixture_passes_strict_with_zero_findings(self) -> None:
         self.repo.clean()
@@ -489,24 +550,117 @@ class TestR006RootAllowlist(ContractTestCase):
 
 
 class TestR007ScriptsVsJustfile(ContractTestCase):
-    def test_scripts_next_to_a_justfile_warns_per_entry(self) -> None:
+    def r007(self, findings) -> list[dict]:
+        return [item for item in findings if item["rule_id"] == "R007"]
+
+    def test_forwarding_to_just_is_reported(self) -> None:
         self.repo.clean()
-        self.repo.write("vx.toml", '[scripts]\nci = "just ci"\ntest = "just test"\n')
+        self.repo.write("vx.toml", '[scripts]\nci = "just ci"\nother = "vx just lint"\n')
+        code, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(code, 1)
+        found = self.r007(findings)
+        self.assertEqual(len(found), 2)
+        self.assertTrue(all("forwards to" in item["message"] for item in found))
+
+    def test_forwarding_survives_leading_whitespace_and_a_block(self) -> None:
+        self.repo.clean()
+        self.repo.write(
+            "vx.toml",
+            '[scripts]\n'
+            'block = """\n'
+            "    just docs\n"
+            '"""\n'
+            'indented = "   just fmt   "\n',
+        )
+        code, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(code, 1)
+        self.assertEqual(len(self.r007(findings)), 2)
+
+    def test_sharing_a_recipe_name_is_reported(self) -> None:
+        self.repo.clean()
+        self.repo.write("justfile", "lint:\n    @echo lint\n")
+        self.repo.write("vx.toml", '[scripts]\nlint = "uvx ruff check ."\n')
+        code, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(code, 1)
+        found = self.r007(findings)
+        self.assertEqual(len(found), 1)
+        self.assertIn("shares the name", found[0]["message"])
+
+    def test_dash_and_underscore_are_the_same_recipe(self) -> None:
+        self.repo.clean()
+        self.repo.write("justfile", "test-cov:\n    @echo cov\n")
+        self.repo.write("vx.toml", '[scripts]\ntest_cov = "pytest --cov"\n')
+        code, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(code, 1)
+        self.assertEqual(len(self.r007(findings)), 1)
+
+    def test_unrelated_entry_next_to_a_justfile_is_allowed(self) -> None:
+        """The whole point of per-entry judging: a real entry point is kept."""
+        self.repo.clean()
+        self.repo.write(
+            "vx.toml",
+            '[env]\nUE_ROOT = "C:/ue"\n\n'
+            '[scripts]\nbuild-ue = "RunUAT.bat BuildPlugin ${UE_ROOT}"\n',
+        )
         code, findings = run_cli(self.repo.root, "--profile", "strict")
         self.assertEqual(code, 0)
-        r007 = [item for item in findings if item["rule_id"] == "R007"]
-        self.assertEqual(len(r007), 2)
+        self.assertEqual(self.r007(findings), [])
 
     def test_scripts_without_a_justfile_are_allowed(self) -> None:
         self.repo.clean()
         (self.repo.root / "justfile").unlink()
         self.repo.write("vx.toml", '[scripts]\ncheck = "prek run --all-files"\n')
-        self.assertEqual(run_cli(self.repo.root, "--profile", "strict")[0], 0)
+        code, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.r007(findings), [])
 
     def test_empty_scripts_table_is_not_reported(self) -> None:
         self.repo.clean()
         self.repo.write("vx.toml", "[scripts]\n")
         self.assertEqual(run_cli(self.repo.root, "--profile", "strict")[0], 0)
+
+    def test_promoted_to_error_it_fails_the_run(self) -> None:
+        # R007 is an error on both profiles, so it fails without an override.
+        self.repo.clean()
+        self.repo.write("vx.toml", '[scripts]\nci = "just ci"\n')
+        self.assertEqual(run_cli(self.repo.root, "--profile", "strict")[0], 1)
+        self.assertEqual(run_cli(self.repo.root, "--profile", "baseline")[0], 1)
+
+    def test_demoted_to_warning_it_passes_the_run(self) -> None:
+        self.repo.clean()
+        self.repo.write("vx.toml", '[scripts]\nci = "just ci"\n')
+        code, findings = run_cli(
+            self.repo.root, "--profile", "baseline", "--warn-rule", "R007"
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(self.severities(self.r007(findings), "R007"), {"warning"})
+
+    def test_reports_the_line_of_each_entry(self) -> None:
+        # With 42 entries in one repository, naming the file 42 times is
+        # unusable; the finding has to point at the entry.
+        self.repo.clean()
+        self.repo.write(
+            "vx.toml",
+            '[tools]\npython = "3.12"\n\n'
+            '[scripts]\nlint = "uvx ruff check ."\nci = "just ci"\ntest = "just test"\n',
+        )
+        self.repo.write("justfile", "lint:\n    @echo lint\n")
+        _code, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(
+            sorted(item["path"] for item in self.r007(findings)),
+            ["vx.toml:5", "vx.toml:6", "vx.toml:7"],
+        )
+
+    def test_a_multi_line_entry_reports_its_first_line(self) -> None:
+        self.repo.clean()
+        self.repo.write(
+            "vx.toml",
+            "[scripts]\nrun = '''\n    just build\n'''\nkeep = \"prek run\"\n",
+        )
+        _code, findings = run_cli(self.repo.root, "--profile", "strict")
+        found = self.r007(findings)
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]["path"], "vx.toml:2")
 
 
 class TestR008AgentsDerived(ContractTestCase):
@@ -588,106 +742,73 @@ class TestR010LlmsTxt(ContractTestCase):
         self.assertIn("R010", self.ids(findings))
 
 
-class TestA001AdapterPythonPackage(ContractTestCase):
-    """A001 is the applicability gate for contract/adapter_contract.json."""
-
-    def adapter(self, *args: str) -> tuple[int, list[dict]]:
-        return run_cli_with(ADAPTER_CONTRACT, self.repo.root, *args)
-
-    def pyproject(self, body: str) -> None:
-        self.repo.write("pyproject.toml", body)
-
-    def test_baseline_is_a001_plus_the_statically_decidable_a010(self) -> None:
-        # A010 joins A001 in baseline because it is decided from source text
-        # alone: it needs no core at runtime, so it can fail the build at once.
-        # The remaining A0xx rules report the rollout gap and stay in strict.
-        stdout = io.StringIO()
-        with contextlib.redirect_stdout(stdout):
-            self.assertEqual(
-                main(["--contract", ADAPTER_CONTRACT, "--profile", "baseline", "--list-rules"]),
-                0,
-            )
-        self.assertEqual(
-            [line.split()[0] for line in stdout.getvalue().strip().splitlines()],
-            ["A001", "A010"],
-        )
-
-    def test_missing_pyproject_toml_warns(self) -> None:
+class TestR011TrackedAgentDirs(ContractTestCase):
+    def test_tracked_file_under_agent_dir_fails(self) -> None:
         self.repo.clean()
-        code, findings = self.adapter()
-        self.assertEqual(code, 0)
-        self.assertEqual(self.severities(findings, "A001"), {"warning"})
-        self.assertEqual(findings[0]["path"], "pyproject.toml")
-
-    def test_a_core_dependency_makes_the_repository_an_adapter(self) -> None:
-        self.repo.clean()
-        self.pyproject('[project]\nname = "dcc-mcp-maya"\ndependencies = ["dcc-mcp-core>=0.19.4"]\n')
-        code, findings = self.adapter()
-        self.assertEqual(code, 0)
-        self.assertEqual(findings, [])
-
-    def test_without_a_core_dependency_the_contract_does_not_apply(self) -> None:
-        self.repo.clean()
-        self.pyproject('[project]\nname = "dcc-mcp-runtime"\ndependencies = []\n')
-        _, findings = self.adapter()
-        self.assertEqual(self.severities(findings, "A001"), {"warning"})
-        self.assertIn("adapter_repositories.json", findings[0]["message"])
-
-    def test_the_core_distribution_is_exempt(self) -> None:
-        self.repo.clean()
-        self.pyproject(
-            '[project]\nname = "dcc-mcp-core"\nversion = "0.20.40"\n'
-            'dependencies = ["pydantic>=2"]\n'
-        )
-        self.assertEqual(self.adapter()[1], [])
-
-    def test_multi_line_array_with_a_pep_508_extra_is_read(self) -> None:
-        self.repo.clean()
-        self.pyproject(
-            '[project]\nname = "dcc-mcp-maya"\ndependencies = [\n'
-            '    "dcc-mcp-core[server]>=0.20.40",\n    "mcp>=1.0",\n]\n'
-        )
-        self.assertEqual(self.adapter()[1], [])
-
-    def test_dependency_groups_are_searched_too(self) -> None:
-        self.repo.clean()
-        self.pyproject(
-            '[project]\nname = "dcc-mcp-epic"\ndependencies = ["psutil>=5.9"]\n\n'
-            '[dependency-groups]\ndev = ["dcc-mcp-core", "pytest>=8"]\n'
-        )
-        self.assertEqual(self.adapter()[1], [])
-
-    def test_optional_dependencies_count(self) -> None:
-        self.repo.clean()
-        self.pyproject(
-            '[project.optional-dependencies]\nmcp = ["dcc-mcp-core>=0.20.40"]\n'
-        )
-        self.assertEqual(self.adapter()[1], [])
-
-    def test_environment_markers_are_stripped(self) -> None:
-        self.repo.clean()
-        self.pyproject(
-            '[project.optional-dependencies]\n'
-            'mcp = ["dcc-mcp-core>=0.20.40; python_version >= \'3.10\'"]\n'
-        )
-        self.assertEqual(self.adapter()[1], [])
-
-    def test_distribution_names_are_normalised(self) -> None:
-        self.repo.clean()
-        self.pyproject('[project]\nname = "dcc-mcp-maya"\ndependencies = ["dcc_mcp_core>=0.19.4"]\n')
-        self.assertEqual(self.adapter()[1], [])
-
-    def test_a_malformed_manifest_is_a_finding_not_a_crash(self) -> None:
-        self.repo.clean()
-        self.pyproject("[project\nname = broken\n")
-        _, findings = self.adapter()
-        self.assertEqual(self.severities(findings, "A001"), {"warning"})
-
-    def test_a001_can_be_promoted_to_an_error(self) -> None:
-        self.repo.clean()
-        code, findings = self.adapter("--error-rule", "A001")
+        self.repo.write(".claude/settings.json", "{}\n")
+        code, findings = run_cli(self.repo.root, "--profile", "strict")
         self.assertEqual(code, 1)
-        self.assertEqual(self.severities(findings, "A001"), {"error"})
+        r011 = [item for item in findings if item["rule_id"] == "R011"]
+        self.assertEqual([item["path"] for item in r011], [".claude/settings.json"])
+
+    def test_whole_skill_tree_is_reported(self) -> None:
+        self.repo.clean()
+        self.repo.write(".kimi/skills/code-review/SKILL.md", "# skill\n")
+        self.repo.write(".kimi/skills/code-review/scripts/collect_pr_context.py", "x\n")
+        _, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertEqual(
+            sorted(item["path"] for item in findings if item["rule_id"] == "R011"),
+            [
+                ".kimi/skills/code-review/SKILL.md",
+                ".kimi/skills/code-review/scripts/collect_pr_context.py",
+            ],
+        )
+
+    def test_empty_agent_dir_is_not_reported(self) -> None:
+        self.repo.clean()
+        self.repo.mkdir(".claude")
+        _, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertNotIn("R011", self.ids(findings))
+
+    def test_directory_warning_moves_to_r008_when_the_dir_is_empty(self) -> None:
+        """R008 warns on an empty agent dir; R011 takes over once files exist."""
+        self.repo.clean()
+        self.repo.mkdir(".claude")
+        _, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertIn("R008", self.ids(findings))
+        self.assertNotIn("R011", self.ids(findings))
+
+        self.repo.write(".claude/settings.json", "{}\n")
+        _, findings = run_cli(self.repo.root, "--profile", "strict")
+        self.assertIn("R011", self.ids(findings))
+        self.assertNotIn("R008", self.ids(findings))
+
+    def test_files_outside_agent_dirs_are_untouched(self) -> None:
+        self.repo.clean()
+        self.repo.write("skills/code-review/SKILL.md", "# skill\n")
+        self.assertEqual(run_cli(self.repo.root, "--profile", "strict")[0], 0)
+
+    def test_findings_are_capped(self) -> None:
+        self.repo.clean()
+        for index in range(25):
+            self.repo.write(f".cursor/skills/s{index}/SKILL.md", "# s\n")
+        _, findings = run_cli(self.repo.root, "--profile", "strict")
+        r011 = [item for item in findings if item["rule_id"] == "R011"]
+        self.assertEqual(len(r011), 21)
+        summaries = [item for item in r011 if "more" in item["message"]]
+        self.assertEqual(len(summaries), 1)
+        self.assertIn("5 more", summaries[0]["message"])
+
+    def test_baseline_profile_stays_green_while_the_rule_rolls_out(self) -> None:
+        self.repo.clean()
+        self.repo.write(".claude/settings.json", "{}\n")
+        self.assertEqual(run_cli(self.repo.root, "--profile", "baseline")[0], 0)
+
+    def test_rule_can_be_promoted_on_the_command_line(self) -> None:
+        self.repo.clean()
+        self.repo.write(".claude/settings.json", "{}\n")
+        code, _ = run_cli(self.repo.root, "--profile", "baseline", "--rule", "R011")
+        self.assertEqual(code, 1)
 
 
 class TestAnnotationOutput(ContractTestCase):
@@ -716,6 +837,700 @@ class TestAnnotationOutput(ContractTestCase):
         _, findings = run_cli(self.repo.root, "--profile", "strict")
         severities = [item["severity"] for item in findings]
         self.assertEqual(severities, sorted(severities, key=lambda s: s != "error"))
+
+
+class AdapterContractTestCase(ContractTestCase):
+    """Shared fixtures for the A0xx adapter contract."""
+
+    def adapter_clean(self, **ruff: str) -> None:
+        """A minimal Python adapter package that satisfies the strict profile."""
+        self.repo.clean()
+        body = "".join(f"{key} = {value}\n" for key, value in ruff.items())
+        self.repo.write(
+            "pyproject.toml",
+            "[project]\n"
+            'name = "dcc-mcp-demo"\n'
+            'requires-python = ">=3.9"\n'
+            'dependencies = ["dcc-mcp-core>=0.20.40,<1.0.0"]\n'
+            "\n[tool.ruff]\n"
+            f"line-length = {ruff.get('line-length', 120)}\n"
+            f"{body}",
+        )
+        self.repo.write("src/dcc_mcp_demo/__init__.py", "")
+        self.repo.write(".pre-commit-config.yaml", "repos: []\n")
+
+    def findings_for(self, rule_id: str, findings: list[dict]) -> list[dict]:
+        return [item for item in findings if item["rule_id"] == rule_id]
+
+
+class TestA001DeprecatedAlias(AdapterContractTestCase):
+    def test_clean_adapter_passes_baseline(self) -> None:
+        self.adapter_clean()
+        code, findings = run_cli(
+            self.repo.root, "--profile", "baseline", contract=ADAPTER_CONTRACT
+        )
+        self.assertEqual(code, 0, findings)
+
+    def test_import_from_the_provider_is_an_error(self) -> None:
+        self.adapter_clean()
+        self.repo.write(
+            "src/dcc_mcp_demo/install.py",
+            "from dcc_mcp_core.deployment import INSTALL_SOP_SCHEMA_VERSION\n",
+        )
+        code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 1)
+        self.assertEqual(self.severities(findings, "A001"), {"error"})
+        self.assertEqual(findings[0]["path"], "src/dcc_mcp_demo/install.py")
+
+    def test_guarded_import_and_its_fallback_are_both_reported(self) -> None:
+        """The fallback exists only to support the import; both must go."""
+        self.adapter_clean()
+        self.repo.write(
+            "src/dcc_mcp_demo/install.py",
+            "try:\n"
+            "    from dcc_mcp_core.deployment import (\n"
+            "        INSTALL_EXIT_OK,\n"
+            "        INSTALL_SOP_SCHEMA_VERSION,\n"
+            "    )\n"
+            "except ImportError:\n"
+            "    INSTALL_EXIT_OK = 0\n"
+            "    INSTALL_SOP_SCHEMA_VERSION = 1\n",
+        )
+        _, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        hits = self.findings_for("A001", findings)
+        self.assertEqual(len(hits), 1)
+        self.assertIn("L2", hits[0]["message"])
+        self.assertIn("L8", hits[0]["message"])
+
+    def test_module_qualified_attribute_access_is_reported(self) -> None:
+        self.adapter_clean()
+        self.repo.write(
+            "src/dcc_mcp_demo/install.py",
+            "import dcc_mcp_core.deployment as deployment\n"
+            "REVISION = deployment.INSTALL_SOP_SCHEMA_VERSION\n",
+        )
+        _, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(len(self.findings_for("A001", findings)), 1)
+
+    def test_a_mention_in_a_comment_or_docstring_is_not_a_reference(self) -> None:
+        """The six adapters that document *why* the alias is wrong are clean."""
+        self.adapter_clean()
+        self.repo.write(
+            "src/dcc_mcp_demo/install.py",
+            '"""Core exports ``INSTALL_SOP_SCHEMA_VERSION``; never use it."""\n'
+            "# INSTALL_SOP_SCHEMA_VERSION is the artifact revision, not the report field.\n"
+            'NAME = "INSTALL_SOP_SCHEMA_VERSION"\n',
+        )
+        code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 0, findings)
+        self.assertEqual(self.findings_for("A001", findings), [])
+
+    def test_a_similar_but_different_name_is_not_reported(self) -> None:
+        self.adapter_clean()
+        self.repo.write(
+            "src/dcc_mcp_demo/install.py",
+            "from dcc_mcp_core.deployment import _DEPRECATED_INSTALL_SOP_SCHEMA_VERSION\n"
+            "from dcc_mcp_core.deployment import INSTALL_SOP_SCHEMA_REVISION\n",
+        )
+        code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 0, findings)
+
+    def test_test_directories_are_out_of_scope(self) -> None:
+        """The guard tests must be able to name the alias they guard against."""
+        self.adapter_clean()
+        self.repo.write(
+            "tests/test_install_lifecycle.py",
+            "def test_alias_is_ignored(monkeypatch):\n"
+            '    monkeypatch.setattr(install, "INSTALL_SOP_SCHEMA_VERSION", 2)\n',
+        )
+        self.repo.write(
+            "src/dcc_mcp_demo/tests/test_helpers.py",
+            "from dcc_mcp_core.deployment import INSTALL_SOP_SCHEMA_VERSION\n",
+        )
+        code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 0, findings)
+        self.assertEqual(self.findings_for("A001", findings), [])
+
+    def test_the_provider_may_define_and_export_the_alias(self) -> None:
+        self.adapter_clean()
+        self.repo.write(
+            "python/dcc_mcp_core/deployment/install_sop.py",
+            "INSTALL_SOP_SCHEMA_VERSION = 2\n"
+            "from dcc_mcp_core.deployment.install_sop import INSTALL_SOP_SCHEMA_VERSION\n",
+        )
+        code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 0, findings)
+
+    def test_an_unparseable_file_is_reported_as_a_blind_spot(self) -> None:
+        self.adapter_clean()
+        self.repo.write("src/dcc_mcp_demo/broken.py", "def oops(:\n")
+        _, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        notices = [item for item in findings if item["severity"] == "notice"]
+        self.assertEqual(len(notices), 1)
+        self.assertIn("broken.py", notices[0]["path"])
+
+
+class TestA002HandRolledSchemaVersion(AdapterContractTestCase):
+    def test_hard_coded_report_schema_version_warns(self) -> None:
+        self.adapter_clean()
+        self.repo.write("src/dcc_mcp_demo/install.py", "FALLBACK_REPORT_SCHEMA_VERSION = 1\n")
+        code, findings = run_cli(
+            self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT
+        )
+        self.assertEqual(code, 0)
+        hits = self.findings_for("A002", findings)
+        self.assertEqual(len(hits), 1)
+        self.assertIn("FALLBACK_REPORT_SCHEMA_VERSION = 1", hits[0]["message"])
+
+    def test_an_unrelated_schema_constant_is_not_reported(self) -> None:
+        self.adapter_clean()
+        self.repo.write("src/dcc_mcp_demo/receipt.py", "RECEIPT_SCHEMA_VERSION = 3\n")
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        self.assertEqual(self.findings_for("A002", findings), [])
+
+    def test_a_non_integer_value_is_not_a_hard_coded_version(self) -> None:
+        self.adapter_clean()
+        self.repo.write(
+            "src/dcc_mcp_demo/install.py",
+            'FALLBACK_REPORT_SCHEMA_VERSION = "1"\nFALLBACK_REPORT_SCHEMA_VERSION_2 = True\n',
+        )
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        self.assertEqual(self.findings_for("A002", findings), [])
+
+    def test_a_schema_version_read_from_core_is_not_reported(self) -> None:
+        self.adapter_clean()
+        self.repo.write(
+            "src/dcc_mcp_demo/install.py",
+            "from dcc_mcp_core.deployment import install_sop_report_schema_version\n"
+            "REPORT_SCHEMA_VERSION = install_sop_report_schema_version()\n",
+        )
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        self.assertEqual(self.findings_for("A002", findings), [])
+
+
+class TestA003CoreFloor(AdapterContractTestCase):
+    def test_a_declared_lower_bound_passes(self) -> None:
+        self.adapter_clean()
+        code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 0, findings)
+
+    def test_an_unversioned_core_dependency_is_an_error(self) -> None:
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[project]\n"
+            'name = "dcc-mcp-demo"\n'
+            'requires-python = ">=3.9"\n'
+            "dependencies = [\n"
+            '    "dcc-mcp-core",\n'
+            '    "pydantic>=2",\n'
+            "]\n",
+        )
+        code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 1)
+        self.assertEqual(self.severities(findings, "A003"), {"error"})
+
+    def test_a_multiline_dependency_array_is_read(self) -> None:
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[project]\n"
+            'name = "dcc-mcp-demo"\n'
+            "dependencies = [\n"
+            '    "dcc-mcp-core>=0.20.36",   # same batch as dcc-mcp-server\n'
+            '    "pydantic>=2",\n'
+            "]\n",
+        )
+        code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 0, findings)
+
+    def test_a_comment_on_the_opening_line_does_not_hide_the_array(self) -> None:
+        """`dependencies = [  # note` must still parse as an array, not as `[`."""
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[project]\n"
+            'name = "dcc-mcp-demo"\n'
+            'requires-python = ">=3.9"\n'
+            "dependencies = [  # Core floor\n"
+            '    "dcc-mcp-core",\n'
+            '    "pydantic>=2",\n'
+            "]\n",
+        )
+        code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 1)
+        self.assertEqual(self.severities(findings, "A003"), {"error"})
+
+    def test_a_poetry_dependency_table_is_read(self) -> None:
+        """`[tool.poetry.dependencies]` is a table, so the floor lives in the value."""
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[tool.poetry]\n"
+            'name = "dcc-mcp-demo"\n'
+            "\n[tool.poetry.dependencies]\n"
+            'python = "^3.10"\n'
+            'dcc-mcp-core = "*"\n',
+        )
+        code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 1)
+        hits = self.findings_for("A003", findings)
+        self.assertEqual(len(hits), 1)
+        self.assertIn("tool.poetry.dependencies", hits[0]["message"])
+
+    def test_a_poetry_dependency_with_a_lower_bound_passes(self) -> None:
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[tool.poetry]\n"
+            'name = "dcc-mcp-demo"\n'
+            "\n[tool.poetry.dependencies]\n"
+            'python = "^3.10"\n'
+            'dcc-mcp-core = ">=0.20.40"\n',
+        )
+        code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 0, findings)
+
+    def test_a_poetry_declared_constraint_list_is_read(self) -> None:
+        """Poetry allows `dcc-mcp-core = [">=0.20.40", "<1.0.0"]`."""
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[tool.poetry]\n"
+            'name = "dcc-mcp-demo"\n'
+            "\n[tool.poetry.dependencies]\n"
+            'dcc-mcp-core = [">=0.20.40", "<1.0.0"]\n',
+        )
+        code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 0, findings)
+
+    def test_a_repository_without_core_is_out_of_scope(self) -> None:
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[project]\n"
+            'name = "dcc-mcp-demo"\n'
+            'requires-python = ">=3.9"\n'
+            'dependencies = ["pydantic>=2"]\n',
+        )
+        code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 0, findings)
+
+    def test_a_self_reference_in_an_extra_is_out_of_scope(self) -> None:
+        """`dcc-mcp-core[test]` in a dev extra is not a deployment requirement."""
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[project]\n"
+            'name = "dcc-mcp-core"\n'
+            'requires-python = ">=3.7"\n'
+            'dependencies = ["dcc-mcp-server>=0.18.17,<1.0.0"]\n'
+            "\n[project.optional-dependencies]\n"
+            'dev = ["dcc-mcp-core[test]"]\n',
+        )
+        code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 0, findings)
+
+
+class TestA012CoreFloorBaseline(AdapterContractTestCase):
+    """A012 — the declared floor is high enough, not merely declared.
+
+    A003 already fails an unversioned Core dependency, so this rule stays silent
+    there: one gap, one finding.
+    """
+
+    def strict(self) -> tuple[int, list[dict]]:
+        return run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+
+    def a012(self, findings: list[dict]) -> list[dict]:
+        return self.findings_for("A012", findings)
+
+    def core(self, requirements: str, table: str = "[project]") -> None:
+        header = table if table == "[project]" else table
+        body = (
+            f'name = "dcc-mcp-demo"\ndependencies = [\n{requirements}\n]\n'
+            if header == "[project]"
+            else f'name = "dcc-mcp-demo"\n{requirements}\n'
+        )
+        self.repo.write("pyproject.toml", f"{header}\n{body}")
+
+    def test_a_floor_at_the_target_passes(self) -> None:
+        self.adapter_clean()
+        _code, findings = self.strict()
+        self.assertEqual(self.a012(findings), [])
+
+    def test_a_floor_at_the_baseline_is_a_notice(self) -> None:
+        self.adapter_clean()
+        self.core('    "dcc-mcp-core>=0.20.36,<1.0.0",')
+        code, findings = self.strict()
+        self.assertEqual(self.severities(findings, "A012"), {"notice"})
+        self.assertEqual(code, 0, "a notice must never fail the build")
+
+    def test_a_floor_below_the_baseline_warns(self) -> None:
+        self.adapter_clean()
+        self.core('    "dcc-mcp-core>=0.18.2,<1.0.0",')
+        _code, findings = self.strict()
+        self.assertEqual(self.severities(findings, "A012"), {"warning"})
+        self.assertIn("0.20.36", self.a012(findings)[0]["message"])
+
+    def test_an_upper_bound_is_not_mistaken_for_a_floor(self) -> None:
+        # `,<1.0.0` must not be read as a 1.0.0 floor and mask the real one.
+        self.adapter_clean()
+        self.core('    "dcc-mcp-core>=0.19.0,<1.0.0",')
+        _code, findings = self.strict()
+        self.assertEqual(self.severities(findings, "A012"), {"warning"})
+
+    def test_the_highest_declared_bound_wins(self) -> None:
+        self.adapter_clean()
+        self.core('    "dcc-mcp-core>=0.18.2",\n    "dcc-mcp-core>=0.20.36",')
+        _code, findings = self.strict()
+        self.assertEqual(self.severities(findings, "A012"), {"notice"})
+
+    def test_a_caret_operator_is_a_floor(self) -> None:
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[tool.poetry.dependencies]\n"
+            'name = "dcc-mcp-demo"\n'
+            'dcc-mcp-core = "^0.18.2"\n',
+        )
+        _code, findings = self.strict()
+        self.assertEqual(self.severities(findings, "A012"), {"warning"})
+
+    def test_poetry_multi_constraint_uses_the_highest(self) -> None:
+        self.repo.write(
+            "pyproject.toml",
+            "[tool.poetry.dependencies]\n"
+            'name = "dcc-mcp-demo"\n'
+            'dcc-mcp-core = [">=0.18.2", "<1.0.0"]\n',
+        )
+        _code, findings = self.strict()
+        self.assertEqual(self.severities(findings, "A012"), {"warning"})
+
+    def test_an_unversioned_dependency_is_left_to_a003(self) -> None:
+        self.adapter_clean()
+        self.core('    "dcc-mcp-core",')
+        _code, findings = self.strict()
+        self.assertEqual(self.a012(findings), [])
+        self.assertEqual(self.severities(findings, "A003"), {"error"})
+
+    def test_a_repository_without_core_is_out_of_scope(self) -> None:
+        self.adapter_clean()
+        self.core('    "pydantic>=2",')
+        _code, findings = self.strict()
+        self.assertEqual(self.a012(findings), [])
+
+    def test_the_rule_is_not_in_the_baseline_profile(self) -> None:
+        self.adapter_clean()
+        self.core('    "dcc-mcp-core>=0.18.2,<1.0.0",')
+        _code, findings = run_cli(self.repo.root, contract=ADAPTER_CONTRACT)
+        self.assertEqual(self.a012(findings), [])
+
+
+class TestA004LineLength(AdapterContractTestCase):
+    def test_the_baseline_value_passes(self) -> None:
+        self.adapter_clean()
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        self.assertEqual(self.findings_for("A004", findings), [])
+
+    def test_a_divergent_value_warns(self) -> None:
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[project]\n"
+            'name = "dcc-mcp-demo"\n'
+            'requires-python = ">=3.9"\n'
+            'dependencies = ["dcc-mcp-core>=0.20.40"]\n'
+            "\n[tool.ruff]\n"
+            "line-length = 100\n",
+        )
+        code, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 0)
+        hits = self.findings_for("A004", findings)
+        self.assertEqual(len(hits), 1)
+        self.assertIn("line-length = 100", hits[0]["message"])
+        self.assertIn("120", hits[0]["message"])
+
+    def test_a_ruff_table_that_omits_line_length_is_reported(self) -> None:
+        # The table is there but silent on line-length, so ruff falls back to
+        # its own default of 88. That silence is the drift the rule exists for.
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[project]\n"
+            'name = "dcc-mcp-demo"\n'
+            'requires-python = ">=3.9"\n'
+            'dependencies = ["dcc-mcp-core>=0.20.40"]\n'
+            "\n[tool.ruff]\n"
+            'target-version = "py39"\n',
+        )
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        hits = self.findings_for("A004", findings)
+        self.assertEqual(len(hits), 1)
+        self.assertIn("declares no line-length", hits[0]["message"])
+        # The gap is not reported twice: A021 sees a ruff configuration.
+        self.assertEqual(self.findings_for("A021", findings), [])
+
+    def test_a_repository_with_no_ruff_table_is_left_to_a021(self) -> None:
+        # Used to be reported here as "declares no line-length". The setting
+        # cannot be wrong when it is nowhere, and A021 already reports it.
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[project]\n"
+            'name = "dcc-mcp-demo"\n'
+            'requires-python = ">=3.9"\n'
+            'dependencies = ["dcc-mcp-core>=0.20.40"]\n',
+        )
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        self.assertEqual(self.findings_for("A004", findings), [])
+        self.assertEqual(len(self.findings_for("A021", findings)), 1)
+
+    def test_a_repository_without_pyproject_is_left_to_a005(self) -> None:
+        self.repo.clean()
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        self.assertEqual(self.findings_for("A004", findings), [])
+
+    def test_a_standalone_ruff_toml_is_read_first(self) -> None:
+        # ruff resolves a standalone ruff.toml before pyproject.toml, so the
+        # gate has to as well -- otherwise a repository that moves its config
+        # is reported as "declares no line-length" when the value is simply in
+        # the other file.
+        self.adapter_clean()
+        self.repo.write("ruff.toml", 'line-length = 100\n\n[lint]\nselect = ["E"]\n')
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        hits = self.findings_for("A004", findings)
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["path"], "ruff.toml")
+        self.assertIn("line-length = 100", hits[0]["message"])
+
+    def test_a_standalone_ruff_toml_at_the_baseline_passes(self) -> None:
+        self.adapter_clean()
+        self.repo.write("ruff.toml", "line-length = 120\n")
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        self.assertEqual(self.findings_for("A004", findings), [])
+
+    def test_silent_when_there_is_no_ruff_config_at_all(self) -> None:
+        # A021 owns that gap; reporting it twice would double the backlog.
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[project]\n"
+            'name = "dcc-mcp-demo"\n'
+            'requires-python = ">=3.9"\n',
+        )
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        self.assertEqual(self.findings_for("A004", findings), [])
+        self.assertEqual(len(self.findings_for("A021", findings)), 1)
+
+    def test_a_real_core_shaped_pyproject_parses(self) -> None:
+        # Guards the lenient TOML parser against what the org actually ships:
+        # sub-tables, inline tables, multi-line arrays and trailing comments.
+        self.repo.clean()
+        self.repo.write(
+            "pyproject.toml",
+            "\n".join(
+                [
+                    "[build-system]",
+                    'requires = ["maturin>=1.0,<2.0"]',
+                    "",
+                    "[project]",
+                    'name = "dcc-mcp-core"',
+                    'version = "0.20.40" # x-release-please-version',
+                    'requires-python = ">=3.7"',
+                    "authors = [",
+                    '    {name = "Hal Long", email = "hal.long@outlook.com"}',
+                    "]",
+                    "dependencies = [",
+                    "    # a comment inside the array",
+                    '    "dcc-mcp-server>=0.18.17,<1.0.0",',
+                    "]",
+                    "",
+                    "[project.optional-dependencies]",
+                    "test = [",
+                    "    \"pytest>=8.3.0; python_version>='3.8'\",",
+                    "]",
+                    "",
+                    "[tool.ruff]",
+                    "line-length = 120",
+                    'target-version = "py37"',
+                    "",
+                    "[tool.ruff.lint]",
+                    'select = ["E", "F"]',
+                    "",
+                ]
+            ),
+        )
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        self.assertEqual(self.findings_for("A004", findings), [])
+
+
+class TestA005RequiresPython(AdapterContractTestCase):
+    def test_a_declared_range_passes(self) -> None:
+        self.adapter_clean()
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        self.assertEqual(self.findings_for("A005", findings), [])
+
+    def test_any_declared_value_is_accepted(self) -> None:
+        """The rule is about visibility; the host owns the value."""
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[project]\n"
+            'name = "dcc-mcp-demo"\n'
+            'requires-python = ">=3.10"\n'
+            'dependencies = ["dcc-mcp-core>=0.20.40"]\n'
+            "\n[tool.ruff]\nline-length = 120\n",
+        )
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        self.assertEqual(self.findings_for("A005", findings), [])
+
+    def test_a_missing_declaration_warns(self) -> None:
+        self.adapter_clean()
+        self.repo.write(
+            "pyproject.toml",
+            "[project]\n"
+            'name = "dcc-mcp-demo"\n'
+            'dependencies = ["dcc-mcp-core>=0.20.40"]\n'
+            "\n[tool.ruff]\nline-length = 120\n",
+        )
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        hits = self.findings_for("A005", findings)
+        self.assertEqual(len(hits), 1)
+        self.assertIn("requires-python", hits[0]["message"])
+
+
+class TestA006PreCommit(AdapterContractTestCase):
+    def test_a_pre_commit_config_passes(self) -> None:
+        self.adapter_clean()
+        _, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        self.assertEqual(self.findings_for("A006", findings), [])
+
+    def test_a_missing_config_warns(self) -> None:
+        self.adapter_clean()
+        (self.repo.root / ".pre-commit-config.yaml").unlink()
+        code, findings = run_cli(self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT)
+        self.assertEqual(code, 0)
+        hits = self.findings_for("A006", findings)
+        self.assertEqual(len(hits), 1)
+        self.assertIn(".pre-commit-config.yaml", hits[0]["path"])
+
+
+class TestA013DoctorModule(AdapterContractTestCase):
+    """A013 — an install adapter ships a doctor self-check."""
+
+    def install_surface(self) -> None:
+        """Give the fixture an Install SOP surface without tripping A001."""
+        self.repo.write(
+            "src/dcc_mcp_demo/install.py",
+            "from dcc_mcp_core.deployment import INSTALL_EXIT_OK\n",
+        )
+
+    def strict(self) -> list[dict]:
+        _code, findings = run_cli(
+            self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT
+        )
+        return findings
+
+    def test_an_adapter_without_an_install_surface_is_skipped(self) -> None:
+        self.adapter_clean()
+        self.assertEqual(self.findings_for("A013", self.strict()), [])
+
+    def test_an_install_module_without_a_doctor_warns(self) -> None:
+        self.adapter_clean()
+        self.install_surface()
+        hits = self.findings_for("A013", self.strict())
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["severity"], "warning")
+        self.assertEqual(hits[0]["path"], "src/dcc_mcp_demo/install.py")
+
+    def test_a_doctor_module_satisfies_the_rule(self) -> None:
+        self.adapter_clean()
+        self.install_surface()
+        self.repo.write("src/dcc_mcp_demo/doctor.py", "REPORT = {}\n")
+        self.assertEqual(self.findings_for("A013", self.strict()), [])
+
+    def test_a_doctor_package_satisfies_the_rule(self) -> None:
+        self.adapter_clean()
+        self.install_surface()
+        self.repo.write("src/dcc_mcp_demo/doctor/__init__.py", "")
+        self.assertEqual(self.findings_for("A013", self.strict()), [])
+
+    def test_a_module_named_for_installing_is_surface_enough(self) -> None:
+        """An adapter that has not adopted the shared symbols is still in scope."""
+        self.adapter_clean()
+        self.repo.write("src/dcc_mcp_demo/install.py", "STEPS = []\n")
+        hits = self.findings_for("A013", self.strict())
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["path"], "src/dcc_mcp_demo/install.py")
+
+    def test_an_unrelated_doctor_named_file_is_not_a_module(self) -> None:
+        self.adapter_clean()
+        self.install_surface()
+        self.repo.write("src/dcc_mcp_demo/doctor_notes.md", "# doctor\n")
+        self.assertEqual(len(self.findings_for("A013", self.strict())), 1)
+
+
+class TestA014ReportValidates(AdapterContractTestCase):
+    """A014 — a real report runs through validate_install_sop_report()."""
+
+    def install_surface(self) -> None:
+        self.repo.write(
+            "src/dcc_mcp_demo/install.py",
+            "from dcc_mcp_core.deployment import INSTALL_EXIT_OK\n",
+        )
+
+    def strict(self) -> list[dict]:
+        _code, findings = run_cli(
+            self.repo.root, "--profile", "strict", contract=ADAPTER_CONTRACT
+        )
+        return findings
+
+    def test_an_adapter_without_an_install_surface_is_skipped(self) -> None:
+        self.adapter_clean()
+        self.assertEqual(self.findings_for("A014", self.strict()), [])
+
+    def test_an_assembled_report_that_is_never_validated_warns(self) -> None:
+        self.adapter_clean()
+        self.install_surface()
+        hits = self.findings_for("A014", self.strict())
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["severity"], "warning")
+        self.assertEqual(hits[0]["path"], "tests")
+
+    def test_validation_in_a_test_satisfies_the_rule(self) -> None:
+        self.adapter_clean()
+        self.install_surface()
+        self.repo.write(
+            "tests/test_report.py",
+            "from dcc_mcp_core.deployment import validate_install_sop_report\n"
+            "def test_report():\n"
+            "    validate_install_sop_report(build())\n",
+        )
+        self.assertEqual(self.findings_for("A014", self.strict()), [])
+
+    def test_validation_in_a_workflow_satisfies_the_rule(self) -> None:
+        self.adapter_clean()
+        self.install_surface()
+        self.repo.write(
+            ".github/workflows/ci.yml",
+            "jobs:\n  check:\n    steps:\n      - run: python -c 'validate_install_sop_report(r)'\n",
+        )
+        self.assertEqual(self.findings_for("A014", self.strict()), [])
+
+    def test_a_different_validator_does_not_satisfy_the_rule(self) -> None:
+        self.adapter_clean()
+        self.install_surface()
+        self.repo.write("tests/test_report.py", "def test_report():\n    check(report)\n")
+        self.assertEqual(len(self.findings_for("A014", self.strict())), 1)
+
+    def test_a_longer_symbol_name_is_not_the_validator(self) -> None:
+        self.adapter_clean()
+        self.install_surface()
+        self.repo.write(
+            "tests/test_report.py", "def test_report():\n    validate_install_sop_report_v2(r)\n"
+        )
+        self.assertEqual(len(self.findings_for("A014", self.strict())), 1)
 
 
 class TestMatrix(unittest.TestCase):
@@ -794,17 +1609,6 @@ class TestMatrix(unittest.TestCase):
             )
         self.assertEqual(code, 2)
 
-    def test_excluded_repositories_are_kept_out_of_the_sweep(self) -> None:
-        # The eight dcc-mcp-* repositories that ship no pyproject.toml are listed
-        # in the manifest under `excluded` with a reason, so the decision not to
-        # sweep them is written down instead of silently lapsing.
-        manifest = json.loads((ROOT / "contract" / "adapter_repositories.json").read_text(encoding="utf-8"))
-        registered = {item["repository"] for item in manifest["repositories"]}
-        excluded = {item["repository"] for item in manifest["excluded"]}
-        self.assertEqual(registered & excluded, set())
-        for item in manifest["excluded"]:
-            self.assertTrue(item.get("reason"), item["repository"])
-
     def test_rejects_an_empty_manifest(self) -> None:
         stderr = io.StringIO()
         with contextlib.redirect_stderr(stderr):
@@ -814,309 +1618,37 @@ class TestMatrix(unittest.TestCase):
         self.assertEqual(code, 2)
 
 
-class InstallSopFixture(ContractTestCase):
-    """Scaffolding for the Install SOP family, A010-A014."""
+class TestAutomationWorkflowWiring(unittest.TestCase):
+    def setUp(self) -> None:
+        self.workflow = (ROOT / ".github/workflows/repo-contract.yml").read_text(encoding="utf-8")
 
-    def adapter_strict(self, *args: str) -> tuple[int, list[dict]]:
-        """Run the adapter contract in `strict`, where A011-A014 live."""
-        return run_cli_with(ADAPTER_CONTRACT, self.repo.root, "--profile", "strict", *args)
+    def test_call_and_dispatch_inputs_remain_identical(self) -> None:
+        call = self.workflow.split("  workflow_call:\n", 1)[1].split("  workflow_dispatch:\n", 1)[0]
+        dispatch = self.workflow.split("  workflow_dispatch:\n", 1)[1].split("\npermissions:\n", 1)[0]
+        self.assertEqual(call.strip(), dispatch.strip())
 
-    def install_surface(self) -> None:
-        """The smallest source set that makes A013 and A014 applicable."""
-        self.repo.write(
-            "src/demo_adapter/install.py",
-            "from dcc_mcp_core.deployment import INSTALL_EXIT_OK\n",
-        )
+    def test_inventory_step_remains_advisory_and_uses_sibling_checkout(self) -> None:
+        step = self.workflow.split("      - name: Report automation inventory drift (advisory)\n", 1)[1]
+        step = step.split("      - name:", 1)[0]
+        self.assertIn("continue-on-error: true", step)
+        self.assertIn("python contract-tooling/scripts/check_automation_contract.py", step)
+        self.assertIn("--root repository", step)
+        self.assertIn('REPOSITORY: ${{ github.repository }}', step)
+        self.assertIn('--repository "$REPOSITORY"', step)
+        self.assertNotIn("secrets.", step)
+        self.assertNotIn("token", step.lower())
 
-    def write_report(self, schema_version: str, extra: str = "") -> None:
-        """Write an Install SOP report envelope, optionally preceded by source."""
-        self.repo.write(
-            "src/demo_adapter/report.py",
-            (f"{extra}\n" if extra else "")
-            + "def build():\n"
-            "    return {\n"
-            f'        "schema_version": {schema_version},\n'
-            '        "status": "ok",\n'
-            '        "steps": [],\n'
-            '        "next_steps": [],\n'
-            '        "receipt_path": None,\n'
-            "    }\n",
-        )
+    def test_inventory_does_not_add_schedule_or_write_permissions(self) -> None:
+        permissions = self.workflow.split("\npermissions:\n", 1)[1].split("\njobs:\n", 1)[0]
+        self.assertEqual(permissions.strip(), "contents: read")
+        self.assertNotIn("schedule:", self.workflow)
+        self.assertNotIn("pull_request_target:", self.workflow)
 
+    def test_inventory_changes_trigger_existing_test_workflow(self) -> None:
+        workflow = (ROOT / ".github/workflows/profile-contract.yml").read_text(encoding="utf-8")
+        for path in ("contract/**", "scripts/check_automation_contract.py", ".github/workflows/repo-contract.yml"):
+            self.assertEqual(workflow.count(f'      - "{path}"'), 2, path)
 
-class TestAdapterRuleProfiles(InstallSopFixture):
-    def listed_rules(self, profile: str) -> dict[str, str]:
-        stdout = io.StringIO()
-        with contextlib.redirect_stdout(stdout):
-            code = main(["--contract", ADAPTER_CONTRACT, "--list-rules", "--profile", profile])
-        self.assertEqual(code, 0)
-        listed = {}
-        for line in stdout.getvalue().splitlines():
-            parts = line.split()
-            if len(parts) >= 2 and parts[0].startswith("A0"):
-                listed[parts[0]] = parts[1]
-        return listed
-
-    def test_baseline_is_the_applicability_gate_plus_a010(self) -> None:
-        self.assertEqual(self.listed_rules("baseline"), {"A001": "warning", "A010": "error"})
-
-    def test_strict_carries_every_adapter_rule(self) -> None:
-        self.assertEqual(
-            self.listed_rules("strict"),
-            {
-                "A001": "warning",
-                "A010": "error",
-                "A011": "warning",
-                "A012": "warning",
-                "A013": "warning",
-                "A014": "warning",
-            },
-        )
-
-
-class TestA010DeprecatedSchemaAlias(InstallSopFixture):
-    """A010 is the one adapter rule that fails the build: it is pure static."""
-
-    def test_references_the_alias_in_source(self) -> None:
-        self.repo.write(
-            "src/demo_adapter/contract.py",
-            "import dcc_mcp_core as _core\n"
-            "ARTIFACT_SCHEMA_VERSION = _core.INSTALL_SOP_SCHEMA_VERSION\n",
-        )
-        code, findings = self.adapter_strict()
-        self.assertIn("A010", self.ids(findings))
-        self.assertEqual(self.severities(findings, "A010"), {"error"})
-        self.assertEqual(code, 1)
-
-    def test_ignores_a_mention_that_is_only_a_comment(self) -> None:
-        self.repo.write(
-            "src/demo_adapter/contract.py",
-            "# INSTALL_SOP_SCHEMA_VERSION is the artifact revision, not the report field.\n"
-            "ARTIFACT_SCHEMA_VERSION = 2\n",
-        )
-        _, findings = self.adapter_strict()
-        self.assertNotIn("A010", self.ids(findings))
-
-    def test_ignores_the_file_that_serves_the_alias(self) -> None:
-        self.repo.write(
-            "python/demo_core/deployment.py",
-            "def __getattr__(name):\n"
-            "    if name == 'INSTALL_SOP_SCHEMA_VERSION':\n"
-            "        return 2\n",
-        )
-        _, findings = self.adapter_strict()
-        self.assertNotIn("A010", self.ids(findings))
-
-    def test_reports_the_line_number(self) -> None:
-        self.repo.write(
-            "src/demo_adapter/contract.py", "VALUE = 1\nVALUE = dcc.INSTALL_SOP_SCHEMA_VERSION\n"
-        )
-        _, findings = self.adapter_strict()
-        paths = [item["path"] for item in findings if item["rule_id"] == "A010"]
-        self.assertTrue(paths)
-        self.assertTrue(paths[0].endswith("contract.py:2"), paths[0])
-
-    def test_runs_in_the_baseline_profile(self) -> None:
-        self.repo.write(
-            "src/demo_adapter/contract.py", "VALUE = dcc.INSTALL_SOP_SCHEMA_VERSION\n"
-        )
-        _, findings = run_cli_with(ADAPTER_CONTRACT, self.repo.root, "--profile", "baseline")
-        self.assertIn("A010", self.ids(findings))
-
-
-class TestA011ReportSchemaVersionSource(InstallSopFixture):
-    def test_artifact_revision_is_reported(self) -> None:
-        # The PIP-3990 defect: the report field carries the artifact revision (2)
-        # instead of the schema const (1).
-        self.write_report(
-            "INSTALL_SOP_SCHEMA_REVISION",
-            "from dcc_mcp_core.deployment import INSTALL_SOP_SCHEMA_REVISION",
-        )
-        _, findings = self.adapter_strict()
-        self.assertIn("A011", self.ids(findings))
-        self.assertEqual(self.severities(findings, "A011"), {"warning"})
-        message = next(item["message"] for item in findings if item["rule_id"] == "A011")
-        self.assertIn("artifact revision", message)
-
-    def test_hardcoded_literal_is_reported(self) -> None:
-        self.write_report("1")
-        _, findings = self.adapter_strict()
-        self.assertIn("A011", self.ids(findings))
-
-    def test_canonical_source_is_accepted(self) -> None:
-        self.write_report(
-            "install_sop_report_schema_version()",
-            "from dcc_mcp_core.deployment import install_sop_report_schema_version",
-        )
-        _, findings = self.adapter_strict()
-        self.assertNotIn("A011", self.ids(findings))
-
-    def test_a_constant_pinned_to_the_schema_const_by_a_test_is_accepted(self) -> None:
-        self.write_report("SCHEMA_VERSION", "SCHEMA_VERSION = 1")
-        self.repo.write(
-            "tests/test_report.py",
-            "from dcc_mcp_core.deployment import install_sop_report_schema_version\n"
-            "from demo_adapter.report import SCHEMA_VERSION\n"
-            "def test_pinned():\n"
-            "    assert SCHEMA_VERSION == install_sop_report_schema_version()\n",
-        )
-        _, findings = self.adapter_strict()
-        self.assertNotIn("A011", self.ids(findings))
-
-    def test_the_same_constant_without_a_guard_is_reported(self) -> None:
-        self.write_report("SCHEMA_VERSION", "SCHEMA_VERSION = 1")
-        _, findings = self.adapter_strict()
-        self.assertIn("A011", self.ids(findings))
-
-    def test_an_unrelated_schema_is_not_reported(self) -> None:
-        # Adapters ship schemas that have nothing to do with the Install SOP,
-        # such as a deck IR. Only dicts with an Install SOP marker key are read.
-        self.repo.write(
-            "src/demo_adapter/deck_ir.py",
-            'IR_VERSION = "office-ir/1.0"\n'
-            "def build():\n"
-            '    return {"schema_version": IR_VERSION, "metadata": {}, "operations": []}\n',
-        )
-        _, findings = self.adapter_strict()
-        self.assertNotIn("A011", self.ids(findings))
-
-    def test_a_file_that_cannot_be_parsed_is_skipped(self) -> None:
-        self.repo.write("src/demo_adapter/broken.py", "def broken(:\n")
-        _, findings = self.adapter_strict()
-        self.assertNotIn("A011", self.ids(findings))
-
-
-class TestA012CoreFloorPolicy(InstallSopFixture):
-    def pyproject(self, dependency: str) -> None:
-        self.repo.write(
-            "pyproject.toml",
-            '[project]\nname = "demo"\ndependencies = [\n'
-            f'    "{dependency}",\n'
-            '    "pytest>=7.0",\n'
-            "]\n",
-        )
-
-    def test_floor_below_the_baseline_is_reported(self) -> None:
-        self.pyproject("dcc-mcp-core>=0.18.2,<1.0.0")
-        _, findings = self.adapter_strict()
-        self.assertIn("A012", self.ids(findings))
-        self.assertEqual(self.severities(findings, "A012"), {"warning"})
-        message = next(item["message"] for item in findings if item["rule_id"] == "A012")
-        self.assertIn("0.20.36", message)
-
-    def test_floor_at_the_baseline_is_advisory_only(self) -> None:
-        self.pyproject("dcc-mcp-core>=0.20.36,<1.0.0")
-        code, findings = self.adapter_strict()
-        self.assertEqual(self.severities(findings, "A012"), {"notice"})
-        self.assertEqual(code, 0, "a notice must never fail the build")
-
-    def test_floor_at_the_target_is_accepted(self) -> None:
-        self.pyproject("dcc-mcp-core>=0.20.40,<1.0.0")
-        _, findings = self.adapter_strict()
-        self.assertNotIn("A012", self.ids(findings))
-
-    def test_a_dependency_without_a_lower_bound_is_reported(self) -> None:
-        self.pyproject("dcc-mcp-core")
-        _, findings = self.adapter_strict()
-        self.assertIn("A012", self.ids(findings))
-        message = next(item["message"] for item in findings if item["rule_id"] == "A012")
-        self.assertIn("no lower bound", message)
-
-    def test_a_comment_in_the_dependency_array_is_ignored(self) -> None:
-        self.repo.write(
-            "pyproject.toml",
-            '[project]\nname = "demo"\ndependencies = [\n'
-            "    # Release Train anchor: same core the other adapters pin.\n"
-            '    "dcc-mcp-core>=0.18.2,<1.0.0",\n'
-            "]\n",
-        )
-        _, findings = self.adapter_strict()
-        self.assertEqual(self.severities(findings, "A012"), {"warning"})
-
-    def test_a_dev_extra_does_not_stand_in_for_the_floor(self) -> None:
-        self.repo.write(
-            "pyproject.toml",
-            '[project]\nname = "demo"\ndependencies = ["dcc-mcp-core>=0.18.2,<1.0.0"]\n'
-            '[project.optional-dependencies]\ndev = ["dcc-mcp-core>=0.20.40"]\n',
-        )
-        _, findings = self.adapter_strict()
-        self.assertEqual(self.severities(findings, "A012"), {"warning"})
-
-    def test_a_repository_without_core_is_not_reported(self) -> None:
-        self.repo.write(
-            "pyproject.toml", '[project]\nname = "demo"\ndependencies = ["pytest>=7.0"]\n'
-        )
-        _, findings = self.adapter_strict()
-        self.assertNotIn("A012", self.ids(findings))
-
-
-class TestA013DoctorModulePresent(InstallSopFixture):
-    def test_install_surface_without_a_doctor_is_reported(self) -> None:
-        self.install_surface()
-        _, findings = self.adapter_strict()
-        self.assertIn("A013", self.ids(findings))
-        self.assertEqual(self.severities(findings, "A013"), {"warning"})
-
-    def test_a_doctor_module_satisfies_the_rule(self) -> None:
-        self.install_surface()
-        self.repo.write("src/demo_adapter/doctor.py", "def main():\n    return 0\n")
-        _, findings = self.adapter_strict()
-        self.assertNotIn("A013", self.ids(findings))
-
-    def test_a_doctor_package_satisfies_the_rule(self) -> None:
-        self.install_surface()
-        self.repo.write("src/demo_adapter/doctor/__init__.py", "")
-        _, findings = self.adapter_strict()
-        self.assertNotIn("A013", self.ids(findings))
-
-    def test_an_adapter_without_an_install_surface_is_skipped(self) -> None:
-        self.repo.write("src/demo_adapter/server.py", "def main():\n    return 0\n")
-        _, findings = self.adapter_strict()
-        self.assertNotIn("A013", self.ids(findings))
-
-    def test_an_install_module_alone_makes_the_rule_apply(self) -> None:
-        self.repo.write("src/demo_adapter/installer.py", "def run():\n    return 0\n")
-        _, findings = self.adapter_strict()
-        self.assertIn("A013", self.ids(findings))
-
-
-class TestA014ReportValidatesAgainstSchema(InstallSopFixture):
-    def test_a_validated_report_satisfies_the_rule(self) -> None:
-        self.install_surface()
-        self.repo.write(
-            "tests/test_report.py",
-            "from dcc_mcp_core.deployment import validate_install_sop_report\n"
-            "def test_report():\n"
-            "    validate_install_sop_report(build_report())\n",
-        )
-        _, findings = self.adapter_strict()
-        self.assertNotIn("A014", self.ids(findings))
-
-    def test_a_ci_workflow_counts_as_validation(self) -> None:
-        self.install_surface()
-        self.repo.write(
-            ".github/workflows/validate.yml",
-            "name: validate\n"
-            "on: [push]\n"
-            "jobs:\n"
-            "  check:\n"
-            "    steps:\n"
-            "      - run: python -c 'validate_install_sop_report(report)'\n",
-        )
-        _, findings = self.adapter_strict()
-        self.assertNotIn("A014", self.ids(findings))
-
-    def test_no_validation_anywhere_is_reported(self) -> None:
-        self.install_surface()
-        self.repo.write("tests/test_other.py", "def test_nothing():\n    assert True\n")
-        _, findings = self.adapter_strict()
-        self.assertIn("A014", self.ids(findings))
-        self.assertEqual(self.severities(findings, "A014"), {"warning"})
-
-    def test_an_adapter_without_an_install_surface_is_skipped(self) -> None:
-        self.repo.write("src/demo_adapter/server.py", "def main():\n    return 0\n")
-        _, findings = self.adapter_strict()
-        self.assertNotIn("A014", self.ids(findings))
 
 if __name__ == "__main__":
     unittest.main()

@@ -5,11 +5,14 @@ on:
     paths:
       - "profile/**"
       - "scripts/check_profile_contract.py"
+      - "scripts/check_automation_contract.py"
       - "scripts/check_repo_contract.py"
+      - "scripts/adapter*_rules.py"
       - "contract/**"
       - "tests/**"
       - "requirements-profile-check.txt"
       - ".github/workflows/profile-contract.yml"
+      - ".github/workflows/repo-contract.yml"
       - ".github/workflows/release-integrity.yml"
   push:
     branches:
@@ -17,11 +20,14 @@ on:
     paths:
       - "profile/**"
       - "scripts/check_profile_contract.py"
+      - "scripts/check_automation_contract.py"
       - "scripts/check_repo_contract.py"
+      - "scripts/adapter*_rules.py"
       - "contract/**"
       - "tests/**"
       - "requirements-profile-check.txt"
       - ".github/workflows/profile-contract.yml"
+      - ".github/workflows/repo-contract.yml"
       - ".github/workflows/release-integrity.yml"
 
 permissions:

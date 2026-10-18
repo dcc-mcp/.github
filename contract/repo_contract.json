@@ -1,6 +1,6 @@
 {
-  "contract_version": "1.1.0",
-  "updated": "2026-09-29",
+  "contract_version": "1.2.0",
+  "updated": "2026-10-07",
   "owner": "dcc-mcp/.github",
   "source_issue": "PIP-3741",
   "description": "Machine-readable definition of the dcc-mcp repository contract. Consumed by scripts/check_repo_contract.py (CI gate) and by the vx-repo-contract skill (local check). Both read this file, so the pass/fail criteria are defined exactly once.",
@@ -66,11 +66,11 @@
     {
       "id": "R007",
       "name": "no-scripts-with-justfile",
-      "title": "A repository with a justfile has no vx.toml [scripts]",
-      "severity": "warn",
-      "profiles": ["strict"],
+      "title": "No [scripts] entry duplicates the justfile",
+      "severity": "error",
+      "profiles": ["baseline", "strict"],
       "source": "PIP-3734",
-      "summary": "[scripts] entries that only shell out to `just <recipe>` duplicate the justfile and drift. Keep recipes in justfile; keep [scripts] only when there is no justfile."
+      "summary": "Judged per entry, not per table. An entry is reported when it forwards to the justfile (`just <recipe>` / `vx just <recipe>`, ignoring leading whitespace and triple-quoted blocks) or when its key names a recipe that exists in the justfile, with `-` and `_` treated as equivalent. Every other entry is legitimate: a repository with a justfile may still keep [scripts] for entry points the justfile does not provide."
     },
     {
       "id": "R008",
@@ -98,6 +98,15 @@
       "profiles": ["strict"],
       "source": "PIP-3738",
       "summary": "If the repository ships an llms.txt generator, llms.txt must exist at the root and be listed as generated. A missing llms.txt means the docs contract is only half applied."
+    },
+    {
+      "id": "R011",
+      "name": "no-tracked-agent-dirs",
+      "title": "No version-controlled files under an agent or IDE directory",
+      "severity": "error",
+      "profiles": ["strict"],
+      "source": "org-agent-dirs-policy",
+      "summary": "Files tracked under any agents_ide_dir must not be committed. These directories are runtime mount points populated from the workspace skill registry, so a committed copy is never the code that runs and silently forks from the registry. Add the anchored pattern to .gitignore and untrack the files, or move a shared asset to a committed path outside the agent directories. R008 only warns that the directory exists; R011 reports each tracked file, because a directory warning is easy to scroll past when the tree is large."
     }
   ],
   "forbidden_artifact_globs": [
@@ -370,7 +379,7 @@
     ".flake8": "Flake8 is superseded by ruff. Move settings into [tool.ruff] in pyproject.toml.",
     ".pylintrc": "Pylint is superseded by ruff. Move settings into [tool.ruff] in pyproject.toml.",
     ".travis.yaml": "Travis CI is retired. Move the pipeline to .github/workflows/.",
-    "skills": "Skills are installed globally by `vx ai setup`. Only loonghao/vx keeps a skills/ directory."
+    "skills": "Agent skills are not vendored per repository. A managed agent run mounts them from the skill registry at task startup, so the registry is authoritative and a committed copy is never read; `loonghao/vx` `skills/` is the global `vx ai setup` install source. Some IDE/CLI runtimes do load a committed copy from their own directory, which is why committing one is worse than redundant: it forks from the registry and silently drifts."
   },
   "agents_source_file": "AGENTS.md",
   "agents_derived_files": [
@@ -395,7 +404,9 @@
   ],
   "agents_provenance_marker": "generated from AGENTS.md",
   "agents_ide_dirs": [
+    ".agent_context",
     ".agents",
+    ".aider",
     ".augment",
     ".beads",
     ".claude",
@@ -403,8 +414,14 @@
     ".clinerules",
     ".codebuddy",
     ".codegraph",
+    ".codex",
+    ".continue",
     ".cursor",
+    ".gemini",
+    ".kimi",
     ".kiro",
+    ".monica",
+    ".multica",
     ".opencode",
     ".roo",
     ".serena",
@@ -424,5 +441,7 @@
     "scripts/generate_llms_txt.py",
     "scripts/llms_txt.py"
   ],
-  "llms_justfile_recipes": ["llms", "llms-txt", "llms_txt", "generate-llms"]
+  "llms_justfile_recipes": ["llms", "llms-txt", "llms_txt", "generate-llms"],
+  "scripts_just_forward_commands": ["just", "vx just"],
+  "scripts_recipe_name_separators": ["-", "_"]
 }

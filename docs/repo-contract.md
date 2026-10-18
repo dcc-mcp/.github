@@ -10,11 +10,10 @@ The rules and their severities are defined once, in
 `vx-repo-contract` skill both read that file, so a criterion is never written
 down twice.
 
-`R0xx` is not the only rule namespace. `--contract` points the same checker at a
-different rule file, and [`docs/adapter-contract.md`](adapter-contract.md)
-describes `contract/adapter_contract.json`: the `A0xx` rules that apply only to
-the Python adapter packages. The two are deliberately separate so that a
-non-Python repository never has to satisfy an adapter rule.
+This contract covers every repository in the org. Repositories that publish a
+`dcc-mcp-*` Python package are additionally checked against
+[`contract/adapter_contract.json`](../contract/adapter_contract.json), described
+in [adapter-contract.md](adapter-contract.md).
 
 ## Rules
 
@@ -26,21 +25,26 @@ non-Python repository never has to satisfy an adapter rule.
 | R004 | `vx-toml-parses` — `vx.toml` parses into known tables | error | error | PIP-3737 |
 | R005 | `tools-version-format` — `[tools]` pins are `stable`, `latest`, `X[.Y[.Z]]`, or a declared delegation sentinel | error | error | PIP-3737 |
 | R006 | `root-allowlist` — every top-level entry is allowlisted | — | warning | PIP-3735 |
-| R007 | `no-scripts-with-justfile` — no `vx.toml [scripts]` when a justfile exists | — | warning | PIP-3734 |
+| R007 | `no-scripts-with-justfile` — no `[scripts]` entry forwards to `just` or shadows a justfile recipe | error | error | PIP-3734 |
 | R008 | `agents-derived-symlink` — `CLAUDE.md` and friends are symlinks or generated | — | warning | PIP-3736 |
 | R009 | `tools-no-latest` — `[tools]` pins are concrete, not `latest` | — | warning | PIP-3737 |
 | R010 | `llms-txt-fresh` — `llms.txt` exists when a generator exists | — | warning | PIP-3738 |
+| R011 | `no-tracked-agent-dirs` — nothing is tracked under an `agents_ide_dir` | — | error | org-agent-dirs-policy |
 
 R006 reports two classes of finding at different severities: a stray generated
 report or a loose `*.py` at the root is an **error** (they are never legitimate),
 while an entry that is simply unknown is a **warning** you can silence with
 `--allow-extra` once you have decided it belongs there.
 
-The first five rules are mechanical: they need no product decision, and a
-repository either satisfies them or it does not. The last five are being rolled
-out by their owning issues, so they start as warnings and get promoted when the
-rollout lands. That is the ratchet — a repository adopts the gate before it is
-clean, and the warnings are the to-do list.
+The first six rules — R001–R005 plus R007 — are mechanical: they need no product
+decision, and a repository either satisfies them or it does not. The rest are
+being rolled out by their owning issues, so they start out limited to `strict`
+and get promoted when the rollout lands. That is the ratchet — a repository
+adopts the gate before it is clean, and the warnings are the to-do list. R011 is
+the exception to the "starts as a warning" pattern: it is an `error`, because by
+the time it fires there is already a tracked file that has to be removed. It is
+scoped to `strict` only while the handful of repositories with a pre-existing
+committed agent tree are cleaned up.
 
 ### Delegation sentinels (R005)
 
@@ -64,6 +68,61 @@ The exemption is scoped per tool, via `tools_delegation_sentinels` in
 `python = "rustup-managed"` is still an error. When another proxy-managed runtime
 needs a sentinel, add it there. Do not widen `tools_version_pattern` instead —
 that would let every tool claim every sentinel.
+
+### Per-entry judging (R007)
+
+R007 is judged **per `[scripts]` entry**, not per table. A repository with a
+justfile may keep `[scripts]`; what it may not do is duplicate the justfile. An
+entry is reported when either is true:
+
+- **(a) forwarding** — the value runs `just <recipe>` or `vx just <recipe>`.
+  Leading whitespace and triple-quoted blocks are stripped first, so a
+  multi-line script whose first command is `just docs` counts.
+- **(b) name collision** — the key names a recipe that exists in the justfile.
+  `-` and `_` are treated as equivalent, so `test_cov` collides with `test-cov`.
+
+Everything else is legitimate. A repository whose justfile has no build recipe
+can keep `build-ue = "..."` in `[scripts]` and depend on `[env]`; a repository
+whose `[scripts]` runs `uvx nox` where the justfile has no `nox` recipe is fine.
+
+The difference matters because `vx run lint` and `just lint` are two entry
+points for the same intent, and they drift — that is what R007 exists to stop.
+An `[scripts]` entry the justfile does not provide has nothing to drift from, so
+banning it would cost a real entry point to prevent a problem that cannot occur.
+
+Because the rule is per entry, it is safe to make it an **error on the
+`baseline` profile**: every finding is a task defined twice, and there is no
+judgement call to defer. A duplicate task is duplicate by construction, which is
+the same standard R001–R005 already hold. Reporting it as a `strict`-only
+warning meant an adopting repository on the default `fail-on: error` saw nothing
+at all, so the rule prevented recurrence only for repositories that had already
+opted into `strict`.
+
+### Opting out (R007)
+
+Per-entry judging should already spare every legitimate entry, so an exemption
+is rare. Before reaching for one, delete the duplicate — but check callers first:
+removing a `[scripts]` entry also removes its `vx run <name>` command. If
+anything invokes `vx run <name>`, migrate those callers to `just <name>`
+first. For a name-collision entry that is not a copy of the recipe, prefer
+renaming the entry over deleting it.
+
+If a repository genuinely cannot migrate yet, understand what `skip-rules:
+"R007"` does before using it: it takes the **whole rule** off the execution
+plan. There is no per-entry exemption for R007 — skipping it for one unmigrated
+entry also stops R007 from reporting every other duplicate in that repository,
+including any added later. Treat it as disabling the rule for that repository,
+not as exempting one line.
+
+Because it is a whole-rule suspension, record it as a decision with an exit
+condition rather than a setting to inherit: note what still has to be migrated
+and when the skip can be removed. The nightly sweep reads the same contract, so
+declare it in `contract/repositories.json` (per-repository `skip_rules`) as well
+as in the caller workflow.
+
+The forwarding commands and the interchangeable separators are configurable via
+`scripts_just_forward_commands` and `scripts_recipe_name_separators` in
+`contract/repo_contract.json`.
 
 ## Adopting the gate
 
@@ -93,7 +152,7 @@ jobs:
     uses: dcc-mcp/.github/.github/workflows/repo-contract.yml@main
     with:
       profile: strict
-      error-rules: "R006,R007,R008"
+      error-rules: "R006,R008"
       fail-on: warning
 ```
 
@@ -120,14 +179,129 @@ python /path/to/dcc-mcp/.github/scripts/check_repo_contract.py --root . --profil
 # What does the contract actually say?
 ... --emit-contract
 ... --list-rules --profile strict
-
-# The adapter rules instead of these ones (see docs/adapter-contract.md)
-... --contract /path/to/dcc-mcp/.github/contract/adapter_contract.json --root .
 ```
 
 Findings are emitted as GitHub annotations
 (`::error file=vx.toml,title=Repo contract R005::...`) so they appear on the file
 in the PR diff.
+
+## Organization automation inventory (advisory)
+
+The existing reusable `repo-contract.yml` also compares the repository under
+test with [`automation_inventory.json`](../contract/automation_inventory.json).
+This is a dated, representative public-source audit of `dcc-mcp`,
+`try-auroraview`, and `vx-org`, **not an exhaustive list or a live org scan**.
+It records source blob IDs, public PR/run evidence, and secret **names** only.
+Credential availability remains `not_verified`; a secret reference is never
+proof that a credential exists, has permission, or was used successfully.
+
+The inventory schema is
+[`automation_inventory.schema.json`](../contract/automation_inventory.schema.json).
+Rule IDs, severities, organizations, and source-path allowlists live in
+[`automation_policy.json`](../contract/automation_policy.json), in their own
+`O0xx` namespace. The checker uses only the Python standard library and supports
+the schema vocabulary shipped here; unsupported schema features require an
+explicit implementation and tests.
+
+| Id | Warning | Meaning |
+|---|---|---|
+| O001 | `automation-inventory-valid` | Schema or inventory consistency needs review, including unknown fields, bad SHAs, negative job counts, duplicate entries, and out-of-scope paths. |
+| O002 | `automation-source-readable` | An audited workflow is missing, unreadable, non-regular, or symlinked. |
+| O003 | `automation-source-drift` | The current checkout's Git blob ID differs from the recorded audit. Re-audit the change before refreshing the baseline. |
+
+These warnings cannot be promoted by the existing gate's `fail-on` or
+`error-rules` inputs. Invalid/unreadable inventory is explicitly reported as
+`invalid`/`unavailable`, never as a clean check. The CI step is advisory even
+if it cannot run; the existing repository gate retains its current behavior.
+
+The checker reads only the registered source paths for the explicit
+`owner/repository` input. It does not make API calls, read credentials, execute
+workflow code, change files, or create PRs. An unregistered repository reports
+`not_in_inventory`; an entry with no source files reports zero files checked.
+Neither claims the repository has no workflows. New, unlisted files are not
+discovered by this phase. Any byte change, including comments, causes a drift
+warning; **drift is a request for review, not a semantic security finding**.
+PR run evidence is historical: `action_required`, zero jobs, or a successful
+manual dispatch does not establish that expected jobs ran for a PR's exact head.
+
+```bash
+# Validate the bundled audit, without reading a target checkout.
+python scripts/check_automation_contract.py --validate-only --format json
+
+# Compare one of the registered repositories with its audited workflow blobs.
+python /path/to/.github/scripts/check_automation_contract.py \
+  --root /path/to/checkout --repository vx-org/vx --format github
+```
+
+To refresh a baseline, review the changed public source and its exact blob ID,
+update the dated inventory evidence, and run `python -m unittest discover -s
+tests -v`. Never add secret values or infer credential availability. The initial
+2026-10-12 audit is preserved as observed, so the new advisory step itself
+intentionally causes O003 for this repository until a subsequent reviewed audit.
+
+This phase adds no schedule or organization entrypoints and does not change
+release graphs, PR writers, credentials, permissions, or the existing nightly
+matrix. Existing Core PRs #2752/#2753 remain the candidates for pointer-PR reuse
+and REST refresh; this checker does not duplicate their logic. Trusted-ref
+adoption is a later pilot: **only after central code lands on the canonical
+default branch**, pin the reusable workflow and its `ref` tooling input to the
+same reviewed, full 40-hex SHA. Do not pin a PR-local commit or update all three
+organizations' callers as part of this inventory change.
+
+## Where agent skills live (R008 / `agents_ide_dirs`)
+
+`agents_ide_dirs` is not an allowlist. A directory on that list that is present
+in a repository is reported by R008 as a warning: agent directories are meant to
+be generated at setup time and kept out of version control.
+
+That makes a committed `skills/` tree under one of those directories a contract
+finding rather than a supported pattern. The reason is **scope-dependent**, and
+getting the scope right matters:
+
+- **Managed agent runs** mount skills from the **organization skill registry**,
+  materialised into the task's `agents_ide_dir` at startup. For these runs the
+  registry is the authoritative source and a committed copy is never read.
+
+- **Some IDE/CLI runtimes do read the repository copy.** Kimi CLI, for example,
+  picks one brand group — `.kimi/skills/`, `.claude/skills/` or
+  `.codex/skills/` — and scans `Project > User > Extra > Built-in`, so a
+  `.kimi/skills/<id>/SKILL.md` with valid frontmatter *is* what a Kimi run in
+  that repository loads.
+
+So a committed copy is not harmless — it is worse than redundant, because it
+forks from the registry and the two silently diverge. A change that lands only
+in a repository looks done in review while every subsequent managed run stays
+on the previous version, which is the failure this entry was written to
+prevent. Land the change in the registry, and treat a repository copy as drift
+whichever runtime reads it.
+
+Export the registry copy when a byte-identical offline copy is genuinely
+needed; do not commit it under an `agents_ide_dir`.
+
+### R011: catching a committed copy
+
+R008 warns that an agent directory exists. R011 goes one step further and
+reports **each tracked file** under one, at `error` severity, with the exact
+remediation:
+
+```
+.kimi/skills/code-review/SKILL.md is tracked under the agent/IDE directory
+`.kimi/`; add `/.kimi/` to .gitignore and untrack it, or move the asset to a
+committed path outside the agent directories
+```
+
+The distinction matters. A single warning naming a directory is easy to scroll
+past, and a whole skill tree is twenty files — which is why a committed tree
+survived review and CI in the first place. Listing the files also makes the
+migration reviewable: every path in the output is a decision about where that
+content should live.
+
+R008 stands down on a directory once R011 has reported files under it, so a
+committed tree produces one set of findings rather than two.
+
+The check asks `git ls-files` which files are version-controlled, so output
+sitting inside an already-ignored agent directory is not reported. Outside a git
+working tree it falls back to listing the directory.
 
 ## Changing a rule
 

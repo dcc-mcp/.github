@@ -1,11 +1,16 @@
 name: Adapter contract (nightly)
 
-# Runs the adapter contract once a day across every Python adapter package listed
-# in contract/adapter_repositories.json. It is the same gate as
-# repo-contract-nightly.yml with a different contract: the rules that only make
-# sense for adapter packages live in contract/adapter_contract.json under the
-# A0xx namespace, so adopting them needs no workflow file in each repository and
-# no change to the R0xx rules every repository is checked against.
+# Runs the Python adapter contract once a day across every repository listed in
+# contract/adapter_repositories.json: the 50 dcc-mcp repositories that ship a
+# Python package. Same shape as repo-contract-nightly.yml -- one manifest, one
+# org-wide sweep, no workflow file needed in the repositories being checked --
+# but pointed at contract/adapter_contract.json (A0xx) instead of
+# contract/repo_contract.json (R0xx).
+#
+# The sweep runs the `strict` profile with `fail-on: error` on purpose: the two
+# baseline rules are errors that block regressions, and the four convergence
+# rules are warnings, so the nightly output is the stock-take list PIP-4101
+# works through rather than a wall of red.
 
 on:
   schedule:
@@ -54,7 +59,7 @@ jobs:
               repos = json.load(handle)["include"]
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
-              handle.write("repos=" + json.dumps(repos) + "\n")
+              handle.write("repos=" + json.dumps({"include": repos}) + "\n")
               handle.write("has_repos=" + ("true" if repos else "false") + "\n")
           PY
 
@@ -63,7 +68,7 @@ jobs:
     needs: matrix
     if: needs.matrix.outputs.has_repos == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.matrix.outputs.repos) }}
@@ -99,7 +104,7 @@ jobs:
           set -- \
             --root repository \
             --contract contract-tooling/contract/adapter_contract.json \
-            --profile "${PROFILE:-baseline}" \
+            --profile "${PROFILE:-strict}" \
             --fail-on "${FAIL_ON:-error}" \
             --format github
 

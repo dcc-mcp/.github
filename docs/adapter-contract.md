@@ -1,201 +1,409 @@
 # Adapter contract
 
-A mechanical gate for the Python adapter packages in the `dcc-mcp` organisation:
-50 repositories that all ship a `pyproject.toml`, all depend on `dcc-mcp-core`,
-and have been drifting apart in how they use the shared API. The rules are
-defined once, in
-[`contract/adapter_contract.json`](../contract/adapter_contract.json), and read
-by both [`scripts/check_repo_contract.py`](../scripts/check_repo_contract.py)
-and the `vx-repo-contract` skill, so a criterion is never written down twice.
+A mechanical gate for the Python adapter contract agreed in PIP-4104. It exists
+because the 50 dcc-mcp repositories that ship a Python package have been
+converging by hand for months: the same Install SOP report field has been
+written five different ways, `line-length` has three values, and nothing
+stopped any of it coming back after the last cleanup.
 
-This is a **second contract, not a second system**. `--contract` points the
-existing checker at a different rule file; the CI gate, the GitHub annotations,
-the `--emit-matrix` sweep and the skill all work exactly as they do for
-[`docs/repo-contract.md`](repo-contract.md).
+The rules and their severities are defined once, in
+[`contract/adapter_contract.json`](../contract/adapter_contract.json). The CI
+sweep ([`scripts/check_repo_contract.py`](../scripts/check_repo_contract.py)
+with `--contract`) reads that file, so a criterion is never written down twice.
 
-## Why a separate file
+## Boundary with the repository contract
 
-The repository contract (`contract/repo_contract.json`) applies to *every*
-repository the organisation sweeps, including non-Python ones such as
-`loonghao/vx` and `loonghao/cua`. Rules like "do not reference the deprecated
-`INSTALL_SOP_SCHEMA_VERSION` alias" are meaningless there, and adding them to
-the shared contract would force Rust and TypeScript repositories to satisfy
-Python adapter rules.
-
-So the adapter rules live in their own file with their own id namespace:
-
-| Contract | Ids | Applies to |
+| | [`repo_contract.json`](repo-contract.md) (`R0xx`) | `adapter_contract.json` (`A0xx`) |
 |---|---|---|
-| `contract/repo_contract.json` | `R0xx` | every repository in `contract/repositories.json` |
-| `contract/adapter_contract.json` | `A0xx` | the Python adapter packages in `contract/adapter_repositories.json` |
+| Applies to | every repository in the sweep | the 50 repositories that ship a Python package |
+| Subject | configuration and documentation hygiene | Python interface surface and code conventions |
+| Manifests | [`contract/repositories.json`](../contract/repositories.json) | [`contract/adapter_repositories.json`](../contract/adapter_repositories.json) |
+| Sweep | `repo-contract-nightly.yml` | `adapter-contract-nightly.yml` |
 
-The namespaces are disjoint and the checker resolves ids against the selected
-contract only, so `--contract contract/adapter_contract.json --rule R001` is an
-error rather than a silently mis-selected rule.
+Both contracts are loaded by the **same checker**, selected with `--contract`,
+and both use the same `baseline` / `strict` profiles. Rule ids are namespaced
+precisely so that the two can be listed side by side in one job without a
+collision; `tests/test_repo_contract.py` asserts the namespaces stay disjoint.
+
+A rule belongs in `adapter_contract.json` only when it needs a Python package to
+be meaningful. "No build artifacts at the root" is true of every repository and
+stays in `repo_contract.json`; "`[tool.ruff] line-length` is 120" means nothing
+without a `pyproject.toml` and belongs here.
 
 ## Rules
 
-| Id | Rule | `baseline` | `strict` | Decided by |
+| Id | Rule | `baseline` | `strict` | Kind |
 |---|---|---|---|---|
-| A001 | `adapter-python-package` — a registered adapter ships a `pyproject.toml` that declares a `dcc-mcp-core` dependency | warning | warning | PIP-4105 |
-| A010 | `no-deprecated-schema-alias` — adapter code does not reference the deprecated `INSTALL_SOP_SCHEMA_VERSION` alias | **error** | error | PIP-4106 |
-| A011 | `report-schema-version-source` — the report `schema_version` comes from the schema `const`, not from a literal or the artifact revision | — | warning | PIP-4106 |
-| A012 | `core-floor-policy` — the declared `dcc-mcp-core` floor is at or above the organisation baseline | — | warning | PIP-4106 |
-| A013 | `doctor-module-present` — an adapter with install capability ships a `doctor` self-check module | — | warning | PIP-4106 |
-| A014 | `report-validates-against-schema` — a real report is validated with `validate_install_sop_report()` in tests or CI | — | warning | PIP-4106 |
+| A001 | `no-deprecated-install-sop-alias` — no reference to Core's deprecated `INSTALL_SOP_SCHEMA_VERSION` | error | error | interface |
+| A002 | `no-hand-rolled-report-schema-version` — no locally hard-coded `*_REPORT_SCHEMA_VERSION` | — | warning | interface |
+| A003 | `core-floor-declared` — a declared `dcc-mcp-core` dependency pins a lower bound | error | error | interface |
+| A012 | `core-floor-baseline` — the declared floor is at or above the organisation baseline | — | warning | interface |
+| A004 | `ruff-line-length` — `[tool.ruff] line-length` is `120` | — | warning | convention |
+| A005 | `requires-python-declared` — `project.requires-python` is declared | — | warning | convention |
+| A006 | `pre-commit-config-exists` — `.pre-commit-config.yaml` is present | — | warning | convention |
+| A007 | `adapter-python-package` — registration has a Core-linked package | warning | warning | applicability |
+| A011 | `report-schema-version-source` — direct report fields do not use literals or artifact revisions | — | warning | interface |
+| A013 | `doctor-module-present` — an adapter that installs ships a `doctor` self-check | — | warning | interface |
+| A014 | `report-validates-against-schema` — a real report runs through `validate_install_sop_report()` | — | warning | interface |
+| A021 | `ruff-config-present` — the repository configures ruff at all | — | warning | convention |
+| A024 | `release-please-present` — release-please config and manifest exist | — | warning | convention |
 
-A001 is the **applicability gate**, not a business rule. It answers one question
-the other rules cannot answer for themselves: *is this repository actually an
-adapter package?* Everything else in this contract assumes the answer is yes, so
-A001 has to be able to say no.
+The original A010–A014 proposal largely landed as A001–A003, A012–A014.
+Two gaps remain distinct: A007 restores the registration applicability warning
+under a free id, and A011 inspects direct report fields that A002's named-constant
+check does not cover. Existing rule ids and severities are unchanged.
 
-A010 is the only rule besides A001 that sits in `baseline`, and the only one
-that fails the build: it is decided from source text alone, needs no core at
-runtime, and has no migration cost, so there is no reason to ratchet it. A011
-to A014 report the gap and start as warnings.
+A007 checks the manifest's Core dependency declarations and exempts Core itself.
+Optional/development dependencies count only for applicability; they do not
+satisfy the runtime floors enforced by A003/A012. An applicability warning does
+not disable other checks or automatically remove a repository from the sweep.
 
-## How A001 decides
+A011 checks integer literals and imported Core artifact-revision references in
+`schema_version` dictionary fields with an Install SOP marker (`steps`,
+`next_steps`, or `receipt_path`). It shares the current bounded source scanner,
+so comments, documentation, tests and excluded provider sources do not become
+findings. It does not follow arbitrary assignments or infer cross-file test
+guards; imported names shadowed by assignments are left unresolved. Named
+constants remain A002's responsibility. Direct literals stay advisory even when
+a separate test pins the same number, because that does not establish that the
+actual report field is guarded. Unrelated schema dictionaries are ignored.
 
-It reads `pyproject.toml`, collects every dependency array whose key matches a
-`dependency_key_patterns` entry, strips PEP 508 specifiers, extras and
-environment markers, and normalises the names the way PEP 503 does.
+A021 and A024 are the code-convention family added by PIP-4107. They are the
+two rules this contract did not already have: the line-length **value** is
+A004's, `requires-python` is A005's and the pre-commit hook is A006's, so a
+second id for any of those would turn one gap into two findings and give the
+ratchet two places to move. Where PIP-4107 measured something the existing
+rules could not see, the capability moved into the rule that owns it rather
+than into a new one — A004 now resolves a standalone `ruff.toml` the way ruff
+itself does, and A006 accepts the `.yml` spelling of the pre-commit config.
 
-```toml
-[project]
-name = "dcc-mcp-maya"
-dependencies = [
-    "dcc-mcp-core[server]>=0.20.40",   # matches: extra and specifier stripped
-]
+### Why A001 can be an error on day one
 
-[dependency-groups]
-dev = ["dcc_mcp_core"]                 # matches: underscores normalise to dashes
+Core 0.20.40 (PIP-4080) renamed `INSTALL_SOP_SCHEMA_VERSION` to
+`INSTALL_SOP_SCHEMA_REVISION` and kept the old name as a `__getattr__` alias
+that raises `DeprecationWarning`. The two names are not the same quantity: the
+old one is the revision of the published schema **artifact** (`-vN`), while a
+report's `schema_version` field is the schema document's `const`, which stays
+at 1. The values agreed at 1 until Core 0.20.34 republished the artifact as
+`-v2` — which is how six repositories ended up emitting `2` where the schema
+requires `1` (PIP-4047 / 4048 / 4049 / 4050 / 4051).
+
+The rule is safe to enforce immediately, without raising any Core floor,
+because every existing reference already sits behind a `try/except ImportError`
+fallback written for old Core releases. Deleting the reference deletes code that
+cannot be reached on any Core the repository already supports.
+
+**The fix depends on what the value means**, and the two cases need opposite
+edits:
+
+- The value means the **artifact revision** — a field named
+  `schema_artifact_revision`, a constant named `ARTIFACT_SCHEMA_VERSION`. The
+  value is already correct and only the name is deprecated, so **rename** it to
+  `INSTALL_SOP_SCHEMA_REVISION`. This is the case in 8 of the 12 repositories
+  that report A001 today.
+- The value feeds a report's **`schema_version`** field, or is a vestigial
+  import that nothing reads. **Delete** the reference and read the field from
+  `install_sop_report_schema_version()`.
+
+**Never rename to make the gate go green.** Where the value reaches a
+report's `schema_version`, renaming keeps the artifact revision flowing into a
+field the schema pins at `1` — the defect survives the rename and becomes harder
+to spot (PIP-3990's root cause). `dcc-mcp-sketchup` is that case today:
+`return declared if isinstance(declared, int) else INSTALL_SOP_SCHEMA_VERSION`
+silently publishes the artifact revision whenever the schema cannot be read.
+
+#### What counts as a reference
+
+The check runs on the **syntax tree**, not on text, so comments and docstrings
+are invisible to it. Three shapes are reported:
+
+```python
+from dcc_mcp_core.deployment import INSTALL_SOP_SCHEMA_VERSION   # 1. import
+INSTALL_SOP_SCHEMA_VERSION = 1                                   # 2. local rebinding
+revision = dcc_mcp_core.deployment.INSTALL_SOP_SCHEMA_VERSION    # 3. attribute access
 ```
 
-A repository passes when any searched array declares a `core_distribution_names`
-entry. It also passes when its own distribution name is in
-`self_distributions` — `dcc-mcp-core` is what adapters depend on, so it cannot
-depend on itself. Everything else reports a warning naming the fix: declare the
-dependency, or drop the repository from the nightly manifest.
+The second shape matters: the `except ImportError` fallback exists only to
+support the import, and an `__all__` re-export keeps the deprecated name in the
+adapter's own public surface. Both must go with the import.
 
-The searched keys, the core names and the exempt distributions all live in
-`contract/adapter_contract.json`. Nothing about the predicate is hardcoded in
-the checker.
+Two exclusions are deliberate and live in the contract, not in the script:
 
-A manifest the reader cannot model is reported as a finding rather than
-crashing: one exotic `pyproject.toml` must not take down a 50-repository sweep.
+- **Test directories are out of scope** (`scan_exclude_dirs`). The regression
+  tests that assert the alias is *not* used have to be able to name it:
+  `test_report_schema_version_ignores_cores_artifact_revision` monkeypatches
+  `INSTALL_SOP_SCHEMA_VERSION` to `2` on purpose. Scanning tests would force
+  those guards to be rewritten or deleted to satisfy the gate.
+- **The provider may define and export the alias** (`provider_package_dirs`).
+  `dcc-mcp-core` owns the deprecated name; the rule targets its consumers. This
+  is why `dcc-mcp-core` can sit in the same sweep as its 49 consumers without a
+  per-repository exemption.
 
-## How the Install SOP family decides
+This distinction is why the check is AST-based rather than a grep. A GitHub code
+search for `INSTALL_SOP_SCHEMA_VERSION` reports 18 hits across the organisation
+and names only 3 repositories; the sweep finds **12**, and all 12 are real code
+references. Code search both under-reports (it missed `dcc-mcp-marmoset`,
+`dcc-mcp-wwise` and six others entirely) and over-reports (15 of its 18 hits are
+comments, docstrings and test guards explaining *why* the alias must not be
+used). Neither direction is usable as a gate.
 
-`dcc-mcp-core` `0.20.40` split one name into two, and the family exists to keep
-adapters from putting the wrong one on the wire:
+### Why A002 is a warning
 
-- `INSTALL_SOP_SCHEMA_REVISION` — the revision of the published schema
-  *artifact* (`adapter-install-sop-vN.schema.json`), currently `2`.
-- `install_sop_report_schema_version()` — the value a report document's
-  `schema_version` field must carry. It reads
-  `properties.schema_version.const` from the schema and is `1`; publishing
-  `-v(N+1)` adds optional members and never moves it.
+Every hand-rolled `FALLBACK_REPORT_SCHEMA_VERSION = 1` is a second source of
+truth for the schema `const` — 13 of them across 12 repositories today.
+Converging on
+`install_sop_report_schema_version()` first needs the repository's Core floor
+raised to `>=0.20.40`, because that is the release the API landed in — and the
+highest floor any repository declares today is `>=0.20.36` (autocad, cinema4d,
+freecad, openscad, sketchup). Raising 50 floors is PIP-4101's job, not this
+gate's, so the rule reports the gap and does not fail on it.
 
-The old `INSTALL_SOP_SCHEMA_VERSION` is a deprecated alias that `__getattr__`
-still serves with a `DeprecationWarning`, which is why **A010** can be an error
-immediately: whether adapter source references it is decidable from the text.
-The one exemption is a file that defines or serves the alias — that is core
-keeping old adapters working, and flagging it would penalise the only
-repository that is supposed to have it.
+### Why A012 separates a baseline from a target
 
-**A011** reads an Install SOP report envelope with `ast`, not with a regex, and
-only considers dicts that carry an Install SOP marker key (`steps`,
-`next_steps`, `receipt_path`). Adapters ship other schemas that also have a
-`schema_version` — a deck IR, a patch format — and without that scoping the
-rule reports documents that have nothing to do with the Install SOP. Two
-sources are rejected: the artifact revision, which is the defect that shipped in
-PIP-3990, and a hardcoded literal.
+A003 makes a lower bound mandatory. A012 answers the separate question of
+whether the bound is *high enough*, and it carries two numbers because the two
+questions it has to serve have different answers:
 
-A hardcoded literal is **accepted when a test pins it to the schema `const`**.
-An adapter that writes `SCHEMA_VERSION = 1` and asserts
-`SCHEMA_VERSION == install_sop_report_schema_version()` has already closed the
-drift this rule is for, and a gate that reports a defended adapter is a gate
-people learn to ignore. The known trade-off is that a guard is matched by name
-across files, so a second, unrelated constant sharing a guarded name is also
-excused. That is the deliberate direction to err in for a warning.
+```json
+"core_floor_baseline": "0.20.36",
+"core_floor_target": "0.20.40"
+```
 
-**A012** compares the declared `dcc-mcp-core` floor against
-`core_floor_baseline` (`0.20.36`), which is the highest floor any adapter
-declares today, so the target is reachable rather than aspirational.
-`core_floor_target` (`0.20.40`) is where the new Install SOP API becomes
-unconditionally available; meeting the baseline but not the target is a
-`notice`, which is reported but can never fail a run. The floor is read through
-the same `parse_pyproject` reader and the same `dependency_key_patterns` that
-A001 uses, so the two rules cannot disagree about what a package declares.
+`core_floor_baseline` is the highest floor any adapter already declares, so the
+target is reachable on the day the rule lands rather than aspirational. That is
+not a stylistic preference — it is what makes the finding a signal. Measured
+2026-10-03 over the 45 repositories that declare a Core floor:
 
-**A013** and **A014** are skipped for an adapter with no Install SOP surface at
-all. Roughly 42 of the 50 adapters neither reference the Install SOP contract
-nor ship an install module, and reporting them for a gap they do not have would
-bury the real findings.
+| Verdict | Count | Repositories |
+|---|---|---|
+| warning (below `0.20.36`) | **40** | floors from `>=0.18.2` (powerpoint) to `>=0.20.34` (premiere) |
+| notice (at `0.20.36`, below `0.20.40`) | **5** | autocad, cinema4d, freecad, openscad, sketchup |
+| pass (at or above `0.20.40`) | **0** | — |
 
-## The nightly sweep
+Had the baseline been set at `0.20.40`, all 45 would have warned and the rule
+would have said nothing about which repository is furthest behind. At `0.20.36`
+it ranks the fleet: the 40 warnings are a backlog ordered by how far each
+repository has drifted, and the 5 notices are the repositories that are one
+bump away.
 
-[`.github/workflows/adapter-contract-nightly.yml`](../.github/workflows/adapter-contract-nightly.yml)
-mirrors `repo-contract-nightly.yml`: one job builds the matrix from
-`contract/adapter_repositories.json` with `--emit-matrix`, one job per
-repository checks it out and runs the gate. Adopting the adapter contract needs
-**no workflow file in the adapter repository** — that is the point, because the
-gap this contract exists to close is that 50 repositories each drifted in their
-own direction.
+`core_floor_target` is where the shared Install SOP API
+(`install_sop_report_schema_version()`, `validate_install_sop_report()`) becomes
+unconditionally available. Sitting above the baseline but short of the target is
+a **notice**, which is reported but can never fail a run: it is the reason A002
+cannot be promoted to an error yet, not a defect in its own right.
 
-The manifest defaults are `profile: baseline`, `fail_on: error`. In `baseline`
-the sweep runs A001 and A010, so a repository that still references the
-deprecated `INSTALL_SOP_SCHEMA_VERSION` alias fails the sweep while an
-unregistered or non-Python repository only draws an A001 warning. Running the
-sweep with `profile: strict` adds A011 to A014, whose warnings are the gap list;
-the ratchet is what turns them red.
+A Core dependency that pins no bound at all is left to A003. One gap, one
+finding.
+
+### Why A013 and A014 are warnings
+
+Both rules describe a gap that is expensive to close rather than a defect, so
+they report without failing. 8 of the 50 swept adapters ship a `doctor` module
+today (openusd, material-maker, wwise, freecad, sketchup, openscad, liquigen,
+capcut), and A013 flags **28** of the 45 packages the sweep could read. A014 is
+the sharper of the two: it flags **27**, including five of those eight
+(capcut, material-maker, openscad, sketchup, wwise), because a doctor that
+assembles a report is not the same thing as a doctor that validates one. Both
+columns are PIP-4101's work queue.
+
+Both rules are scoped to repositories that actually have an install surface —
+one of the `install_sop_symbols` appearing in a scanned module, or a module
+matching `install_source_globs`. Repositories with no install capability are
+skipped rather than reported, so the rule set stays silent for the packages it
+was never written for.
+
+Both are matched by name or by text, which makes them satisfiable in the letter
+without being satisfied in spirit: a `doctor` that never validates a report
+passes A013, and a `# TODO: use validate_install_sop_report` in a workflow
+passes A014. That is the right trade for a warning — a noisy gate gets switched
+off, while a permissive one still points at the right file — and it is why
+neither rule belongs in `baseline` until the ratchet closes the gap.
+
+### Why A005 does not pick a value
+
+`requires-python` has four legitimate values in the fleet (`>=3.7` through
+`>=3.10`) plus one repository that declares none, because host-side constraints
+differ: zbrush, wwise and obs need `>=3.10` for the host bridge, while the
+organisation Python 3.7 red line (PIP-2519) holds until **2026-12-31**. The rule
+therefore checks only that the range is *visible to pip*, and leaves the value
+to the host.
+
+### What A021 and A024 judge
+
+Each rule covers exactly one gap, and no gap is covered twice.
+
+**A024** requires every file in `release_please_files`, reporting each missing
+one separately so the annotation points at the file to add. release-please is
+how the organisation versions and publishes, so a repository without it
+releases by hand.
+
+**A021** reports a repository that has a `pyproject.toml` but no usable ruff
+configuration. Three shapes reach it and they are reported separately, because
+each one is a different edit:
+
+| Shape | Reported as | The fix |
+|---|---|---|
+| no standalone config and no `[tool.ruff]` table | "has no `[tool.ruff]` section" | write the configuration |
+| `[tool.ruff]` present but empty | "`[tool.ruff]` is empty" | fill it in |
+| only sub-tables, e.g. `[tool.ruff.lint]` | "holds only the sub-table `[tool.ruff.lint]` and no settings of its own" | move the top-level settings up |
+
+The second and third used to be reported as the first: the table resolution
+collapsed "the table is absent" and "the table is empty" into the same result,
+so both were silent, and a nested-only table was called missing while the
+sub-table sat right there in the parse. A repository with no `pyproject.toml`
+at all is still left to A005 — one gap, one finding.
+
+### Where A004 and A006 absorbed the rest
+
+**A004** resolves `line-length` the way ruff itself does: a standalone
+`ruff.toml` or `.ruff.toml` wins, and only then does `[tool.ruff]` in
+`pyproject.toml` apply. This is a latent-false-positive fix rather than a new
+check — no registered repository uses a standalone configuration today, but the
+moment one does, reading only `pyproject.toml` would report "declares no
+line-length" when the setting is simply in the other file. A004 reports a
+`[tool.ruff]` table that omits `line-length`, because ruff would then fall back
+to its own default of 88 and that silence is the drift; it stays quiet when
+there is no ruff configuration at all, which is A021's gap, and when there is
+no `pyproject.toml`, which is A005's. It also stays quiet on an empty or
+nested-only table: those declare no `line-length` to be wrong about, and A021
+names them. Both rules resolve the table through the same code path, so they
+cannot disagree about whether it exists. A sub-table is never read as a value —
+`[tool.ruff.line-length]` is a table, not a line length.
+
+**A006** accepts `.pre-commit-config.yaml` and `.pre-commit-config.yml`,
+matching both spellings pre-commit itself looks for. It is a contract-only
+change: the rule already iterates `pre_commit_configs`.
+
+Values that are not judged are still visible in the finding messages: the
+nightly output is the backlog list, and every message says what to do next.
+
+## The two-tier profile
+
+`baseline` enforces A001 and A003 as errors and includes the advisory A007
+registration check. No existing severity is promoted. `strict` adds the
+convergence warnings, including A011; warnings remain a review queue.
+
+That is the ratchet, the same one `repo-contract.md` describes: the sweep runs
+`--profile strict --fail-on error`, so **errors block regressions and warnings
+are the stock-take list**. A repository adopts the gate before it is clean, and
+the warning column is the work queue.
+
+Measured 2026-10-02 by running the checker over shallow clones of all 50
+repositories:
+
+| Rule | Repositories | Notes |
+|---|---|---|
+| A001 | 12 | 8 use the alias as an artifact revision (rename), 4 feed it into a report field or import it vestigially (delete) |
+| A002 | 12 | 13 hard-coded constants in total |
+| A003 | 0 | 45 of 50 declare a Core dependency with a lower bound; the other 5 declare none and are skipped (`dcc-mcp-cache-inspector`, `dcc-mcp-epic`, `dcc-mcp-maya-procedural-architecture`, `dcc-mcp-runtime`, and `dcc-mcp-core`, which owns the distribution) |
+| A004 | 30 | all 30 declare `line-length = 100`, against a baseline of 120 |
+| A005 | 1 | `dcc-mcp-cache-inspector` |
+| A006 | 44 | 6 have a `.pre-commit-config.yaml` |
+| A012 | 40 | plus 5 notices; see below |
+| A013 | 28 | measured 2026-10-03 over the 45 repositories that cloned (see below) |
+| A014 | 27 | includes 5 of the 8 that already ship a `doctor` module |
+| A021 | 3 | `dcc-mcp-powerpoint`, `dcc-mcp-openscreen` and `dcc-mcp-gaea` have a `pyproject.toml` without `[tool.ruff]`. A repository with no `pyproject.toml` at all is A005's gap, not this one |
+| A024 | 1 | `dcc-mcp-cache-inspector`, missing both files |
+
+The A001–A006 rows were measured 2026-10-02 over all 50 repositories. The A013
+and A014 rows were measured 2026-10-03 over the same sweep; five repositories
+failed to clone in that run (`dcc-mcp-cache-inspector`,
+`dcc-mcp-marvelous-designer`, `dcc-mcp-maya-procedural-architecture`,
+`dcc-mcp-substance3d-designer`, `dcc-mcp-substance3d-painter`), so those two
+counts are a lower bound over 45 packages.
+
+The A021 and A004 rows were re-measured 2026-10-09 over every repository in
+`contract/adapter_repositories.json` — 51 after `dcc-mcp-reaper` joined — and
+both are unchanged by the empty-table and nested-table fixes: the 3 A021
+repositories have no ruff configuration of any shape, and the line-length
+distribution is still 30 on `100`, 18 on `120` and 3 with no table at all. Those
+counts are held in place by `tests/test_adapter_contract_rules.py`, which
+replays the distribution as a synthetic fleet so a rule change cannot move the
+nightly numbers without failing a test.
+
+`dcc-mcp-core` reports nothing under A001–A006: it owns the deprecated alias, so
+`provider_package_dirs` exempts its package tree. It does report A013, because
+it ships install machinery and no `doctor` module of its own.
+
+Two repositories carry a file that does not parse as Python at all —
+`dcc-mcp-3dsmax/import_balls_fbx.py` (a `for` statement with no body) and
+`dcc-mcp-openscreen/.../scripts/_client.py` (literal `\n` sequences written into
+the source). Both are reported as **notices** rather than skipped silently: a
+file the gate cannot read is a gap in the gate, and the point of this contract
+is that gaps are visible.
 
 ## Ratchet plan
 
-The warnings are the to-do list. Promoting a rule is a two-step move, never a
-big-bang edit across 50 repositories:
+Promote a rule with `--error-rule` in the manifest entry of every repository
+that is clean, then move the promotion into the contract default. Concretely:
 
-1. **Visible.** The rule lands as a `warning` in `strict` (or in `baseline`, as
-   A001 does) and the nightly reports the gap per repository.
-2. **Binding.** Once the owning issue has driven the count down, the rule moves
-   to `error`, or a repository that is clean promotes it for itself with
-   `error_rules` in its manifest entry.
+1. **A001/A003** — already errors. A001 needs no Core floor change, so it is
+   the cheapest rule to clear: 8 of the 12 repositories are a one-line rename to
+   `INSTALL_SOP_SCHEMA_REVISION`, and the other 4 delete a vestigial import. Do
+   this first, because A001 is the only rule whose nightly output is red today.
+2. **A004** — raise the 30 repositories on `line-length = 100` to `120` and
+   declare it in the 3 that omit it. Reformatting is one `ruff format` run per
+   repository; it belongs in a dedicated PR so it does not bury review signal.
+3. **A002** — blocked behind PIP-4101: raise the Core floor to `>=0.20.40`,
+   replace the hand-rolled constant with `install_sop_report_schema_version()`,
+   then promote.
+4. **A006 / A005** — cheapest to land, and worth doing early: a
+   `.pre-commit-config.yaml` turns every later convention rule into something a
+   contributor sees before pushing.
 
-The Install SOP family (A010 to A014) is the current ratchet target. Only A010
-is binding today; the other four start as warnings because the `dcc-mcp-core`
-floor declarations across the fleet are as low as `>=0.18.2` while the
-replacement API only exists from `0.20.40`. Every threshold the family uses —
-`core_floor_baseline`, `core_floor_target`, the symbol names, the globs — is a
-contract value, so moving a threshold is an edit to the JSON and not a code
-change.
+A006 and A005 are last in the dependency order but first in the value order.
+
+## Adopting the sweep
+
+Add the repository to
+[`contract/adapter_repositories.json`](../contract/adapter_repositories.json)
+and `adapter-contract-nightly.yml` picks it up the next morning — no workflow
+file in the repository itself, the same way `repo-contract-nightly.yml` works.
+Every repository that ships a Python package belongs in that manifest whether or
+not it is clean.
 
 ## Running it locally
 
 ```bash
-# In any adapter repository
+# The whole adapter contract, warnings and all
 python /path/to/dcc-mcp/.github/scripts/check_repo_contract.py \
-  --root . --contract contract/adapter_contract.json --profile baseline
+  --root . \
+  --contract /path/to/dcc-mcp/.github/contract/adapter_contract.json \
+  --profile strict \
+  --format text
 
-# Does --contract reach the rules?
-... --contract contract/adapter_contract.json --list-rules --profile baseline
+# Just the gate that CI fails on
+... --profile baseline --fail-on error
 
 # What does the contract actually say?
-... --contract contract/adapter_contract.json --emit-contract
+... --contract .../adapter_contract.json --list-rules --profile strict
+... --contract .../adapter_contract.json --emit-contract
 ```
 
 Findings are emitted as GitHub annotations
-(`::warning file=pyproject.toml,title=Repo contract A001::...`) so they appear on
-the file in the PR diff.
+(`::error file=src/dcc_mcp_maya/install.py,title=Repo contract A001::...`) so
+they land on the file in the diff.
 
 ## Changing a rule
 
-Edit `contract/adapter_contract.json` — not the script. Adding a rule means
-adding a `rules` entry plus a handler in `RULES`;
-`tests/test_repo_contract.py` asserts the two stay in sync, that every handler
-is claimed by a contract, and that the two contracts keep disjoint id
-namespaces.
+Edit `contract/adapter_contract.json` — not the script. The script only
+implements the mechanics (parse TOML, walk the tree, parse `pyproject.toml`) and
+reads every threshold, symbol name, glob and severity from the contract. That is
+what keeps `scripts/` free of hardcoded policy, and it is what lets a
+repository's local `vx-repo-contract` run and CI agree.
 
-If a repository turns out not to belong in the sweep, remove it from
-`contract/adapter_repositories.json` rather than widening a rule. A001 exists so
-that this decision is made explicitly instead of being buried in an exemption
-list.
+Adding a rule means a `rules` entry plus a handler in `RULES`;
+`tests/test_repo_contract.py` asserts the two stay in sync for both contracts.
+
+## Deliberately not covered
+
+- **Host-side language implementations** — SketchUp's Ruby bridge, C4D's
+  `c4dpy`, the `dotnet` tree in `dcc-mcp-office`. The contract constrains the
+  Python interface surface only.
+- **`doctor` and `compat` module coverage** (8/50 and 5/50 today). Both are
+  capability questions, not interface-contract questions, and capability
+  standards are being defined separately in PIP-3974 (S1–S6). Adding a rule here
+  would set the bar before that work has decided what the bar is.
+- **A single `requires-python` value** — see above.
+- **CI workflow count and shape** (1 to 23 workflows per repository). The spread
+  is real but the target is not agreed; a rule would only encode a guess.

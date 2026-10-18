@@ -1,0 +1,22 @@
+{
+  "$comment": "Read-only, warning-only adoption. A changed blob requests a fresh review; it is not proof of an unsafe workflow. No credential values or availability are inferred.",
+  "organizations": ["dcc-mcp", "try-auroraview", "vx-org"],
+  "source_path_patterns": [".github/workflows/*.yml", ".github/workflows/*.yaml"],
+  "rules": {
+    "inventory": {
+      "id": "O001",
+      "name": "automation-inventory-valid",
+      "severity": "warning"
+    },
+    "source": {
+      "id": "O002",
+      "name": "automation-source-readable",
+      "severity": "warning"
+    },
+    "drift": {
+      "id": "O003",
+      "name": "automation-source-drift",
+      "severity": "warning"
+    }
+  }
+}
