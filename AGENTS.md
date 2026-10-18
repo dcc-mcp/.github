@@ -46,7 +46,40 @@ repository contract that every `dcc-mcp` repository is checked against.
 - **This repository is checked by its own gate.** `AGENTS.md` is required by
   rule R003; do not delete it.
 
-## Before opening a PR
+## Adapter runtime and distribution gate
+
+- Classify the **actual Python process**, not the product name. Host-interpreter
+  adapters use the host's supported Python, stdlib, host-owned modules and the
+  explicitly approved first-party Core/server distributions. Do not add third-party
+  runtime requirements, copy their source into a vendor directory, or hide them
+  in a ZIP. A Rust sidecar does not change the host Python dependency boundary.
+- External adapters use the official `dcc-mcp-runtime` distribution. Do not
+  create another per-adapter CPython, virtual environment or environment manager.
+  Thin host scripts plus an external service need **two** audited import
+  boundaries; a Python-capable host does not make its external service embedded.
+- Separate stdlib, host modules, first-party Core/server, mandatory third-party bridge
+  dependencies, optional features, and build/dev tools. Optional/build/dev
+  labels never authorize importing or bundling those packages in the default
+  host runtime. Keep host-owned modules out of pip dependencies.
+- Shared means compatible, versioned reuse, not a process-global environment:
+  scope by OS, architecture, Python ABI, Core version and dependency set. Keep
+  incompatible sets side by side and preserve rollback. Never inject another
+  interpreter or native ABI into a host to make a dependency resolve.
+- Before migration, check active owners/PRs, existing Core/CLI/runtime APIs and
+  actual released artifacts. Do not claim the Python runtime wheel includes
+  CPython. An absent target binary, placeholder hash, stale manifest or untested
+  host is a blocker, not permission to invent metadata or install automatically.
+- Run A030–A032 and the read-only artifact auditor described in
+  [the runtime policy](docs/adapter-runtime-policy.md). Source declarations and
+  archive metadata are bounded checks, not proof of complete import closure.
+  Each adapter must also run isolated no-site-packages startup/provenance tests
+  and its real-host tests before promotion to a blocking gate.
+- Report compressed bytes, expanded bytes, largest components and exact
+  tag/SHA. Compare like-for-like platform/build artifacts and separately account
+  for a shared runtime's first download and incremental adapters. Never claim
+  savings from a hypothetical runtime or from deleting required host/Core code.
+
+## Validation before opening a PR
 
 ```bash
 python -m unittest discover -s tests -v

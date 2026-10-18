@@ -47,6 +47,12 @@ without a `pyproject.toml` and belongs here.
 | A014 | `report-validates-against-schema` — a real report runs through `validate_install_sop_report()` | — | warning | interface |
 | A021 | `ruff-config-present` — the repository configures ruff at all | — | warning | convention |
 | A024 | `release-please-present` — release-please config and manifest exist | — | warning | convention |
+| A030 | `runtime-mode-declared` — actual host/external Python boundary is explicit | — | warning | runtime |
+| A031 | `host-runtime-dependencies` — host mandatory dependencies are first-party | — | warning | runtime |
+| A032 | `external-shared-runtime` — official provider and justified bridge dependencies | — | warning | runtime |
+
+The runtime declaration and artifact boundaries, limitations and adoption steps
+are documented in [Adapter runtime policy](adapter-runtime-policy.md).
 
 The original A010–A014 proposal largely landed as A001–A003, A012–A014.
 Two gaps remain distinct: A007 restores the registration applicability warning

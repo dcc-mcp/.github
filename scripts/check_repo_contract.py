@@ -2098,8 +2098,9 @@ def all_rules() -> dict[str, Callable[..., list[Finding]]]:
     """
     from adapter_contract_rules import ADAPTER_RULES
     from adapter_package_rules import PACKAGE_RULES
+    from adapter_runtime_rules import RUNTIME_RULES
 
-    return {**RULES, **ADAPTER_RULES, **PACKAGE_RULES}
+    return {**RULES, **ADAPTER_RULES, **PACKAGE_RULES, **RUNTIME_RULES}
 
 
 # ----------------------------------------------------------------------- driver
