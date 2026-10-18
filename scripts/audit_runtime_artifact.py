@@ -72,6 +72,7 @@ def audit(path: Path, contract: dict, mode: str = "inspect", adapter: str | None
     report = {"artifact": path.name, "archive_bytes": path.stat().st_size, "sha256": "",
               "mode": mode, "check_scope": "recognized archive members and declared distribution metadata only",
               "top_level_unpacked_bytes": 0, "nested_payload_unpacked_bytes": 0,
+              "inspection_complete": True,
               "members": 0, "distributions": [], "interpreter_payloads": [], "environment_payloads": [],
               "largest_members": [], "findings": [], "limitations": [
                   "Archive sizes are measured bytes, not an installed footprint; nested archive expansion is reported separately.",
@@ -84,12 +85,47 @@ def audit(path: Path, contract: dict, mode: str = "inspect", adapter: str | None
     report["sha256"] = digest.hexdigest()
     largest = []
     nested_read = 0
+    unpacked_read = 0
 
     def finding(message: str) -> None:
         if len(report["findings"]) < policy["max_findings"]:
             report["findings"].append(message)
 
-    def inspect_member(name: str, size: int, read, depth: int, prefix: str, seen: set) -> None:
+    def incomplete(message: str) -> None:
+        report["inspection_complete"] = False
+        finding(message)
+
+    def read_member(display: str, size: int, open_member, retain: bool) -> bytes:
+        """Validate every payload through EOF without buffering ordinary files.
+
+        Reading ZIP members checks encryption, compression and CRC errors. The
+        aggregate budget includes both outer members and nested expansion, and
+        is checked against actual reads as well as untrusted header sizes.
+        """
+        nonlocal unpacked_read
+        if size < 0 or size > policy["max_unpacked_bytes"] - unpacked_read:
+            raise ValueError(f"expanded byte limit exceeded: {display}")
+        payload = bytearray()
+        measured = 0
+        with open_member() as handle:
+            while True:
+                remaining = min(size - measured, policy["max_unpacked_bytes"] - unpacked_read)
+                block = handle.read(min(64 * 1024, remaining + 1))
+                if not block:
+                    break
+                measured += len(block)
+                unpacked_read += len(block)
+                if unpacked_read > policy["max_unpacked_bytes"]:
+                    raise ValueError(f"expanded byte limit exceeded: {display}")
+                if measured > size:
+                    raise ValueError(f"member size differs from header: {display}")
+                if retain:
+                    payload.extend(block)
+        if measured != size:
+            raise ValueError(f"member size differs from header: {display}")
+        return bytes(payload)
+
+    def inspect_member(name: str, size: int, open_member, depth: int, prefix: str, seen: set) -> None:
         nonlocal nested_read
         report["members"] += 1
         if report["members"] > policy["max_members"]:
@@ -102,35 +138,41 @@ def audit(path: Path, contract: dict, mode: str = "inspect", adapter: str | None
         seen.add(normalized)
         if member.is_absolute() or ".." in member.parts or re.match(r"^[A-Za-z]:", normalized):
             finding(f"unsafe member path: {display}")
+        base = member.name.lower()
+        is_metadata = base in policy["metadata_basenames"]
+        is_nested = any(base.endswith(suffix) for suffix in policy["nested_archive_suffixes"])
+        read_metadata = is_metadata and size <= policy["max_metadata_bytes"]
+        read_nested = is_nested and depth < policy["max_nested_depth"] and nested_read + size <= policy["max_nested_bytes"]
+        payload = read_member(display, size, open_member, read_metadata or read_nested)
+        # These sizes only include payloads read to EOF and checked against the
+        # declared size. An incomplete report must not be used as a total size.
         key = "top_level_unpacked_bytes" if depth == 0 else "nested_payload_unpacked_bytes"
         report[key] += size
         largest.append({"path": display, "bytes": size})
-        base = member.name.lower()
         if any(fnmatch.fnmatchcase(base, pattern) for pattern in policy["interpreter_basenames"]):
             report["interpreter_payloads"].append({"path": display, "bytes": size})
         if base in policy["environment_files"] or any(part.lower() in policy["environment_directories"] for part in member.parts[:-1]):
             report["environment_payloads"].append({"path": display, "bytes": size})
-        if base in policy["metadata_basenames"]:
-            if size > policy["max_metadata_bytes"]:
-                finding(f"metadata size limit exceeded: {display}")
+        if is_metadata:
+            if not read_metadata:
+                incomplete(f"metadata size limit exceeded: {display}")
             else:
-                metadata = BytesParser().parsebytes(read(), headersonly=True)
+                metadata = BytesParser().parsebytes(payload, headersonly=True)
                 names, versions = metadata.get_all("Name", []), metadata.get_all("Version", [])
                 if len(names) != 1 or len(versions) != 1 or not str(names[0]).strip() or not str(versions[0]).strip():
                     finding(f"metadata must have one Name and Version: {display}")
                 else:
                     report["distributions"].append({"name": str(names[0]), "version": str(versions[0]), "path": display,
                                                     "requires_dist": metadata.get_all("Requires-Dist", [])})
-        elif any(base.endswith(suffix) for suffix in policy["nested_archive_suffixes"]):
-            if depth >= policy["max_nested_depth"] or nested_read + size > policy["max_nested_bytes"]:
-                finding(f"nested archive inspection limit exceeded: {display}")
+        elif is_nested:
+            if not read_nested:
+                incomplete(f"nested archive inspection limit exceeded: {display}")
             else:
                 nested_read += size
-                payload = read()
                 try:
                     inspect_archive(io.BytesIO(payload), depth + 1, display + "!/")
                 except (ValueError, OSError, RuntimeError, EOFError, NotImplementedError, lzma.LZMAError, zlib.error, tarfile.TarError, zipfile.BadZipFile) as exc:
-                    finding(f"cannot inspect nested archive {display}: {exc}")
+                    incomplete(f"cannot inspect nested archive {display}: {exc}")
 
     def inspect_archive(source, depth: int, prefix: str) -> None:
         seen: set[str] = set()
@@ -138,7 +180,7 @@ def audit(path: Path, contract: dict, mode: str = "inspect", adapter: str | None
             with zipfile.ZipFile(source) as archive:
                 for member in archive.infolist():
                     if not member.is_dir():
-                        inspect_member(member.filename, member.file_size, lambda m=member: archive.read(m), depth, prefix, seen)
+                        inspect_member(member.filename, member.file_size, lambda m=member: archive.open(m), depth, prefix, seen)
         else:
             if hasattr(source, "seek"):
                 source.seek(0)
@@ -148,20 +190,19 @@ def audit(path: Path, contract: dict, mode: str = "inspect", adapter: str | None
             with archive:
                 for member in archive:
                     if member.isfile():
-                        def read(m=member):
+                        def open_member(m=member):
                             handle = archive.extractfile(m)
                             if handle is None:
                                 raise ValueError(f"unreadable member {m.name}")
-                            with handle:
-                                return handle.read()
-                        inspect_member(member.name, member.size, read, depth, prefix, seen)
+                            return handle
+                        inspect_member(member.name, member.size, open_member, depth, prefix, seen)
                     elif member.issym() or member.islnk():
-                        inspect_member(member.name, 0, lambda: b"", depth, prefix, seen)
+                        inspect_member(member.name, 0, io.BytesIO, depth, prefix, seen)
 
     try:
         inspect_archive(path, 0, "")
     except (ValueError, OSError, RuntimeError, EOFError, NotImplementedError, lzma.LZMAError, zlib.error, tarfile.TarError, zipfile.BadZipFile) as exc:
-        finding(f"archive inspection incomplete: {exc}")
+        incomplete(f"archive inspection incomplete: {exc}")
     report["largest_members"] = sorted(largest, key=lambda item: item["bytes"], reverse=True)[:policy["largest_members"]]
     if mode in ("host", "external"):
         for category in ("interpreter_payloads", "environment_payloads"):

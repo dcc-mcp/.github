@@ -346,6 +346,7 @@
     "max_members": 100000,
     "max_nested_depth": 2,
     "max_nested_bytes": 268435456,
+    "max_unpacked_bytes": 1073741824,
     "max_metadata_bytes": 1048576,
     "max_findings": 100,
     "largest_members": 15

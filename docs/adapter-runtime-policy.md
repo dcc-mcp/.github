@@ -86,9 +86,14 @@ python scripts/audit_runtime_artifact.py external-adapter.tar.gz --mode external
 ```
 
 The auditor never extracts, executes, imports, installs or downloads anything.
-It reads ZIP/wheel/tar member metadata and bounded nested archives, calculates
-SHA-256 and exact compressed/uncompressed sizes, lists distribution metadata,
-and reports the largest members. Nested expanded bytes are separate from the
+It streams every regular ZIP/wheel/tar member through EOF, validates its declared
+size and the archive reader's integrity checks (including ZIP CRC and encryption),
+and inspects bounded nested archives. It calculates SHA-256, exact archive bytes
+and verified expanded bytes, lists distribution metadata, and reports the largest
+members. Ordinary files are streamed without retaining their contents in memory.
+The contract's `max_unpacked_bytes` limits all outer and nested expanded reads
+combined; metadata and nested archive buffering retain their separate limits.
+Nested expanded bytes are separate from the
 outer archive's expanded bytes so the two are not incorrectly added together
 as an installed footprint. Limits and detection patterns live in the contract.
 
@@ -100,6 +105,9 @@ provided. Plain stdlib `venv/` is not evidence of a virtual environment.
 Malformed metadata, unsafe/duplicate member paths, unreadable archives and
 inspection limits fail instead of silently reducing coverage. Exit codes are
 0 (no findings), 1 (findings/incomplete inspection), 2 (audit unavailable).
+If `inspection_complete` is false, expanded byte counts cover only successfully
+validated members and must not be presented as a complete artifact size. TAR
+has no per-member CRC; these checks do not provide cryptographic authenticity.
 
 This is not a security scanner or a complete import-closure proof. Renamed or
 metadata-free vendored packages, opaque executable resources and unrecognized
