@@ -63,10 +63,14 @@ A011 checks integer literals and imported Core artifact-revision references in
 `next_steps`, or `receipt_path`). It shares the current bounded source scanner,
 so comments, documentation, tests and excluded provider sources do not become
 findings. It does not follow arbitrary assignments or infer cross-file test
-guards; imported names shadowed by assignments are left unresolved. Named
-constants remain A002's responsibility. Direct literals stay advisory even when
-a separate test pins the same number, because that does not establish that the
-actual report field is guarded. Unrelated schema dictionaries are ignored.
+guards. Import resolution approximates lexical scopes, including function-local
+and `try`-block imports. Sibling scopes are isolated; rebinding or conflicting
+imports within a scope remain unresolved. Control-flow execution and import
+success are not evaluated. Function defaults, decorators, and comprehension
+iterables are not modeled with complete Python evaluation-scope semantics.
+Named constants remain A002's responsibility. Direct literals stay advisory
+even when a separate test pins the same number, because that does not establish
+that the actual report field is guarded. Unrelated schema dictionaries are ignored.
 
 A021 and A024 are the code-convention family added by PIP-4107. They are the
 two rules this contract did not already have: the line-length **value** is

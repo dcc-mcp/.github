@@ -78,6 +78,73 @@ def _string_key(node: ast.AST) -> str | None:
     return node.s if isinstance(node, ast.Str) else None
 
 
+_SCOPE_NODES = (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef,
+                ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+
+
+def _scope_aliases(scope: ast.AST, inherited: dict[str, str]) -> dict[str, str]:
+    """Collect imports and shadowing in one lexical scope, including blocks.
+
+    This is deliberately flow-insensitive: conflicting imports or any ordinary
+    assignment to an imported name make it unresolved within that scope.
+    Nested scopes cannot add imports or shadow names in their siblings.
+    """
+    imports: dict[str, set] = {}
+    assigned = set()
+
+    def collect(node: ast.AST) -> None:
+        if node is not scope and isinstance(node, _SCOPE_NODES):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                assigned.add(node.name)
+            return
+        if isinstance(node, ast.ImportFrom):
+            for imported in node.names:
+                name = imported.asname or imported.name
+                target = f"{node.module}.{imported.name}" if node.module and not node.level else None
+                imports.setdefault(name, set()).add(target)
+        elif isinstance(node, ast.Import):
+            for imported in node.names:
+                name = imported.asname or imported.name.split(".")[0]
+                target = imported.name if imported.asname else imported.name.split(".")[0]
+                imports.setdefault(name, set()).add(target)
+        elif isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            assigned.add(node.id)
+        elif isinstance(node, ast.arg):
+            assigned.add(node.arg)
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            assigned.update(node.names)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            assigned.add(node.name)
+        for child in ast.iter_child_nodes(node):
+            collect(child)
+
+    collect(scope)
+    aliases = {name: target for name, target in inherited.items()
+               if name not in assigned and name not in imports}
+    for name, targets in imports.items():
+        if name not in assigned and len(targets) == 1 and None not in targets:
+            aliases[name] = next(iter(targets))
+    return aliases
+
+
+def _scoped_dicts(scope: ast.AST, inherited: dict[str, str]):
+    aliases = _scope_aliases(scope, inherited)
+    # Class namespaces are visible in their body, not lexical closures for
+    # methods or nested classes. Those inherit the enclosing non-class scope.
+    child_aliases = inherited if isinstance(scope, ast.ClassDef) else aliases
+
+    def walk(node: ast.AST):
+        if node is not scope and isinstance(node, _SCOPE_NODES):
+            yield from _scoped_dicts(node, child_aliases)
+            return
+        if isinstance(node, ast.Dict):
+            yield node, aliases
+        for child in ast.iter_child_nodes(node):
+            yield from walk(child)
+
+    yield from walk(scope)
+
+
 def check_report_schema_version_source(root: Path, contract: Contract, ctx: dict) -> list[Finding]:
     """A011: inspect direct fields missed by A002's named-constant check.
 
@@ -92,25 +159,7 @@ def check_report_schema_version_source(root: Path, contract: Contract, ctx: dict
     modules, notices = _prepare_scan(root, contract, ctx, rule)
     findings = list(notices)
     for path, tree in modules:
-        aliases = {}
-        for node in tree.body:
-            if isinstance(node, ast.ImportFrom) and node.module and not node.level:
-                for imported in node.names:
-                    aliases[imported.asname or imported.name] = f"{node.module}.{imported.name}"
-            elif isinstance(node, ast.Import):
-                for imported in node.names:
-                    aliases[imported.asname or imported.name.split(".")[0]] = (
-                        imported.name if imported.asname else imported.name.split(".")[0])
-        # A local or later assignment can shadow an import. Do not infer that
-        # such a name still denotes Core without scope/dataflow analysis.
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
-                aliases.pop(node.id, None)
-            elif isinstance(node, ast.arg):
-                aliases.pop(node.arg, None)
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Dict):
-                continue
+        for node, aliases in _scoped_dicts(tree, {}):
             entries = {_string_key(key): value for key, value in zip(node.keys, node.values)
                        if key is not None and _string_key(key) is not None}
             if field not in entries or not markers.intersection(entries):

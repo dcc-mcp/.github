@@ -100,6 +100,52 @@ class PackageRuleTests(AdapterContractTestCase):
         _, findings = run_cli(self.repo.root, '--profile', 'strict', contract=ADAPTER_CONTRACT)
         self.assertTrue(any('not parseable' in f['message'] for f in findings))
 
+    def test_function_local_and_try_block_artifact_imports_warn(self):
+        sources = (
+            'def build():\n    from dcc_mcp_core.deployment import INSTALL_SOP_SCHEMA_REVISION as revision\n    return {"schema_version": revision, "steps": []}\n',
+            'try:\n    from dcc_mcp_core.deployment import INSTALL_SOP_SCHEMA_REVISION as revision\nexcept ImportError:\n    pass\nREPORT = {"schema_version": revision, "steps": []}\n',
+            'def build():\n    try:\n        from dcc_mcp_core.deployment import INSTALL_SOP_SCHEMA_REVISION as revision\n    except ImportError:\n        pass\n    return {"schema_version": revision, "steps": []}\n',
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                self.repo.write('src/demo/report.py', source)
+                self.assertEqual(len(self.findings('A011')), 1)
+
+    def test_function_local_import_does_not_leak_to_sibling(self):
+        self.repo.write('src/demo/report.py',
+            'def imported():\n    from dcc_mcp_core.deployment import INSTALL_SOP_SCHEMA_REVISION as revision\n'
+            'def unrelated(revision):\n    return {"schema_version": revision, "steps": []}\n')
+        self.assertEqual(self.findings('A011'), [])
+
+    def test_local_shadow_does_not_hide_module_import_from_other_scopes(self):
+        self.repo.write('src/demo/report.py',
+            'from dcc_mcp_core.deployment import INSTALL_SOP_SCHEMA_REVISION as revision\n'
+            'def unrelated(revision):\n    return {"schema_version": revision, "steps": []}\n'
+            'def build():\n    return {"schema_version": revision, "steps": []}\n')
+        self.assertEqual(len(self.findings('A011')), 1)
+
+    def test_rebinding_and_conflicting_imports_remain_unresolved(self):
+        for source in (
+            'def build():\n    from dcc_mcp_core.deployment import INSTALL_SOP_SCHEMA_REVISION as revision\n    revision = get_report_schema_const()\n    return {"schema_version": revision, "steps": []}\n',
+            'try:\n    from dcc_mcp_core.deployment import INSTALL_SOP_SCHEMA_REVISION as revision\nexcept ImportError:\n    from another_library import revision\nREPORT = {"schema_version": revision, "steps": []}\n',
+        ):
+            with self.subTest(source=source):
+                self.repo.write('src/demo/report.py', source)
+                self.assertEqual(self.findings('A011'), [])
+
+    def test_class_import_does_not_become_method_lexical_binding(self):
+        self.repo.write('src/demo/report.py',
+            'class Report:\n    from dcc_mcp_core.deployment import INSTALL_SOP_SCHEMA_REVISION as revision\n'
+            '    payload = {"schema_version": revision, "steps": []}\n'
+            '    def build(self):\n        return {"schema_version": revision, "steps": []}\n')
+        self.assertEqual(len(self.findings('A011')), 1)
+
+    def test_comprehension_target_shadows_outer_import(self):
+        self.repo.write('src/demo/report.py',
+            'from dcc_mcp_core.deployment import INSTALL_SOP_SCHEMA_REVISION as revision\n'
+            'reports = [{"schema_version": revision, "steps": []} for revision in get_versions()]\n')
+        self.assertEqual(self.findings('A011'), [])
+
     def test_contract_only_edits_trigger_profile_ci_on_pr_and_push(self):
         workflow = (ROOT / '.github/workflows/profile-contract.yml').read_text()
         self.assertEqual(workflow.count('- "contract/**"'), 2)
