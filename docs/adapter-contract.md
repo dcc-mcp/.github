@@ -41,6 +41,8 @@ without a `pyproject.toml` and belongs here.
 | A004 | `ruff-line-length` — `[tool.ruff] line-length` is `120` | — | warning | convention |
 | A005 | `requires-python-declared` — `project.requires-python` is declared | — | warning | convention |
 | A006 | `pre-commit-config-exists` — `.pre-commit-config.yaml` is present | — | warning | convention |
+| A007 | `adapter-python-package` — registration has a Core-linked package | warning | warning | applicability |
+| A011 | `report-schema-version-source` — direct report fields do not use literals or artifact revisions | — | warning | interface |
 | A013 | `doctor-module-present` — an adapter that installs ships a `doctor` self-check | — | warning | interface |
 | A014 | `report-validates-against-schema` — a real report runs through `validate_install_sop_report()` | — | warning | interface |
 | A021 | `ruff-config-present` — the repository configures ruff at all | — | warning | convention |
@@ -52,11 +54,29 @@ without a `pyproject.toml` and belongs here.
 The runtime declaration and artifact boundaries, limitations and adoption steps
 are documented in [Adapter runtime policy](adapter-runtime-policy.md).
 
-Ids A007–A012 are unassigned on purpose. The Install SOP interface family was
-numbered A010–A014 by PIP-4106 before A001–A006 existed; three of those five
-rules were already covered here as A001, A002 and A003 when the family was
-landed, so only the two that were not — the `doctor` module and the report
-validation — were added, under their original ids.
+The original A010–A014 proposal largely landed as A001–A003, A012–A014.
+Two gaps remain distinct: A007 restores the registration applicability warning
+under a free id, and A011 inspects direct report fields that A002's named-constant
+check does not cover. Existing rule ids and severities are unchanged.
+
+A007 checks the manifest's Core dependency declarations and exempts Core itself.
+Optional/development dependencies count only for applicability; they do not
+satisfy the runtime floors enforced by A003/A012. An applicability warning does
+not disable other checks or automatically remove a repository from the sweep.
+
+A011 checks integer literals and imported Core artifact-revision references in
+`schema_version` dictionary fields with an Install SOP marker (`steps`,
+`next_steps`, or `receipt_path`). It shares the current bounded source scanner,
+so comments, documentation, tests and excluded provider sources do not become
+findings. It does not follow arbitrary assignments or infer cross-file test
+guards. Import resolution approximates lexical scopes, including function-local
+and `try`-block imports. Sibling scopes are isolated; rebinding or conflicting
+imports within a scope remain unresolved. Control-flow execution and import
+success are not evaluated. Function defaults, decorators, and comprehension
+iterables are not modeled with complete Python evaluation-scope semantics.
+Named constants remain A002's responsibility. Direct literals stay advisory
+even when a separate test pins the same number, because that does not establish
+that the actual report field is guarded. Unrelated schema dictionaries are ignored.
 
 A021 and A024 are the code-convention family added by PIP-4107. They are the
 two rules this contract did not already have: the line-length **value** is
@@ -269,9 +289,9 @@ nightly output is the backlog list, and every message says what to do next.
 
 ## The two-tier profile
 
-`baseline` holds A001 and A003. Both are mechanical, both are satisfied by
-every repository today or by a small, safe edit, and neither needs a Core floor
-bump. Anything that needs a decision goes into `strict` as a warning.
+`baseline` enforces A001 and A003 as errors and includes the advisory A007
+registration check. No existing severity is promoted. `strict` adds the
+convergence warnings, including A011; warnings remain a review queue.
 
 That is the ratchet, the same one `repo-contract.md` describes: the sweep runs
 `--profile strict --fail-on error`, so **errors block regressions and warnings

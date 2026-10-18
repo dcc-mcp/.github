@@ -60,7 +60,8 @@ class FixtureRepo:
         """Write the smallest adapter that passes every rule in this family."""
         self.write(
             "pyproject.toml",
-            '[project]\nname = "demo"\nrequires-python = ">=3.9"\n\n'
+            '[project]\nname = "demo"\nrequires-python = ">=3.9"\n'
+            'dependencies = ["dcc-mcp-core>=0.20.40"]\n\n'
             "[tool.ruff]\nline-length = 120\n",
         )
         self.write(".pre-commit-config.yaml", "repos: []\n")

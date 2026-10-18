@@ -89,6 +89,29 @@
       "summary": "Without it, the ruff settings in pyproject.toml only run in CI, so a contributor learns about a lint failure after pushing. 6 of 51 packages have one today."
     },
     {
+      "id": "A007",
+      "name": "adapter-python-package",
+      "title": "A registered adapter is a Python package linked to Core",
+      "severity": "warning",
+      "profiles": [
+        "baseline",
+        "strict"
+      ],
+      "source": "PIP-4105",
+      "summary": "Advisory registration check: a pyproject manifest declares a Core dependency, or names an exempt provider. Optional/development declarations establish package applicability only; they do not satisfy A003 or A012 runtime floor requirements. Does not skip or weaken other rules."
+    },
+    {
+      "id": "A011",
+      "name": "report-schema-version-source",
+      "title": "Direct Install SOP report fields use the report schema version, not the artifact revision",
+      "severity": "warning",
+      "profiles": [
+        "strict"
+      ],
+      "source": "PIP-4106",
+      "summary": "Checks direct integer literals and imported Core artifact-revision references in schema_version fields of dictionaries with Install SOP marker keys. Complements A002 without reclassifying named constants. No cross-file value or test-guard inference; every warning requires review, and arbitrary dataflow is outside scope."
+    },
+    {
       "id": "A013",
       "name": "doctor-module-present",
       "title": "An adapter that provides install capability ships a doctor self-check module",
@@ -97,7 +120,7 @@
         "strict"
       ],
       "source": "PIP-4106",
-      "summary": "The doctor is where an adapter assembles its Install SOP report and validates it before the report is published. 8 of 51 adapters have one (openusd, material-maker, wwise, freecad, sketchup, openscad, liquigen, capcut), so the rule is a convergence warning and the gap closes by ratchet. Adapters with no install surface are skipped rather than reported. Ids A007-A012 are unassigned: this family was numbered A010-A014 by PIP-4106 before A001-A006 existed, and its first three rules were superseded by A001, A002 and A003 rather than renumbered.",
+      "summary": "The doctor is where an adapter assembles its Install SOP report and validates it before the report is published. 8 of 51 adapters have one (openusd, material-maker, wwise, freecad, sketchup, openscad, liquigen, capcut), so the rule is a convergence warning and the gap closes by ratchet. Adapters with no install surface are skipped rather than reported. Existing A001-A006 remain unchanged; A007 checks applicability and A011 recovers the direct report-field gap from the original interface proposal.",
       "known_boundaries": [
         "The module is matched by name, so a doctor that assembles a report without validating it satisfies the rule.",
         "install_source_globs matches src/**/install*.py, so install_preflight_docs.py counts as install capability while uninstall.py does not."
@@ -355,5 +378,30 @@
     "dcc-mcp-core": [
       "server"
     ]
-  }
+  },
+  "adapter_package_applicability": {
+    "distribution_name_keys": [
+      "project.name",
+      "tool.poetry.name"
+    ],
+    "self_distributions": [
+      "dcc-mcp-core"
+    ],
+    "dependency_key_patterns": [
+      "^project\\.dependencies$",
+      "^project\\.optional-dependencies\\.[^.]+$",
+      "^dependency-groups\\.[^.]+$",
+      "^tool\\.poetry\\.dependencies$"
+    ]
+  },
+  "report_schema_version_field": "schema_version",
+  "report_schema_marker_keys": [
+    "steps",
+    "next_steps",
+    "receipt_path"
+  ],
+  "report_schema_artifact_symbols": [
+    "dcc_mcp_core.deployment.INSTALL_SOP_SCHEMA_REVISION",
+    "dcc_mcp_core.deployment.INSTALL_SOP_SCHEMA_VERSION"
+  ]
 }

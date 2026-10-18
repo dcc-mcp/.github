@@ -88,8 +88,8 @@ python scripts/check_repo_contract.py --root . --contract contract/adapter_contr
 ```
 
 The second command must report no errors. The third runs the adapter contract
-against this repository: it is not a Python package, so A005 and A006 warn
-about the missing `pyproject.toml` and pre-commit config. Two warnings and exit
-0 is the expected result; anything else means the checker regressed. If you
+against this repository: it is not a Python package, so advisory findings include the missing manifest,
+registration applicability and pre-commit configuration. Exit 0 with no errors
+is expected; review warning changes rather than treating their count as fixed. If you
 change either contract file, explain the severity change in the PR description —
 it affects every repository that has adopted the gate.
