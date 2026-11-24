@@ -1,0 +1,50 @@
+name: VX + just toolchain
+
+on:
+  workflow_call:
+    inputs:
+      vx-version:
+        description: "VX release used by the organization-wide toolchain gate."
+        required: false
+        type: string
+        default: "0.9.34"
+  workflow_dispatch:
+    inputs:
+      vx-version:
+        description: "VX release used by the organization-wide toolchain gate."
+        required: false
+        type: string
+        default: "0.9.34"
+
+permissions:
+  contents: read
+
+jobs:
+  toolchain:
+    name: VX + just contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Setup vx (pinned)
+        uses: loonghao/vx@debe4f035713d28366ec0c322e0b87de2a25d2f2 # v0.9.34
+        with:
+          version: ${{ inputs.vx-version || '0.9.34' }}
+          cache: false
+
+      - name: Verify committed VX lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f vx.toml
+          test -f vx.lock
+          test -f justfile
+          vx lock --check
+
+      - name: Run unified local and CI entry point
+        shell: bash
+        run: vx just@1.58 toolchain-ci
