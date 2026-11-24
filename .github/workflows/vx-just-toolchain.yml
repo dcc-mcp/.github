@@ -47,4 +47,4 @@ jobs:
 
       - name: Run unified local and CI entry point
         shell: bash
-        run: vx just@1.58 toolchain-ci
+        run: vx just@1.58 --shell bash toolchain-ci
