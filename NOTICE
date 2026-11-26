@@ -9,10 +9,10 @@ libraries, host applications, SDKs, runtimes, bundled binaries, models, sample
 assets, generated files, upstream packages, and other included material remain
 under their own licenses and notices. Keep those notices with any redistribution.
 
-DCC-MCP and .github names and branding identify this project and its maintainers.
+DCC-MCP and dcc-mcp/.github names and branding identify this project and its maintainers.
 This notice does not grant rights to third-party trademarks or imply endorsement
 by a host vendor.
 
-Commercial use is permitted. Mentioning DCC-MCP and .github in product credits, or
+Commercial use is permitted. Mentioning DCC-MCP and dcc-mcp/.github in product credits, or
 contacting maintainers about commercial distribution, is appreciated but optional
 and is not a license condition.
