@@ -1,6 +1,6 @@
 TRADEMARKS
 
-"DCC-MCP", "DCC MCP", and ".github" names, logos, and other marks identify
+"DCC-MCP", "DCC MCP", and "dcc-mcp/.github" names, logos, and other marks identify
 the DCC-MCP organization and this project. The MIT license grants copyright
 permissions only. It does not grant trademark rights or permission to imply
 endorsement.
